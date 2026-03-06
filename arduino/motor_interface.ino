@@ -1,6 +1,6 @@
 #include "Arduino.h"
 
-#include "config.h"
+#include "motor_interface.h"
 
 void left_set_speed(int pwm) {
     if (pwm >= 0) {
@@ -33,7 +33,21 @@ inline void right_stop() {
 Encoder left_encoder(LEFT_ENC_CLK, LEFT_ENC_DT);
 Encoder right_encoder(RIGHT_ENC_CLK, RIGHT_ENC_DT);
 
+
+// left_speed  [1]
+// right_speed [1]
+byte rx_buf[2];
+
+// left_enc_speed  [4]
+// left_enc_cnt    [4]
+// right_enc_speed [4]
+// right_enc_cnt   [4]
+byte tx_buf[32];
+
+uint32_t last_millis;
+
 void setup() {
+
 
     pinmode(LEFT_LEN, OUTPUT);
     pinmode(LEFT_REN, OUTPUT);
@@ -50,11 +64,16 @@ void setup() {
 
     interrupts(); // enable interrupts
 
+    last_millis = millis();
 }
 
 
-
-
 void loop() {
-    for (;;);
+    Serial.write(tx_buf, 32);
+    Serial.readBytes(rx_buf, 2);
+
+    left_set_speed(highByte(rx_buf));
+    right_set_speed(lowByte(rx_buf));
+
+    while (millis() - last_millis < 100); // Ждёт чтобы каждый цикл занимал одинаковое (время как на ВПД)
 }
