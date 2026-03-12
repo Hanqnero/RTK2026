@@ -1,0 +1,10 @@
+# LD19 2D lidar (ldlidar_stl_ros2). Frame and topic overridden by launch.
+lidar:
+  ros__parameters:
+    frame_id: lidar_link
+    topic_name: scan
+    port_name: /dev/ldlidar
+    port_baudrate: 230400
+    product_name: LDLiDAR_LD19
+    laser_scan_dir: true
+    enable_angle_crop_func: false

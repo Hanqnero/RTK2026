@@ -1,0 +1,18 @@
+base_controller:
+  ros__parameters:
+    # Diff-drive: 250 mm width -> wheel_separation 0.25 m. Encoder: MT6701 (see docs/ENCODER_MT6701.md).
+    # ticks_per_meter = PPR / (2*pi*wheel_radius); calibrate on real robot or use 1000 as placeholder.
+    wheel_separation: 0.25
+    ticks_per_meter: 1000.0
+    max_linear_speed: 0.5
+    max_angular_speed: 1.0
+    max_pwm: 127
+    cmd_vel_timeout_sec: 0.5
+    cmd_vel_topic: "cmd_vel"
+    encoder_report_topic: "encoder_report"
+    motor_command_topic: "motor_command"
+    odom_topic: "odom"
+    odom_frame_id: "odom"
+    base_frame_id: "base_link"
+    tf_publish_rate: 20.0
+    publish_tf: true

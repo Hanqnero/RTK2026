@@ -1,0 +1,45 @@
+# Build from repo root: docker compose -f docker/docker-compose.yml build
+# Like zero-to-slam: separate containers for base (SLAM/tf/clock) and Nav2; they share a network.
+
+networks:
+  rtk2026_net:
+    driver: bridge
+
+services:
+  rtk2026:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: rtk2026:latest
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - rtk2026_net
+
+  # Terminal 1: base only (fake_scan, clock, static tf/map, slam_toolbox). No Nav2.
+  base:
+    image: rtk2026:latest
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash &&
+      ros2 launch rtk2026_simulation simulation.launch.py
+      use_sim_time:=true use_fake_scan:=true use_fake_odom:=true use_slam:=true use_navigation:=false use_rviz:=false"
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - rtk2026_net
+    depends_on:
+      - rtk2026
+
+  # Terminal 2 (after base is up): Nav2 only. Sees /map, /scan, /tf from base via same network.
+  nav2:
+    image: rtk2026:latest
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash &&
+      ros2 launch nav2_bringup navigation_launch.py use_sim_time:=true
+      params_file:=/workspace/install/rtk2026_navigation/share/rtk2026_navigation/config/nav2_params.yaml"
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - rtk2026_net
+    depends_on:
+      - rtk2026

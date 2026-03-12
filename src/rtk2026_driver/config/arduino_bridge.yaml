@@ -1,0 +1,9 @@
+arduino_bridge:
+  ros__parameters:
+    serial_port: "/dev/ttyUSB0"
+    baud_rate: 115200
+    read_timeout_sec: 0.5
+    publish_rate: 10.0
+    motor_command_topic: "motor_command"
+    encoder_report_topic: "encoder_report"
+    min_motor_send_interval_sec: 0.05

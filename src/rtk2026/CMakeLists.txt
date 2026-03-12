@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.8)
+project(rtk2026)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+find_package(ament_cmake_core REQUIRED)
+
+ament_package()
