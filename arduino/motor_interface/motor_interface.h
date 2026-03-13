@@ -3,13 +3,13 @@
 
 #include "stdint.h" // int64_t
 
-#define LEFT_LEN 1
-#define LEFT_REN 1
-#define RIGHT_LEN 1
-#define RIGHT_REN 1
+// #define LEFT_LEN 1
+// #define LEFT_REN 1
+// #define RIGHT_LEN 1
+// #define RIGHT_REN 1
 
-#define LEFT_LPWM 1
-#define LEFT_RPWM 1
+#define LEFT_LPWM 6
+#define LEFT_RPWM 7
 #define RIGHT_LPWM 1
 #define RIGHT_RPWM 1
 
@@ -26,8 +26,8 @@ void left_set_speed(int pwm);
 void right_set_speed(int pwm);
 
 
-volatile int64_t left_cnt;
-volatile int64_t right_cnt;
+extern volatile int64_t left_cnt;
+extern volatile int64_t right_cnt;
 
 
 #endif
