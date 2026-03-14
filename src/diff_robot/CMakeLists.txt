@@ -21,7 +21,7 @@ find_package(geometry_msgs REQUIRED)
 # find_package(<dependency> REQUIRED)
 
 install(
-  DIRECTORY launch
+  DIRECTORY launch urdf world
   DESTINATION share/${PROJECT_NAME}/
 )
 
