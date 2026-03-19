@@ -16,7 +16,10 @@ except ImportError:
     serial = None
 
 
-def clamp_pwm(value: int, low: int = -128, high: int = 127) -> int:
+TX_PACKET_SIZE = 16  # 4x int32_t (left_speed, left_cnt, right_speed, right_cnt)
+
+
+def clamp_pwm(value: int, low: int = -255, high: int = 255) -> int:
     return max(low, min(high, value))
 
 
@@ -83,13 +86,10 @@ class ArduinoBridgeNode(Node):
         if self._ser is None or not self._ser.is_open:
             return
         try:
-            if self._ser.in_waiting >= 32:
-                raw = self._ser.read(32)
-                if len(raw) == 32:
-                    left_speed = struct.unpack("<i", raw[0:4])[0]
-                    left_cnt = struct.unpack("<i", raw[4:8])[0]
-                    right_speed = struct.unpack("<i", raw[8:12])[0]
-                    right_cnt = struct.unpack("<i", raw[12:16])[0]
+            if self._ser.in_waiting >= TX_PACKET_SIZE:
+                raw = self._ser.read(TX_PACKET_SIZE)
+                if len(raw) == TX_PACKET_SIZE:
+                    left_speed, left_cnt, right_speed, right_cnt = struct.unpack("<iiii", raw)
                     report = EncoderReport()
                     report.header = Header()
                     report.header.stamp = self.get_clock().now().to_msg()
@@ -112,9 +112,13 @@ class ArduinoBridgeNode(Node):
         now = time.monotonic()
         if self._has_pending and (now - self._last_motor_send_time) >= self._min_send_interval:
             try:
-                b0 = self._pending_left & 0xFF
-                b1 = self._pending_right & 0xFF
-                self._ser.write(bytes([b0, b1]))
+                left = self._pending_left
+                right = self._pending_right
+                left_fwd = max(left, 0) & 0xFF
+                left_bwd = max(-left, 0) & 0xFF
+                right_fwd = max(right, 0) & 0xFF
+                right_bwd = max(-right, 0) & 0xFF
+                self._ser.write(bytes([left_fwd, left_bwd, right_fwd, right_bwd]))
                 self._last_motor_send_time = now
                 self._has_pending = False
             except Exception as e:
