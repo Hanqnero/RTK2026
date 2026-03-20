@@ -21,7 +21,7 @@
   - `imu_filter.launch.py` — фильтрация IMU и, при необходимости, TF `imu_link` → `imu_optical_frame`.
 - Вспомогательные узлы для Docker/симуляции:
   - `odom_tf_broadcaster.launch.py` — TF из `/odom`;
-  - узлы `static_odom_tf_publisher`, `clock_publisher`, `static_map_publisher` и `trigger_nav2_bringup` для one‑container сценария (см. `rtk2026_simulation/simulation.launch.py`).
+  - узлы `static_odom_tf_publisher`, `clock_publisher`, `static_map_publisher` и `trigger_nav2_bringup` для сборок, где Nav2 поднимают отдельным контейнером или с задержкой.
 
 ## Основные топики
 

@@ -14,6 +14,8 @@ def generate_launch_description():
     use_description = LaunchConfiguration("use_description", default="true")
     use_fake_encoder = LaunchConfiguration("use_fake_encoder", default="false")
     publish_tf = LaunchConfiguration("publish_tf", default="true")
+    use_rviz = LaunchConfiguration("use_rviz", default="true")
+    use_foxglove = LaunchConfiguration("use_foxglove", default="false")
 
     declared = [
         DeclareLaunchArgument(
@@ -31,6 +33,16 @@ def generate_launch_description():
             default_value="true",
             description="If false, base_controller does not publish odom->base_link (use with EKF).",
         ),
+        DeclareLaunchArgument(
+            "use_rviz",
+            default_value="true",
+            description="Launch RViz2 (set false for headless, e.g. Raspberry Pi).",
+        ),
+        DeclareLaunchArgument(
+            "use_foxglove",
+            default_value="false",
+            description="Launch foxglove_bridge (WebSocket on port 8765 for Foxglove Studio).",
+        ),
     ]
 
     description_launch = IncludeLaunchDescription(
@@ -39,6 +51,7 @@ def generate_launch_description():
                 FindPackageShare("rtk2026_description"), "launch", "view_rtk2026.launch.py"
             ])
         ),
+        launch_arguments={"use_rviz": use_rviz}.items(),
         condition=IfCondition(use_description),
     )
 
@@ -72,6 +85,14 @@ def generate_launch_description():
         parameters=[base_config, {"publish_tf": publish_tf}],
         output="screen",
     )
+    foxglove_bridge_node = Node(
+        package="foxglove_bridge",
+        executable="foxglove_bridge",
+        name="foxglove_bridge",
+        parameters=[{"port": 8765}],
+        output="screen",
+        condition=IfCondition(use_foxglove),
+    )
 
     return LaunchDescription(
         declared
@@ -80,5 +101,6 @@ def generate_launch_description():
             arduino_bridge_node,
             fake_encoder_node,
             base_controller_node,
+            foxglove_bridge_node,
         ]
     )

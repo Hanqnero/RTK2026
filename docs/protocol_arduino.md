@@ -1,33 +1,40 @@
 # UART protocol: Raspberry Pi <-> Arduino Mega
 
-Reference firmware: [../arduino/motor_interface.ino](../arduino/motor_interface.ino).
+Reference firmware: [../arduino/motor_interface/motor_interface.ino](../arduino/motor_interface/motor_interface.ino).
+Bridge node: [../src/rtk2026_driver/rtk2026_driver/arduino_bridge_node.py](../src/rtk2026_driver/rtk2026_driver/arduino_bridge_node.py).
 
 ## Link parameters
 
 - **Baud rate**: 115200
 - **Cycle**: ~100 ms (Arduino loop waits so each cycle is ~100 ms)
 
-## Host -> Arduino (RX on Arduino): 2 bytes
+## Host -> Arduino (RX on Arduino): 4 bytes
 
 | Offset | Size | Description |
 |--------|------|-------------|
-| 0 | 1 B | Left motor speed (PWM). Interpretation: 0 = stop; sign/direction and scale as in firmware (e.g. 0..255 forward, or signed -128..127). |
-| 1 | 1 B | Right motor speed (PWM). Same interpretation as left. |
+| 0 | 1 B | Left motor forward PWM (0..255) |
+| 1 | 1 B | Left motor backward PWM (0..255) |
+| 2 | 1 B | Right motor forward PWM (0..255) |
+| 3 | 1 B | Right motor backward PWM (0..255) |
 
-Note: Firmware uses `right_set_speed(int pwm)` with the second byte; both bytes are passed as (int8_t) for signed PWM.
+Arduino computes: `left_pwm = rx[0] - rx[1]`, `right_pwm = rx[2] - rx[3]`, result in range -255..255.
+Bridge splits signed PWM: positive -> forward byte, negative -> backward byte.
 
-## Arduino -> Host (TX from Arduino): 32 bytes
+## Arduino -> Host (TX from Arduino): 16 bytes
+
+Packed struct `TxPacket`:
 
 | Offset | Size | Type | Description |
 |--------|------|------|-------------|
-| 0 | 4 B | int32_t | Left encoder speed (counts per SPEED_PERIOD_MS, from Encoder::speed()) |
-| 4 | 4 B | int64_t low 32b or int32_t | Left encoder count (from Encoder::cnt()) |
-| 8 | 4 B | int32_t | Right encoder speed |
-| 12 | 4 B | int64_t low 32b or int32_t | Right encoder count |
-| 16 | 16 B | - | Reserved (zero or unused) |
+| 0 | 4 B | int32_t | Left encoder speed (counts per cycle) |
+| 4 | 4 B | int32_t | Left encoder count (cumulative) |
+| 8 | 4 B | int32_t | Right encoder speed (counts per cycle) |
+| 12 | 4 B | int32_t | Right encoder count (cumulative) |
 
-Encoder period is 100 ms (SPEED_PERIOD_MS in encoder.cpp). Byte order: assume little-endian for multi-byte fields.
+Byte order: little-endian. Bridge reads with `struct.unpack("<iiii", raw)`.
 
-## Firmware notes
+## Notes
 
-- TX buffer is filled in `loop()` with left_speed, left_cnt (low 32b), right_speed, right_cnt (little-endian int32) from the encoder objects.
+- Encoders are optional: if `enc_start()` is not called, speed and count fields will be zero.
+- Motor PWM range on Arduino: `constrain(pwm, -255, 255)`.
+- Bridge PWM range: -255..255 (clamped before splitting into forward/backward bytes).

@@ -6,8 +6,8 @@ param([switch]$Build)
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path $PSScriptRoot -Parent
-if (-not (Test-Path (Join-Path $repoRoot "docker\Dockerfile"))) {
-    Write-Host "Repo root with docker/Dockerfile not found. Run from RTK2026 root."
+if (-not (Test-Path (Join-Path $repoRoot "docker\windows\Dockerfile"))) {
+    Write-Host "Repo root with docker/ not found. Run from RTK2026 root."
     exit 1
 }
 

@@ -14,7 +14,7 @@ $image = "rtk2026:latest"
 
 if ($Build) {
     Write-Host "Building image $image..."
-    docker build -t $image -f docker/Dockerfile.windows .
+    docker build -t $image -f docker/windows/Dockerfile .
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
