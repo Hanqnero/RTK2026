@@ -158,13 +158,15 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {"use_sim_time": use_sim_time},
-            # At 0.032 m/s a 90-deg turn takes ~20s — hold constraint long enough
-            {"constraint_duration_sec": 20.0},
-            # 5/10 to activate earlier (when sign is still far)
-            {"vote_window": 10},
-            {"vote_threshold": 0.5},
-            # This track has only a right-turn sign at the intersection
-            {"allowed_signs": "right"},
+            # Active turn: az=-0.5 for 3s, then resume lane following
+            {"turn_duration_sec": 3.0},
+            {"turn_angular_z": -0.5},
+            {"turn_linear_x":   0.02},
+            {"vote_window":    10},
+            {"vote_threshold":  0.5},
+            {"allowed_signs":  "right"},
+            # Don't re-trigger for 15s after a turn
+            {"cooldown_sec":   15.0},
         ],
         condition=UnlessCondition(lane_calibration_mode),
     )
