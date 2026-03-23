@@ -170,6 +170,8 @@ def generate_launch_description():
     # detect_intersection_sign: publishes /detect/traffic_sign
     #   (UInt8: 1=intersection, 2=left, 3=right)
     # ------------------------------------------------------------------
+    # detect_intersection_sign uses raw camera (not IPM) — signs are vertical,
+    # bird's-eye warping destroys them. Raw forward view is correct input.
     detect_intersection_sign_node = Node(
         package="turtlebot3_autorace_detect",
         executable="detect_intersection_sign",
@@ -177,8 +179,8 @@ def generate_launch_description():
         output="screen",
         parameters=[{"use_sim_time": use_sim_time}],
         remappings=[
-            ("/detect/image_input",            ipm_compensated_topic),
-            ("/detect/image_input/compressed", ipm_compensated_topic + "/compressed"),
+            ("/detect/image_input",            "/camera/image_raw"),
+            ("/detect/image_input/compressed", "/camera/image_raw/compressed"),
         ],
         condition=UnlessCondition(lane_calibration_mode),
     )
@@ -209,6 +211,7 @@ def generate_launch_description():
     # ------------------------------------------------------------------
     # detect_construction_sign (original mission sign, kept for compatibility)
     # ------------------------------------------------------------------
+    # detect_construction_sign also uses raw camera — sign is a vertical board
     detect_construction_sign_node = Node(
         package="turtlebot3_autorace_detect",
         executable="detect_construction_sign",
@@ -216,8 +219,8 @@ def generate_launch_description():
         output="screen",
         parameters=[{"use_sim_time": use_sim_time}],
         remappings=[
-            ("/detect/image_input",            ipm_compensated_topic),
-            ("/detect/image_input/compressed", ipm_compensated_topic + "/compressed"),
+            ("/detect/image_input",            "/camera/image_raw"),
+            ("/detect/image_input/compressed", "/camera/image_raw/compressed"),
         ],
     )
 
