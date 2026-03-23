@@ -11,6 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-colcon-common-extensions \
     ros-humble-std-msgs \
+    ros-humble-cv-bridge \
+    ros-humble-image-transport \
+    ros-humble-vision-opencv \
+    python3-opencv \
+    libopencv-dev \
     ros-humble-xacro \
     ros-humble-robot-state-publisher \
     ros-humble-joint-state-publisher \
@@ -20,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-robot-localization \
     ros-humble-slam-toolbox \
     ros-humble-nav2-bringup \
+    ros-humble-tf2-geometry-msgs \
     ros-humble-ros2-control \
     ros-humble-ros2-controllers \
     ros-humble-diff-drive-controller \
@@ -29,6 +35,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-gazebo-ros2-control \
     ros-humble-gazebo-ros-pkgs \
     ros-humble-gazebo-ros \
+    ros-humble-rqt \
+    ros-humble-rqt-image-view \
+    ros-humble-rqt-common-plugins \
+    ros-humble-image-transport-plugins \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install -U rosdep && rosdep init || true
@@ -63,7 +73,29 @@ RUN . /opt/ros/humble/setup.bash && \
 COPY src /workspace/src
 
 RUN . /opt/ros/humble/setup.bash && \
+    rosdep install -y -i --from-paths src \
+      --skip-keys "rtk2026 rtk2026_description rtk2026_bringup rtk2026_interfaces \
+                   rtk2026_driver rtk2026_base rtk2026_localization rtk2026_slam \
+                   rtk2026_navigation rtk2026_simulation rtk2026_peripherals \
+                   diff_robot rtk2026_nav2_explorer \
+                   turtlebot3_autorace turtlebot3_autorace_camera \
+                   turtlebot3_autorace_detect turtlebot3_autorace_mission" || true
+
+RUN . /opt/ros/humble/setup.bash && \
     colcon build --symlink-install
+
+# --- Слой 4: патчи autorace (apply after build so symlinks exist) ---
+COPY docker/patches /workspace/docker/patches
+
+RUN python3 /workspace/docker/patches/patch_detect_lane_publish_neutral.py || echo "patch_detect_lane_publish_neutral: already applied or skipped" && \
+    python3 /workspace/docker/patches/patch_control_lane_neutral.py || echo "patch_control_lane_neutral: already applied or skipped" && \
+    python3 /workspace/docker/patches/patch_avoid_construction_params.py || echo "patch_avoid_construction_params: already applied or skipped"
+
+RUN cp /workspace/docker/patches/lane.yaml \
+       /workspace/install/turtlebot3_autorace_detect/share/turtlebot3_autorace_detect/param/lane/lane.yaml
+
+# --- Слой 5: Xvfb для headless рендеринга (camera sensor textures в Gazebo) ---
+RUN apt-get update && apt-get install -y --no-install-recommends xvfb && rm -rf /var/lib/apt/lists/*
 
 RUN echo "source /opt/ros/humble/setup.bash" >> /etc/bash.bashrc && \
     echo "source /workspace/install/setup.bash" >> /etc/bash.bashrc
