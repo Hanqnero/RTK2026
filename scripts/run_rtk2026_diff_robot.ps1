@@ -21,11 +21,12 @@ $repoRoot = Split-Path $repoRoot -Parent
 
 Set-Location $repoRoot
 
-$image = "rtk2026:latest"
+$image = if ($Autorace) { "rtk2026-autorace:latest" } else { "rtk2026:latest" }
+$dockerfile = if ($Autorace) { "docker/autorace/Dockerfile" } else { "docker/windows/Dockerfile" }
 
 if ($Build) {
-    Write-Host "Building image $image..."
-    docker build -t $image -f docker/windows/Dockerfile .
+    Write-Host "Building image $image (from $dockerfile)..."
+    docker build -t $image -f $dockerfile .
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 

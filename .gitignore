@@ -24,3 +24,8 @@ Thumbs.db
 
 # Docker
 .docker/
+
+# Development screenshots / debug images in repo root
+/*.png
+/*.jpg
+/*.jpeg
