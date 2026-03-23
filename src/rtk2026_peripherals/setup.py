@@ -34,6 +34,7 @@ setup(
             "cmd_vel_limiter = rtk2026_peripherals.cmd_vel_limiter_node:main",
             "autorace_max_vel_publisher = rtk2026_peripherals.autorace_max_vel_publisher_node:main",
             "lane_path_publisher = rtk2026_peripherals.lane_path_publisher:main",
+            "lane_mission = rtk2026_peripherals.lane_mission_node:main",
         ],
     },
 )

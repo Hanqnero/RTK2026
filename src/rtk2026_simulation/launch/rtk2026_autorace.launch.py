@@ -1,9 +1,16 @@
 # Launch TurtleBot3 Autorace pipeline: lane keeping via PD regulator, sign detection, obstacle avoidance.
 # Expects: Gazebo + diff_robot already running with /camera/image_raw, /scan, /odom.
-# Publishes: /cmd_vel (detect_lane → /control/lane → control_lane PD+avoid mux → /cmd_vel).
-# lane_calibration_mode:=true -- detect_lane in calibration mode (tune in rqt, save lane.yaml).
-# use_camera_calibration:=true -- run turtlebot3_autorace_camera (intrinsic+extrinsic) for view (/camera/image_projected).
-# lane_image_source:=ipm|camera -- which bird's-eye topic to feed detect_lane.
+#
+# Data flow:
+#   camera → image_relay_autorace (IPM) → detect_lane → /control/lane
+#   → control_lane (PD + avoid mux) → /control/cmd_vel
+#   → lane_mission (sign-based angular constraint filter) → /cmd_vel
+#
+# Args:
+#   lane_calibration_mode:=true  — detect_lane in calibration mode (tune in rqt, save lane.yaml)
+#   use_camera_calibration:=true — run turtlebot3_autorace_camera (intrinsic+extrinsic)
+#   lane_image_source:=ipm|camera — bird's-eye topic for detect_lane
+#   use_slam:=true               — run slam_toolbox for map building / odometry correction
 
 import os
 
@@ -17,13 +24,14 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    use_sim_time = LaunchConfiguration("use_sim_time", default="true")
-    mission = LaunchConfiguration("mission", default="construction")
-    lane_calibration_mode = LaunchConfiguration("lane_calibration_mode", default="false")
-    use_camera_calibration = LaunchConfiguration("use_camera_calibration", default="false")
-    lane_image_source = LaunchConfiguration("lane_image_source", default="ipm")
+    use_sim_time          = LaunchConfiguration("use_sim_time",           default="true")
+    mission               = LaunchConfiguration("mission",                default="construction")
+    lane_calibration_mode = LaunchConfiguration("lane_calibration_mode",  default="false")
+    use_camera_calibration= LaunchConfiguration("use_camera_calibration", default="false")
+    lane_image_source     = LaunchConfiguration("lane_image_source",      default="ipm")
+    use_slam              = LaunchConfiguration("use_slam",               default="false")
 
-    ipm_projected_topic = "/rtk_autorace_ipm/image_projected"
+    ipm_projected_topic   = "/rtk_autorace_ipm/image_projected"
     ipm_compensated_topic = "/rtk_autorace_ipm/image_compensated"
 
     try:
@@ -40,7 +48,16 @@ def generate_launch_description():
         camera_share = None
         intrinsic_launch = extrinsic_launch = None
 
-    # IPM relay node: /camera/image_raw → bird's-eye projected/compensated
+    try:
+        slam_share = get_package_share_directory("slam_toolbox")
+        slam_launch = os.path.join(slam_share, "launch", "online_async_launch.py")
+    except Exception:
+        slam_share = None
+        slam_launch = None
+
+    # ------------------------------------------------------------------
+    # IPM relay: /camera/image_raw → bird's-eye projected/compensated
+    # ------------------------------------------------------------------
     relay_node = Node(
         package="rtk2026_peripherals",
         executable="image_relay_autorace",
@@ -49,14 +66,10 @@ def generate_launch_description():
         parameters=[
             {"use_sim_time": use_sim_time},
             {"use_ipm": True},
-            # camera_joint z=0.038 + wheel_radius=0.01 = 0.048m above ground
             {"camera_height_m": 0.048},
-            # camera_joint rpy="0.0 0.3490 0.0" => 20deg downward pitch
             {"camera_pitch_rad": 0.3490},
-            # with 20deg pitch road visible from ~5cm to ~40cm ahead
             {"y_near_m": 0.05},
             {"y_far_m": 0.40},
-            # lane width ~0.35m, ±0.22m gives full lane + margin
             {"x_left_m": -0.22},
             {"x_right_m": 0.22},
             {"ipm_vertical_flip": False},
@@ -65,7 +78,9 @@ def generate_launch_description():
         ],
     )
 
-    # max_vel publisher (used by avoid_construction to cap speed)
+    # ------------------------------------------------------------------
+    # Speed cap publisher (used by avoid_construction to cap speed)
+    # ------------------------------------------------------------------
     max_vel_node = Node(
         package="rtk2026_peripherals",
         executable="autorace_max_vel_publisher",
@@ -78,6 +93,9 @@ def generate_launch_description():
         ],
     )
 
+    # ------------------------------------------------------------------
+    # detect_lane: publishes /control/lane (lane center offset)
+    # ------------------------------------------------------------------
     detect_lane_common_params = (
         [
             {"use_sim_time": use_sim_time, "is_detection_calibration_mode": lane_calibration_mode},
@@ -94,9 +112,9 @@ def generate_launch_description():
         output="screen",
         parameters=detect_lane_common_params,
         remappings=[
-            ("/detect/image_input", ipm_projected_topic),
+            ("/detect/image_input",            ipm_projected_topic),
             ("/detect/image_input/compressed", ipm_projected_topic + "/compressed"),
-            ("/detect/lane", "/control/lane"),
+            ("/detect/lane",                   "/control/lane"),
         ],
         condition=IfCondition(PythonExpression(["'", lane_image_source, "' != 'camera'"])),
     )
@@ -108,25 +126,67 @@ def generate_launch_description():
         output="screen",
         parameters=detect_lane_common_params,
         remappings=[
-            ("/detect/image_input", "/camera/image_projected"),
+            ("/detect/image_input",            "/camera/image_projected"),
             ("/detect/image_input/compressed", "/camera/image_projected/compressed"),
-            ("/detect/lane", "/control/lane"),
+            ("/detect/lane",                   "/control/lane"),
         ],
         condition=IfCondition(PythonExpression(["'", lane_image_source, "' == 'camera'"])),
     )
 
-    # control_lane: PD regulator + avoid mux, subscribes /control/lane → publishes /cmd_vel
+    # ------------------------------------------------------------------
+    # control_lane: PD regulator + avoid mux → /control/cmd_vel
+    # NOTE: no remapping to /cmd_vel — lane_mission_node does that
+    # ------------------------------------------------------------------
     control_lane_node = Node(
         package="turtlebot3_autorace_mission",
         executable="control_lane",
         name="control_lane",
         output="screen",
         parameters=[{"use_sim_time": use_sim_time}],
-        remappings=[("/control/cmd_vel", "/cmd_vel")],
+        # control_lane publishes natively to /control/cmd_vel — consumed by lane_mission
         condition=UnlessCondition(lane_calibration_mode),
     )
 
-    # avoid_construction: lidar-based obstacle avoidance, publishes /avoid_control
+    # ------------------------------------------------------------------
+    # lane_mission: sign-based angular velocity constraint filter
+    #   /detect/traffic_sign → clamp angular.z → /cmd_vel
+    # ------------------------------------------------------------------
+    lane_mission_node = Node(
+        package="rtk2026_peripherals",
+        executable="lane_mission",
+        name="lane_mission",
+        output="screen",
+        parameters=[
+            {"use_sim_time": use_sim_time},
+            # Hold direction constraint for 5 s after sign detected
+            {"constraint_duration_sec": 5.0},
+            # Need 3 consecutive detections to activate (debounce false positives)
+            {"sign_debounce_count": 3},
+        ],
+        condition=UnlessCondition(lane_calibration_mode),
+    )
+
+    # ------------------------------------------------------------------
+    # detect_intersection_sign: publishes /detect/traffic_sign
+    #   (UInt8: 1=intersection, 2=left, 3=right)
+    # ------------------------------------------------------------------
+    detect_intersection_sign_node = Node(
+        package="turtlebot3_autorace_detect",
+        executable="detect_intersection_sign",
+        name="detect_intersection_sign",
+        output="screen",
+        parameters=[{"use_sim_time": use_sim_time}],
+        remappings=[
+            ("/detect/image_input",            ipm_compensated_topic),
+            ("/detect/image_input/compressed", ipm_compensated_topic + "/compressed"),
+        ],
+        condition=UnlessCondition(lane_calibration_mode),
+    )
+
+    # ------------------------------------------------------------------
+    # avoid_construction: lidar obstacle avoidance → /avoid_control
+    # Delayed 15 s: lane_state=1 at startup triggers false avoidance otherwise
+    # ------------------------------------------------------------------
     avoid_construction_node = Node(
         package="turtlebot3_autorace_mission",
         executable="avoid_construction",
@@ -146,41 +206,38 @@ def generate_launch_description():
         condition=UnlessCondition(lane_calibration_mode),
     )
 
-    # detect_construction_sign for sign detection
-    detect_sign_node = Node(
+    # ------------------------------------------------------------------
+    # detect_construction_sign (original mission sign, kept for compatibility)
+    # ------------------------------------------------------------------
+    detect_construction_sign_node = Node(
         package="turtlebot3_autorace_detect",
         executable="detect_construction_sign",
         name="detect_construction_sign",
         output="screen",
         parameters=[{"use_sim_time": use_sim_time}],
         remappings=[
-            ("/detect/image_input", ipm_compensated_topic),
+            ("/detect/image_input",            ipm_compensated_topic),
             ("/detect/image_input/compressed", ipm_compensated_topic + "/compressed"),
         ],
     )
 
+    # ------------------------------------------------------------------
+    # SLAM toolbox (optional, use_slam:=true)
+    # Provides /map and corrected /tf odom→base_footprint
+    # ------------------------------------------------------------------
     actions = [
-        DeclareLaunchArgument("use_sim_time", default_value="true", description="Use sim time"),
-        DeclareLaunchArgument(
-            "lane_calibration_mode",
-            default_value="false",
-            description="Run detect_lane in calibration mode to tune lane params in rqt and save lane.yaml",
-        ),
-        DeclareLaunchArgument(
-            "use_camera_calibration",
-            default_value="false",
-            description="Use turtlebot3_autorace_camera (intrinsic+extrinsic) for /camera/image_projected.",
-        ),
-        DeclareLaunchArgument(
-            "lane_image_source",
-            default_value="ipm",
-            description="Which topic to feed detect_lane: ipm or camera.",
-        ),
-        DeclareLaunchArgument(
-            "mission",
-            default_value="construction",
-            description="Mission type for sign detection",
-        ),
+        DeclareLaunchArgument("use_sim_time",           default_value="true",
+                              description="Use sim time"),
+        DeclareLaunchArgument("lane_calibration_mode",  default_value="false",
+                              description="detect_lane calibration mode (tune in rqt)"),
+        DeclareLaunchArgument("use_camera_calibration", default_value="false",
+                              description="Use turtlebot3_autorace_camera for image_projected"),
+        DeclareLaunchArgument("lane_image_source",      default_value="ipm",
+                              description="Bird's-eye source for detect_lane: ipm or camera"),
+        DeclareLaunchArgument("use_slam",               default_value="false",
+                              description="Run slam_toolbox for map building + odometry correction"),
+        DeclareLaunchArgument("mission",                default_value="construction",
+                              description="Mission type for sign detection"),
         max_vel_node,
         relay_node,
     ]
@@ -213,13 +270,28 @@ def generate_launch_description():
             ),
         )
 
+    if slam_launch and os.path.isfile(slam_launch):
+        actions.append(
+            GroupAction(
+                condition=IfCondition(use_slam),
+                actions=[
+                    IncludeLaunchDescription(
+                        PythonLaunchDescriptionSource(slam_launch),
+                        launch_arguments={"use_sim_time": use_sim_time}.items(),
+                    ),
+                ],
+            ),
+        )
+
     actions.extend([
         detect_lane_node_ipm,
         detect_lane_node_camera,
         control_lane_node,
-        # Delay avoid_construction 15s: lane_state=1 at startup triggers false avoidance otherwise
+        lane_mission_node,
+        detect_intersection_sign_node,
+        # Delay avoid_construction 15s: lane_state=1 at startup triggers false avoidance
         TimerAction(period=15.0, actions=[avoid_construction_node]),
-        detect_sign_node,
+        detect_construction_sign_node,
     ])
 
     return LaunchDescription(actions)

@@ -39,6 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-gazebo-ros \
     ros-humble-rmw-cyclonedds-cpp \
     ros-humble-teleop-twist-keyboard \
+    ros-humble-slam-toolbox \
     ros-humble-rqt \
     ros-humble-rqt-image-view \
     ros-humble-rqt-common-plugins \
