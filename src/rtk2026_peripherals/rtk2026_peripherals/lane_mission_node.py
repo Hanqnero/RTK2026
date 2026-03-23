@@ -114,7 +114,8 @@ class LaneMissionNode(Node):
                 f"Sign {sign} detected → {new_state} "
                 f"(constraint for {self._duration:.1f}s)"
             )
-        self._state          = new_state
+        self._state = new_state
+        # Extend timer: as long as sign is visible, keep resetting the timeout
         self._constraint_end = now + self._duration
         self._sign_buf.clear()
 

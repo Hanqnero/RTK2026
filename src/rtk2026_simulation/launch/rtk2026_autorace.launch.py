@@ -158,10 +158,11 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {"use_sim_time": use_sim_time},
-            {"constraint_duration_sec": 5.0},
-            # Vote window: sign must win 7/10 detections to activate
+            # At 0.032 m/s a 90-deg turn takes ~20s — hold constraint long enough
+            {"constraint_duration_sec": 20.0},
+            # 5/10 to activate earlier (when sign is still far)
             {"vote_window": 10},
-            {"vote_threshold": 0.7},
+            {"vote_threshold": 0.5},
             # This track has only a right-turn sign at the intersection
             {"allowed_signs": "right"},
         ],
