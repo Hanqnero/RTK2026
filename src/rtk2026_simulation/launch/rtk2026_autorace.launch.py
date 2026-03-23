@@ -158,10 +158,12 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {"use_sim_time": use_sim_time},
-            # Hold direction constraint for 5 s after sign detected
             {"constraint_duration_sec": 5.0},
-            # Need 3 consecutive detections to activate (debounce false positives)
-            {"sign_debounce_count": 3},
+            # Vote window: sign must win 7/10 detections to activate
+            {"vote_window": 10},
+            {"vote_threshold": 0.7},
+            # This track has only a right-turn sign at the intersection
+            {"allowed_signs": "right"},
         ],
         condition=UnlessCondition(lane_calibration_mode),
     )

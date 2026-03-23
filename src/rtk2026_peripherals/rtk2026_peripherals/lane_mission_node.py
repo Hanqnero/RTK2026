@@ -17,7 +17,9 @@ Topics:
 Parameters:
   constraint_duration_sec (float, 5.0) — how long to hold the constraint after sign is seen
   az_turn_limit          (float, 2.0)  — max |angular.z| during constraint
-  sign_debounce_count    (int,   3)    — consecutive sign detections required to activate
+  vote_window            (int,   10)   — sliding window size for sign voting
+  vote_threshold         (float, 0.6)  — fraction of window needed to activate (e.g. 6/10)
+  allowed_signs          (str,  "all") — which signs to act on: "all", "right", "left"
   passthrough_avoid      (bool, True)  — pass avoid_control through unclamped when avoid_active
 """
 
@@ -46,17 +48,21 @@ class LaneMissionNode(Node):
 
         self.declare_parameter("constraint_duration_sec", 5.0)
         self.declare_parameter("az_turn_limit",           2.0)
-        self.declare_parameter("sign_debounce_count",     3)
+        self.declare_parameter("vote_window",             10)
+        self.declare_parameter("vote_threshold",          0.6)
+        self.declare_parameter("allowed_signs",           "all")
         self.declare_parameter("passthrough_avoid",       True)
 
-        self._duration    = self.get_parameter("constraint_duration_sec").value
-        self._az_limit    = self.get_parameter("az_turn_limit").value
-        self._debounce_n  = self.get_parameter("sign_debounce_count").value
-        self._pass_avoid  = self.get_parameter("passthrough_avoid").value
+        self._duration       = self.get_parameter("constraint_duration_sec").value
+        self._az_limit       = self.get_parameter("az_turn_limit").value
+        self._vote_window    = self.get_parameter("vote_window").value
+        self._vote_threshold = self.get_parameter("vote_threshold").value
+        self._allowed        = self.get_parameter("allowed_signs").value  # "all"|"right"|"left"
+        self._pass_avoid     = self.get_parameter("passthrough_avoid").value
 
         self._state          = STATE_NORMAL
         self._constraint_end = 0.0       # wall-clock time when constraint expires
-        self._sign_buf: list[int] = []   # debounce buffer
+        self._sign_buf: list[int] = []   # sliding vote window
 
         self._avoid_active   = False
 
@@ -80,14 +86,20 @@ class LaneMissionNode(Node):
         if sign not in (SIGN_LEFT, SIGN_RIGHT, SIGN_INTERSECTION):
             return
 
-        self._sign_buf.append(sign)
-        if len(self._sign_buf) > self._debounce_n * 2:
-            self._sign_buf = self._sign_buf[-self._debounce_n * 2:]
+        # Filter by allowed_signs parameter
+        if self._allowed == "right" and sign != SIGN_RIGHT:
+            return
+        if self._allowed == "left" and sign != SIGN_LEFT:
+            return
 
-        # Activate only when the last N detections all agree
-        if len(self._sign_buf) >= self._debounce_n:
-            recent = self._sign_buf[-self._debounce_n:]
-            if all(s == sign for s in recent):
+        self._sign_buf.append(sign)
+        if len(self._sign_buf) > self._vote_window:
+            self._sign_buf = self._sign_buf[-self._vote_window:]
+
+        # Activate when a sign wins the vote (>= vote_threshold fraction of window)
+        if len(self._sign_buf) >= self._vote_window:
+            count = self._sign_buf.count(sign)
+            if count / self._vote_window >= self._vote_threshold:
                 self._activate(sign)
 
     def _activate(self, sign: int):
