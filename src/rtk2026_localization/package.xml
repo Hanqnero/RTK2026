@@ -4,7 +4,7 @@
   <name>rtk2026_localization</name>
   <version>0.1.0</version>
   <description>EKF localization: fuse odom (and IMU when available)</description>
-  <maintainer email="user@example.com">RTK2026</maintainer>
+  <maintainer email=""></maintainer>
   <license>Apache-2.0</license>
   <depend>robot_localization</depend>
   <depend>launch</depend>

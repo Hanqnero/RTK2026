@@ -4,7 +4,7 @@
   <name>rtk2026_navigation</name>
   <version>0.1.0</version>
   <description>Nav2 config and launch for RTK2026 diff-drive base</description>
-  <maintainer email="user@example.com">RTK2026</maintainer>
+  <maintainer email=""></maintainer>
   <license>Apache-2.0</license>
   <depend>nav2_bringup</depend>
   <depend>launch</depend>

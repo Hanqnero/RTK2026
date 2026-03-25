@@ -3,8 +3,8 @@
 <package format="3">
   <name>rtk2026</name>
   <version>0.1.0</version>
-  <description>Meta-package for RTK2026 tracked mobile robot</description>
-  <maintainer email="user@example.com">RTK2026</maintainer>
+  <description>Robot meta-package</description>
+  <maintainer email=""></maintainer>
   <license>Apache-2.0</license>
   <exec_depend>rtk2026_description</exec_depend>
   <exec_depend>rtk2026_bringup</exec_depend>

@@ -4,7 +4,7 @@
   <name>rtk2026_base</name>
   <version>0.1.0</version>
   <description>Diff-drive base: cmd_vel to motor PWM, encoder to odometry and tf</description>
-  <maintainer email="user@example.com">RTK2026</maintainer>
+  <maintainer email=""></maintainer>
   <license>Apache-2.0</license>
   <depend>rclpy</depend>
   <depend>geometry_msgs</depend>
