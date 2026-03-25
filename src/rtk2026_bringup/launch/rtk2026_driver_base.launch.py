@@ -47,20 +47,24 @@ def generate_launch_description():
 
     description_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            PathJoinSubstitution([
-                FindPackageShare("rtk2026_description"), "launch", "view_rtk2026.launch.py"
-            ])
+            PathJoinSubstitution(
+                [
+                    FindPackageShare("rtk2026_description"),
+                    "launch",
+                    "view_rtk2026.launch.py",
+                ]
+            )
         ),
         launch_arguments={"use_rviz": use_rviz}.items(),
         condition=IfCondition(use_description),
     )
 
-    driver_config = PathJoinSubstitution([
-        FindPackageShare("rtk2026_driver"), "config", "arduino_bridge.yaml"
-    ])
-    base_config = PathJoinSubstitution([
-        FindPackageShare("rtk2026_base"), "config", "base_controller.yaml"
-    ])
+    driver_config = PathJoinSubstitution(
+        [FindPackageShare("rtk2026_bringup"), "config", "rtk2026_params.yaml"]
+    )
+    base_config = PathJoinSubstitution(
+        [FindPackageShare("rtk2026_base"), "config", "base_controller.yaml"]
+    )
 
     arduino_bridge_node = Node(
         package="rtk2026_driver",

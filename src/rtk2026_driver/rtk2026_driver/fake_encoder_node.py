@@ -3,8 +3,9 @@
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Header
+
 from rtk2026_interfaces.msg import EncoderReport
 
 
@@ -15,8 +16,8 @@ class FakeEncoderNode(Node):
         super().__init__("fake_encoder")
         self.declare_parameter("encoder_report_topic", "encoder_report")
         self.declare_parameter("publish_rate", 10.0)
-        topic = self.get_parameter("encoder_report_topic").get_parameter_value().string_value
-        rate = self.get_parameter("publish_rate").get_parameter_value().double_value
+        topic = self.get_parameter("encoder_report_topic").value
+        rate = self.get_parameter("publish_rate").value
         self._left = 0
         self._right = 0
         qos = QoSProfile(
@@ -26,7 +27,9 @@ class FakeEncoderNode(Node):
         )
         self._pub = self.create_publisher(EncoderReport, topic, qos)
         self._timer = self.create_timer(1.0 / rate, self._timer_cb)
-        self.get_logger().info("Fake encoder publishing on %s at %.1f Hz" % (topic, rate))
+        self.get_logger().info(
+            "Fake encoder publishing on %s at %.1f Hz" % (topic, rate)
+        )
 
     def _timer_cb(self):
         msg = EncoderReport()

@@ -8,6 +8,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Header
+
 from rtk2026_interfaces.msg import EncoderReport, MotorCommand
 
 try:
@@ -43,30 +44,6 @@ class ArduinoBridgeNode(Node):
         self.declare_parameter("encoder_report_topic", "encoder_report")
         self.declare_parameter("min_motor_send_interval_sec", 0.02)
 
-<<<<<<< HEAD
-        self._port_path = (
-            self.get_parameter("serial_port").get_parameter_value().string_value
-        )
-        self._baud = self.get_parameter("baud_rate").get_parameter_value().integer_value
-        self._read_timeout = (
-            self.get_parameter("read_timeout_sec").get_parameter_value().double_value
-        )
-        self._publish_rate = (
-            self.get_parameter("publish_rate").get_parameter_value().double_value
-        )
-        self._motor_topic = (
-            self.get_parameter("motor_command_topic").get_parameter_value().string_value
-        )
-        self._encoder_topic = (
-            self.get_parameter("encoder_report_topic")
-            .get_parameter_value()
-            .string_value
-        )
-        self._min_send_interval = (
-            self.get_parameter("min_motor_send_interval_sec")
-            .get_parameter_value()
-            .double_value
-=======
         self._port_path = str(self.get_parameter("serial_port").value)
         self._baud = int(self.get_parameter("baud_rate").value)
         self._read_timeout = float(self.get_parameter("read_timeout_sec").value)
@@ -75,7 +52,6 @@ class ArduinoBridgeNode(Node):
         self._encoder_topic = str(self.get_parameter("encoder_report_topic").value)
         self._min_send_interval = float(
             self.get_parameter("min_motor_send_interval_sec").value
->>>>>>> arduino
         )
 
         self._ser = None

@@ -4,14 +4,14 @@
 import math
 
 import rclpy
+from geometry_msgs.msg import Quaternion, TransformStamped, Twist
+from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.parameter import ParameterType
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from geometry_msgs.msg import Twist
-from nav_msgs.msg import Odometry
-from rtk2026_interfaces.msg import EncoderReport, MotorCommand
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from tf2_ros import TransformBroadcaster
-from geometry_msgs.msg import TransformStamped, Quaternion
+
+from rtk2026_interfaces.msg import EncoderReport, MotorCommand
 
 
 class BaseControllerNode(Node):
@@ -27,26 +27,50 @@ class BaseControllerNode(Node):
         self.declare_parameter("cmd_vel_topic", "cmd_vel")
         self.declare_parameter("encoder_report_topic", "encoder_report")
         self.declare_parameter("motor_command_topic", "motor_command")
+        self.declare_parameter("motor_publish_rate", 100.0)
         self.declare_parameter("odom_topic", "odom")
         self.declare_parameter("odom_frame_id", "odom")
         self.declare_parameter("base_frame_id", "base_link")
         self.declare_parameter("tf_publish_rate", 20.0)
         self.declare_parameter("publish_tf", True)
 
-        self._wheel_sep = self.get_parameter("wheel_separation").get_parameter_value().double_value
-        self._ticks_per_m = self.get_parameter("ticks_per_meter").get_parameter_value().double_value
-        self._max_linear = self.get_parameter("max_linear_speed").get_parameter_value().double_value
-        self._max_angular = self.get_parameter("max_angular_speed").get_parameter_value().double_value
-        self._max_pwm = self.get_parameter("max_pwm").get_parameter_value().integer_value
-        self._cmd_timeout = self.get_parameter("cmd_vel_timeout_sec").get_parameter_value().double_value
-        self._odom_frame = self.get_parameter("odom_frame_id").get_parameter_value().string_value
-        self._base_frame = self.get_parameter("base_frame_id").get_parameter_value().string_value
-        self._tf_rate = self.get_parameter("tf_publish_rate").get_parameter_value().double_value
+        self._wheel_sep = (
+            self.get_parameter("wheel_separation").get_parameter_value().double_value
+        )
+        self._ticks_per_m = (
+            self.get_parameter("ticks_per_meter").get_parameter_value().double_value
+        )
+        self._max_linear = (
+            self.get_parameter("max_linear_speed").get_parameter_value().double_value
+        )
+        self._max_angular = (
+            self.get_parameter("max_angular_speed").get_parameter_value().double_value
+        )
+        self._max_pwm = (
+            self.get_parameter("max_pwm").get_parameter_value().integer_value
+        )
+        self._cmd_timeout = (
+            self.get_parameter("cmd_vel_timeout_sec").get_parameter_value().double_value
+        )
+        self._odom_frame = (
+            self.get_parameter("odom_frame_id").get_parameter_value().string_value
+        )
+        self._base_frame = (
+            self.get_parameter("base_frame_id").get_parameter_value().string_value
+        )
+        self._tf_rate = (
+            self.get_parameter("tf_publish_rate").get_parameter_value().double_value
+        )
         pv = self.get_parameter("publish_tf").get_parameter_value()
         if pv.type == ParameterType.PARAMETER_BOOL:
             self._publish_tf = pv.bool_value
         else:
             self._publish_tf = pv.string_value.lower() == "true"
+
+        self._motor_command_rate = float(self.get_parameter("motor_publish_rate").value)
+        motor_period = (
+            1.0 / self._motor_command_rate if self._motor_command_rate > 0.0 else 0.05
+        )
 
         self._x = 0.0
         self._y = 0.0
@@ -60,7 +84,9 @@ class BaseControllerNode(Node):
 
         self._motor_pub = self.create_publisher(
             MotorCommand,
-            self.get_parameter("motor_command_topic").get_parameter_value().string_value,
+            self.get_parameter("motor_command_topic")
+            .get_parameter_value()
+            .string_value,
             10,
         )
         self._odom_pub = self.create_publisher(
@@ -83,12 +109,14 @@ class BaseControllerNode(Node):
         )
         self._encoder_sub = self.create_subscription(
             EncoderReport,
-            self.get_parameter("encoder_report_topic").get_parameter_value().string_value,
+            self.get_parameter("encoder_report_topic")
+            .get_parameter_value()
+            .string_value,
             self._encoder_cb,
             qos_sensor,
         )
 
-        self._cmd_timer = self.create_timer(0.05, self._cmd_timer_cb)
+        self._cmd_timer = self.create_timer(motor_period, self._cmd_timer_cb)
         if self._publish_tf:
             self._tf_timer = self.create_timer(1.0 / self._tf_rate, self._tf_timer_cb)
         else:
