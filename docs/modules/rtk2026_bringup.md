@@ -3,7 +3,7 @@
 ## Назначение
 
 Содержит launch‑файлы, которые собирают воедино драйвер, базу, локализацию, SLAM, навигацию и периферию.  
-Отвечает за сценарии «поднять весь робот», «только база», «база + SLAM + Nav2», а также новый Gazebo/симуляционный пайплайн.
+Отвечает за сценарии «поднять весь робот», «только база», «база + SLAM + Nav2». Симуляция на трассе — отдельно в `rtk2026_simulation` (`rtk2026_diff_robot_track.launch.py`).
 
 ## Основные launch‑файлы
 
@@ -14,10 +14,6 @@
   - EKF (`rtk2026_localization`);
   - SLAM (`rtk2026_slam`);
   - Nav2 (`rtk2026_navigation`).
-- `rtk2026_sim_slam_explore.launch.py` — Gazebo + SLAM + Nav2 + frontier‑explorer:
-  - вызывает `rtk2026_simulation/rtk2026_gazebo.launch.py`;
-  - затем `rtk2026_nav2_explorer/rtk2026_nav2_slam.launch.py`;
-  - затем `rtk2026_nav2_explorer/rtk2026_explorer.launch.py`.
 
 ## Параметры
 
@@ -26,5 +22,5 @@
 - `use_description` — включать ли `robot_state_publisher` и RViz;
 - `use_fake_encoder` — использовать ли заглушку энкодера;
 - `use_localization`, `use_slam`, `use_navigation` — включать ли соответствующие подсистемы;
-- `use_sim_time` — время от симуляции (Isaac / Gazebo).
+- `use_sim_time` — время от симуляции (Gazebo и т.п.).
 

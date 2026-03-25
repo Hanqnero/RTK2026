@@ -30,6 +30,11 @@ setup(
             "static_map_publisher = rtk2026_peripherals.static_map_publisher_node:main",
             "static_odom_tf_publisher = rtk2026_peripherals.static_odom_tf_node:main",
             "trigger_nav2_bringup = rtk2026_peripherals.trigger_nav2_bringup_node:main",
+            "image_relay_autorace = rtk2026_peripherals.image_relay_autorace_node:main",
+            "cmd_vel_limiter = rtk2026_peripherals.cmd_vel_limiter_node:main",
+            "autorace_max_vel_publisher = rtk2026_peripherals.autorace_max_vel_publisher_node:main",
+            "lane_path_publisher = rtk2026_peripherals.lane_path_publisher:main",
+            "lane_mission = rtk2026_peripherals.lane_mission_node:main",
         ],
     },
 )

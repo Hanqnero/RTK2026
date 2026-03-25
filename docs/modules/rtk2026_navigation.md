@@ -24,7 +24,5 @@
 ## Использование
 
 - В реальном роботе — через `rtk2026_bringup/full.launch.py` с `use_navigation:=true`.
-- В симуляции/SLAM — через:
-  - `rtk2026_simulation/simulation.launch.py` (Nav2 поверх фейковой карты/SLAM),
-  - `rtk2026_nav2_explorer/rtk2026_nav2_slam.launch.py` (Nav2 + SLAM для исследования).
+- В симуляции/SLAM — через `rtk2026_simulation/rtk2026_diff_robot_track.launch.py` (включает Nav2 через `rtk2026_nav2_explorer`) или отдельно `rtk2026_nav2_explorer/rtk2026_nav2_slam.launch.py`.
 

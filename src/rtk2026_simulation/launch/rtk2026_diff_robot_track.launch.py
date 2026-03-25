@@ -1,5 +1,6 @@
 import os
 
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
@@ -10,18 +11,9 @@ from launch.actions import (
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-
-
-def _robot_description_string() -> str:
-    # В Docker мы знаем layout: diff_robot лежит в /workspace/src/diff_robot
-    urdf_path = "/workspace/src/diff_robot/urdf/diff_robot.urdf"
-    try:
-        with open(urdf_path, "r") as f:
-            return f.read()
-    except Exception:
-        return ""
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -34,6 +26,8 @@ def generate_launch_description() -> LaunchDescription:
     Y = LaunchConfiguration("Y")
     use_sim_time = LaunchConfiguration("use_sim_time")
     explore = LaunchConfiguration("explore")
+    use_rviz = LaunchConfiguration("use_rviz")
+    use_gazebo_gui = LaunchConfiguration("use_gazebo_gui")
 
     # Пути к launch RTK‑Nav2+SLAM и explorer
     nav2_slam_launch = PathJoinSubstitution(
@@ -51,11 +45,20 @@ def generate_launch_description() -> LaunchDescription:
         ]
     )
 
-    robot_description_xml = _robot_description_string()
+    # robot_description из URDF по пути пакета (работает и в /workspace, и в /home/.../RTK2026)
+    diff_robot_share = get_package_share_directory("diff_robot")
+    urdf_path = os.path.join(diff_robot_share, "urdf", "diff_robot.urdf")
+    with open(urdf_path, "r") as f:
+        robot_description_xml = f.read()
     robot_description = {"robot_description": robot_description_xml}
 
-    # RViz конфиг из diff_robot (тот же, что использовался раньше)
-    rviz_config_default = "/workspace/src/diff_robot/urdf/rviz.rviz"
+    diff_robot_share_sub = FindPackageShare("diff_robot")
+    urdf_file = PathJoinSubstitution(
+        [diff_robot_share_sub, "urdf", "diff_robot.urdf"]
+    )
+    rviz_config_default = PathJoinSubstitution(
+        [diff_robot_share_sub, "urdf", "rviz.rviz"]
+    )
     rviz_config = LaunchConfiguration("rvizconfig")
 
     robot_state_publisher = Node(
@@ -69,15 +72,19 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
+    # use_gazebo_gui:=true (Windows/по умолчанию) — окно Gazebo; false (Mac VNC) — только gzserver, визуализация в RViz
+    world_dir = os.path.join(diff_robot_share, "world")
     gazebo_launch = ExecuteProcess(
-        cmd=[
-            "gazebo",
-            "--verbose",
-            "-s",
-            "libgazebo_ros_factory.so",
-            world,
-        ],
+        cmd=["gazebo", "--verbose", "-s", "libgazebo_ros_factory.so", world],
         output="screen",
+        cwd=world_dir,
+        condition=IfCondition(use_gazebo_gui),
+    )
+    gzserver_launch = ExecuteProcess(
+        cmd=["gzserver", "--verbose", world, "-s", "libgazebo_ros_factory.so"],
+        output="screen",
+        cwd=world_dir,
+        condition=UnlessCondition(use_gazebo_gui),
     )
 
     spawn_entity = TimerAction(
@@ -88,7 +95,7 @@ def generate_launch_description() -> LaunchDescription:
                 executable="spawn_entity.py",
                 arguments=[
                     "-file",
-                    "/workspace/src/diff_robot/urdf/diff_robot.urdf",
+                    urdf_file,
                     "-entity",
                     "diff_robot",
                     "-timeout",
@@ -120,6 +127,7 @@ def generate_launch_description() -> LaunchDescription:
         parameters=[
             {"use_sim_time": use_sim_time},
         ],
+        condition=IfCondition(use_rviz),
     )
 
     # RTK Nav2 + SLAM поверх diff_robot (Gazebo уже даёт /odom и /scan)
@@ -164,8 +172,12 @@ def generate_launch_description() -> LaunchDescription:
     ld_actions = [
         DeclareLaunchArgument(
             "world",
-            default_value="/workspace/src/diff_robot/world/silverstone_track.world",
-            description="Absolute path to Gazebo world file inside container.",
+            default_value=os.path.join(
+                get_package_share_directory("diff_robot"),
+                "world",
+                "silverstone_track.world",
+            ),
+            description="Path to Gazebo world file.",
         ),
         DeclareLaunchArgument(
             "x",
@@ -212,8 +224,19 @@ def generate_launch_description() -> LaunchDescription:
             default_value="true",
             description="Start RTK frontier explorer after Nav2+SLAM.",
         ),
+        DeclareLaunchArgument(
+            "use_rviz",
+            default_value="true",
+            description="Start RViz2 inside the container.",
+        ),
+        DeclareLaunchArgument(
+            "use_gazebo_gui",
+            default_value="true",
+            description="If true, run full Gazebo with GUI; if false, run gzserver only (headless, e.g. for Mac VNC).",
+        ),
         robot_state_publisher,
         gazebo_launch,
+        gzserver_launch,
         spawn_entity,
         rviz_node,
         nav2_group,

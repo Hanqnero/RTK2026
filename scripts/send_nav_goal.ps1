@@ -1,4 +1,4 @@
-# Send a test Nav2 goal. With split containers use the Nav2 container (run_docker_slam_nav2.ps1).
+# Send a test Nav2 goal. Use a running container that has Nav2 (e.g. nav2 service in compose).
 # Run from RTK2026 root: .\scripts\send_nav_goal.ps1. Optional: -X, -Y, -Yaw (degrees).
 
 param(
@@ -14,7 +14,7 @@ Set-Location $repoRoot
 $id = (docker ps --filter "name=rtk2026_nav2" --format "{{.ID}}" | Select-Object -First 1)
 if (-not $id) { $id = (docker ps --filter "ancestor=rtk2026:latest" --format "{{.ID}}" | Select-Object -First 1) }
 if (-not $id) {
-    Write-Host "No running container. Start base: .\scripts\run_docker_slam.ps1; then Nav2: .\scripts\run_docker_slam_nav2.ps1"
+    Write-Host "No running container found."
     exit 1
 }
 

@@ -3,22 +3,12 @@
 <package format="3">
   <name>rtk2026_simulation</name>
   <version>0.1.0</version>
-  <description>Simulation launch and Isaac Lab integration for RTK2026</description>
+  <description>Simulation launch files for RTK2026 (diff_robot on track)</description>
   <maintainer email="user@example.com">RTK2026</maintainer>
   <license>Apache-2.0</license>
-  <depend>rtk2026_description</depend>
-  <depend>rtk2026_peripherals</depend>
-  <exec_depend>gazebo_ros</exec_depend>
-  <exec_depend>gazebo_ros2_control</exec_depend>
-  <exec_depend>ros2_control</exec_depend>
-  <exec_depend>ros2_controllers</exec_depend>
-  <exec_depend>xacro</exec_depend>
-  <depend>rtk2026_localization</depend>
-  <depend>rtk2026_slam</depend>
-  <depend>rtk2026_navigation</depend>
-  <depend>robot_state_publisher</depend>
   <depend>launch</depend>
   <depend>launch_ros</depend>
+  <depend>robot_state_publisher</depend>
   <export>
     <build_type>ament_cmake</build_type>
   </export>

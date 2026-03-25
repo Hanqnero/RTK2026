@@ -9,8 +9,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path $PSScriptRoot -Parent
-if (-not (Test-Path (Join-Path $repoRoot "docker\Dockerfile"))) {
-    Write-Host "Repo root with docker/Dockerfile not found. Run from RTK2026 root."
+if (-not (Test-Path (Join-Path $repoRoot "docker\windows\Dockerfile"))) {
+    Write-Host "Repo root with docker/ not found. Run from RTK2026 root."
     exit 1
 }
 
@@ -52,4 +52,4 @@ if ($run -notmatch "not available|STARTUP failed") {
     Write-Host "WARN: Expected 'not available' or 'STARTUP failed' (no lifecycle_manager); exit code $exitCode"
 }
 Write-Host ""
-Write-Host "Steps 1-2 OK. Full pipeline: run_docker_slam.ps1 then send_nav_goal.ps1"
+Write-Host "Steps 1-2 OK."
