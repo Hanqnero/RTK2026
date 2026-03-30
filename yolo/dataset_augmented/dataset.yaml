@@ -1,0 +1,5 @@
+path: /Users/hanqnero/Desktop/rtk-dataset/dataset_augmented
+train: images/train
+val: images/val
+nc: 8
+names: ['bus_stop', 'move_forward', 'no_turn_left', 'no_turn_right', 'obstacle', 'parking_spot', 'turn_left', 'turn_right']
