@@ -16,8 +16,8 @@ Encoder::Encoder(int A, int B):
     last_time{0},
     A{A}, B{B}
 {
-    pinMode(A, INPUT);
-    pinMode(B, INPUT);
+    pinMode(A, INPUT_PULLUP);
+    pinMode(B, INPUT_PULLUP);
 }
 
 bool Encoder::direction() {

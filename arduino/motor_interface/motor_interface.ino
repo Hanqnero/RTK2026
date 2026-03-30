@@ -3,30 +3,31 @@
 
 namespace {
 
-constexpr uint8_t RAW_PWM_PACKET_SIZE = 4;
 constexpr uint8_t VELOCITY_PACKET_SIZE = 7;
 constexpr uint8_t VELOCITY_HEADER_0 = 0xA5;
 constexpr uint8_t VELOCITY_HEADER_1 = 0x5A;
 constexpr uint8_t TELEMETRY_HEADER_0 = 0x5A;
 constexpr uint8_t TELEMETRY_HEADER_1 = 0xA5;
 
-constexpr uint32_t CONTROL_PERIOD_MS = 20;
+constexpr uint32_t CONTROL_PERIOD_MS = 100;
 constexpr uint32_t COMMAND_TIMEOUT_MS = 300;
 
 constexpr int LEFT_MOTOR_SIGN = 1;
 constexpr int RIGHT_MOTOR_SIGN = 1;
-constexpr int LEFT_TPS_SIGN = 1;
-constexpr int RIGHT_TPS_SIGN = 1;
-constexpr float LEFT_TPS_TO_PWM = 0.80f;
-constexpr float RIGHT_TPS_TO_PWM = 0.80f;
-constexpr int LEFT_PWM_STATIC = 55;
-constexpr int RIGHT_PWM_STATIC = 55;
+constexpr int LEFT_ENCODER_SIGN = -1;
+constexpr int RIGHT_ENCODER_SIGN = -1;
 
-enum CommandMode : uint8_t {
-    COMMAND_NONE = 0,
-    COMMAND_PWM = 1,
-    COMMAND_WHEEL_VELOCITY = 2,
-};
+// Feedforward identified from floor sweep (ROS path, March 30, 2026).
+constexpr float LEFT_TPS_TO_PWM = 0.087f;
+constexpr float RIGHT_TPS_TO_PWM = 0.086f;
+constexpr int LEFT_PWM_STATIC = 29;
+constexpr int RIGHT_PWM_STATIC = 29;
+
+// PI correction on top of feedforward.
+constexpr float PI_KP = 0.05f;
+constexpr float PI_KI = 0.12f;
+constexpr float I_LIMIT = 350.0f;
+constexpr float DT_S = static_cast<float>(CONTROL_PERIOD_MS) / 1000.0f;
 
 struct __attribute__((packed)) TelemetryPacket {
     uint8_t header0;
@@ -38,11 +39,10 @@ struct __attribute__((packed)) TelemetryPacket {
     uint8_t checksum;
 };
 
-CommandMode command_mode = COMMAND_NONE;
-int raw_left_pwm = 0;
-int raw_right_pwm = 0;
 int16_t target_left_tps = 0;
 int16_t target_right_tps = 0;
+float left_i = 0.0f;
+float right_i = 0.0f;
 
 uint32_t last_command_millis = 0;
 uint32_t last_control_millis = 0;
@@ -56,81 +56,69 @@ uint8_t packet_checksum(const uint8_t* data, size_t size) {
     return sum;
 }
 
-int target_to_pwm(int16_t target_tps, int tps_sign, float tps_to_pwm, int pwm_static) {
+int feedforward_pwm(int16_t target_tps, float gain, int pwm_static) {
     if (target_tps == 0) {
         return 0;
     }
 
-    const int signed_target = tps_sign * static_cast<int>(target_tps);
-    int pwm = static_cast<int>(abs(signed_target) * tps_to_pwm) + pwm_static;
-    pwm = constrain(pwm, 0, 255);
-    return (signed_target > 0) ? pwm : -pwm;
+    float pwm = static_cast<float>(target_tps) * gain;
+    pwm += (target_tps > 0) ? static_cast<float>(pwm_static) : -static_cast<float>(pwm_static);
+    return static_cast<int>(constrain(pwm, -255.0f, 255.0f));
+}
+
+int wheel_control_pwm(
+    int16_t target_tps,
+    int32_t measured_tps,
+    float& integral_state,
+    float ff_gain,
+    int ff_static)
+{
+    if (target_tps == 0) {
+        integral_state = 0.0f;
+        return 0;
+    }
+
+    const float ff = static_cast<float>(feedforward_pwm(target_tps, ff_gain, ff_static));
+    const float error = static_cast<float>(target_tps) - static_cast<float>(measured_tps);
+    integral_state = constrain(integral_state + error * DT_S, -I_LIMIT, I_LIMIT);
+    const float u = ff + PI_KP * error + PI_KI * integral_state;
+    return static_cast<int>(constrain(u, -255.0f, 255.0f));
 }
 
 void stop_motion() {
-    raw_left_pwm = 0;
-    raw_right_pwm = 0;
     target_left_tps = 0;
     target_right_tps = 0;
     left_stop();
     right_stop();
 }
 
-bool read_velocity_packet() {
-    if (Serial.available() < VELOCITY_PACKET_SIZE) {
-        return false;
-    }
-    if (Serial.peek() != VELOCITY_HEADER_0) {
-        return false;
-    }
-
-    uint8_t frame[VELOCITY_PACKET_SIZE];
-    if (Serial.readBytes(reinterpret_cast<char*>(frame), VELOCITY_PACKET_SIZE) != VELOCITY_PACKET_SIZE) {
-        return false;
-    }
-    if (frame[0] != VELOCITY_HEADER_0 || frame[1] != VELOCITY_HEADER_1) {
-        return false;
-    }
-    if (packet_checksum(frame, VELOCITY_PACKET_SIZE - 1) != frame[VELOCITY_PACKET_SIZE - 1]) {
-        return false;
-    }
-
-    target_left_tps = static_cast<int16_t>(frame[2] | (frame[3] << 8));
-    target_right_tps = static_cast<int16_t>(frame[4] | (frame[5] << 8));
-    command_mode = COMMAND_WHEEL_VELOCITY;
-    last_command_millis = millis();
-    return true;
-}
-
 void process_serial_commands() {
     while (Serial.available() > 0) {
-        const int first = Serial.peek();
-        if (first < 0) {
+        if (Serial.peek() != VELOCITY_HEADER_0) {
+            Serial.read();
+            continue;
+        }
+
+        if (Serial.available() < VELOCITY_PACKET_SIZE) {
             return;
         }
 
-        if (first == VELOCITY_HEADER_0) {
-            if (Serial.available() < VELOCITY_PACKET_SIZE) {
-                return;
-            }
-            if (!read_velocity_packet()) {
-                Serial.read();
-            }
+        uint8_t frame[VELOCITY_PACKET_SIZE];
+        if (Serial.readBytes(reinterpret_cast<char*>(frame), VELOCITY_PACKET_SIZE) != VELOCITY_PACKET_SIZE) {
             return;
         }
 
-        if (Serial.available() >= RAW_PWM_PACKET_SIZE) {
-            uint8_t raw[RAW_PWM_PACKET_SIZE];
-            if (Serial.readBytes(reinterpret_cast<char*>(raw), RAW_PWM_PACKET_SIZE) != RAW_PWM_PACKET_SIZE) {
-                return;
-            }
-            raw_left_pwm = static_cast<int>(raw[0]) - static_cast<int>(raw[1]);
-            raw_right_pwm = static_cast<int>(raw[2]) - static_cast<int>(raw[3]);
-            command_mode = COMMAND_PWM;
-            last_command_millis = millis();
-            return;
+        if (frame[0] != VELOCITY_HEADER_0 || frame[1] != VELOCITY_HEADER_1) {
+            continue;
         }
 
+        if (packet_checksum(frame, VELOCITY_PACKET_SIZE - 1) != frame[VELOCITY_PACKET_SIZE - 1]) {
+            continue;
+        }
+
+        target_left_tps = static_cast<int16_t>(frame[2] | (frame[3] << 8));
+        target_right_tps = static_cast<int16_t>(frame[4] | (frame[5] << 8));
+        last_command_millis = millis();
         return;
     }
 }
@@ -200,26 +188,16 @@ void loop() {
 
     const uint32_t now = millis();
     if ((uint32_t)(now - last_command_millis) > COMMAND_TIMEOUT_MS) {
-        command_mode = COMMAND_NONE;
+        target_left_tps = 0;
+        target_right_tps = 0;
     }
 
     if ((uint32_t)(now - last_control_millis) >= CONTROL_PERIOD_MS) {
         last_control_millis = now;
-
-        switch (command_mode) {
-            case COMMAND_PWM:
-                left_set_speed(raw_left_pwm);
-                right_set_speed(raw_right_pwm);
-                break;
-            case COMMAND_WHEEL_VELOCITY:
-                left_set_speed(target_to_pwm(target_left_tps, LEFT_TPS_SIGN, LEFT_TPS_TO_PWM, LEFT_PWM_STATIC));
-                right_set_speed(target_to_pwm(target_right_tps, RIGHT_TPS_SIGN, RIGHT_TPS_TO_PWM, RIGHT_PWM_STATIC));
-                break;
-            case COMMAND_NONE:
-            default:
-                stop_motion();
-                break;
-        }
+        const int32_t left_meas = LEFT_ENCODER_SIGN * left_enc.speed();
+        const int32_t right_meas = RIGHT_ENCODER_SIGN * right_enc.speed();
+        left_set_speed(wheel_control_pwm(target_left_tps, left_meas, left_i, LEFT_TPS_TO_PWM, LEFT_PWM_STATIC));
+        right_set_speed(wheel_control_pwm(target_right_tps, right_meas, right_i, RIGHT_TPS_TO_PWM, RIGHT_PWM_STATIC));
     }
 
     if ((uint32_t)(now - last_telemetry_millis) >= CONTROL_PERIOD_MS) {
@@ -228,10 +206,10 @@ void loop() {
         TelemetryPacket pkt{};
         pkt.header0 = TELEMETRY_HEADER_0;
         pkt.header1 = TELEMETRY_HEADER_1;
-        pkt.left_speed = left_enc.speed();
-        pkt.left_cnt = static_cast<int32_t>(left_enc.cnt());
-        pkt.right_speed = right_enc.speed();
-        pkt.right_cnt = static_cast<int32_t>(right_enc.cnt());
+        pkt.left_speed = LEFT_ENCODER_SIGN * left_enc.speed();
+        pkt.left_cnt = LEFT_ENCODER_SIGN * static_cast<int32_t>(left_enc.cnt());
+        pkt.right_speed = RIGHT_ENCODER_SIGN * right_enc.speed();
+        pkt.right_cnt = RIGHT_ENCODER_SIGN * static_cast<int32_t>(right_enc.cnt());
         pkt.checksum = packet_checksum(reinterpret_cast<const uint8_t*>(&pkt), sizeof(pkt) - 1);
         Serial.write(reinterpret_cast<const uint8_t*>(&pkt), sizeof(pkt));
     }
