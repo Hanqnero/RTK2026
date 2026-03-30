@@ -17,16 +17,16 @@ constexpr int RIGHT_MOTOR_SIGN = 1;
 constexpr int LEFT_ENCODER_SIGN = -1;
 constexpr int RIGHT_ENCODER_SIGN = -1;
 
-// Feedforward identified from floor sweep (ROS path, March 30, 2026).
-constexpr float LEFT_TPS_TO_PWM = 0.087f;
-constexpr float RIGHT_TPS_TO_PWM = 0.086f;
-constexpr int LEFT_PWM_STATIC = 29;
-constexpr int RIGHT_PWM_STATIC = 29;
+// Conservative feedforward retune from floor logs.
+constexpr float LEFT_TPS_TO_PWM = 0.068f;
+constexpr float RIGHT_TPS_TO_PWM = 0.067f;
+constexpr int LEFT_PWM_STATIC = 22;
+constexpr int RIGHT_PWM_STATIC = 22;
 
 // PI correction on top of feedforward.
-constexpr float PI_KP = 0.05f;
-constexpr float PI_KI = 0.12f;
-constexpr float I_LIMIT = 350.0f;
+constexpr float PI_KP = 0.04f;
+constexpr float PI_KI = 0.06f;
+constexpr float I_LIMIT = 250.0f;
 constexpr float DT_S = static_cast<float>(CONTROL_PERIOD_MS) / 1000.0f;
 
 struct __attribute__((packed)) TelemetryPacket {
@@ -80,7 +80,17 @@ int wheel_control_pwm(
 
     const float ff = static_cast<float>(feedforward_pwm(target_tps, ff_gain, ff_static));
     const float error = static_cast<float>(target_tps) - static_cast<float>(measured_tps);
-    integral_state = constrain(integral_state + error * DT_S, -I_LIMIT, I_LIMIT);
+
+    // Simple anti-windup: freeze integrator if control is saturated and
+    // error pushes deeper into saturation.
+    const float i_candidate = constrain(integral_state + error * DT_S, -I_LIMIT, I_LIMIT);
+    const float u_candidate = ff + PI_KP * error + PI_KI * i_candidate;
+    const bool sat_high = (u_candidate > 255.0f) && (error > 0.0f);
+    const bool sat_low = (u_candidate < -255.0f) && (error < 0.0f);
+    if (!sat_high && !sat_low) {
+        integral_state = i_candidate;
+    }
+
     const float u = ff + PI_KP * error + PI_KI * integral_state;
     return static_cast<int>(constrain(u, -255.0f, 255.0f));
 }
