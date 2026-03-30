@@ -108,15 +108,12 @@ class BaseControllerNode(Node):
                 self._last_cmd_angular = 0.0
         v = max(-self._max_linear, min(self._max_linear, self._last_cmd_linear))
         omega = max(-self._max_angular, min(self._max_angular, self._last_cmd_angular))
-        L = self._wheel_sep
-        v_l = v - omega * L / 2.0
-        v_r = v + omega * L / 2.0
-        if self._max_linear > 0:
-            pwm_l = int((v_l / self._max_linear) * self._max_pwm)
-            pwm_r = int((v_r / self._max_linear) * self._max_pwm)
-        else:
-            pwm_l = 0
-            pwm_r = 0
+        # Map normalized linear/angular commands directly into PWM space so
+        # both full-forward and in-place rotation can use the full PWM range.
+        v_norm = (v / self._max_linear) if self._max_linear > 0 else 0.0
+        omega_norm = (omega / self._max_angular) if self._max_angular > 0 else 0.0
+        pwm_l = int((v_norm - omega_norm) * self._max_pwm)
+        pwm_r = int((v_norm + omega_norm) * self._max_pwm)
         pwm_l = max(-self._max_pwm, min(self._max_pwm, pwm_l))
         pwm_r = max(-self._max_pwm, min(self._max_pwm, pwm_r))
         self._motor_pub.publish(MotorCommand(left_pwm=pwm_l, right_pwm=pwm_r))
@@ -172,7 +169,7 @@ class BaseControllerNode(Node):
         return q
 
     def _tf_timer_cb(self):
-        if not self._publish_tf or self._last_encoder_time is None:
+        if not self._publish_tf:
             return
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
@@ -188,9 +185,12 @@ class BaseControllerNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = BaseControllerNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    finally:
+        node._motor_pub.publish(MotorCommand(left_pwm=0, right_pwm=0))
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == "__main__":

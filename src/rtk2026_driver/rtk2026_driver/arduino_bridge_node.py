@@ -33,6 +33,10 @@ class ArduinoBridgeNode(Node):
         self.declare_parameter("motor_command_topic", "motor_command")
         self.declare_parameter("encoder_report_topic", "encoder_report")
         self.declare_parameter("min_motor_send_interval_sec", 0.05)
+        self.declare_parameter("left_motor_inverted", False)
+        self.declare_parameter("right_motor_inverted", False)
+        self.declare_parameter("left_encoder_inverted", False)
+        self.declare_parameter("right_encoder_inverted", False)
 
         self._port_path = self.get_parameter("serial_port").get_parameter_value().string_value
         self._baud = self.get_parameter("baud_rate").get_parameter_value().integer_value
@@ -41,6 +45,10 @@ class ArduinoBridgeNode(Node):
         self._motor_topic = self.get_parameter("motor_command_topic").get_parameter_value().string_value
         self._encoder_topic = self.get_parameter("encoder_report_topic").get_parameter_value().string_value
         self._min_send_interval = self.get_parameter("min_motor_send_interval_sec").get_parameter_value().double_value
+        self._left_motor_inv = self.get_parameter("left_motor_inverted").get_parameter_value().bool_value
+        self._right_motor_inv = self.get_parameter("right_motor_inverted").get_parameter_value().bool_value
+        self._left_enc_inv = self.get_parameter("left_encoder_inverted").get_parameter_value().bool_value
+        self._right_enc_inv = self.get_parameter("right_encoder_inverted").get_parameter_value().bool_value
 
         self._ser = None
         self._last_motor_send_time = 0.0
@@ -72,18 +80,25 @@ class ArduinoBridgeNode(Node):
                 timeout=self._read_timeout,
                 write_timeout=0.1,
             )
+            # CH340 сбрасывает Arduino при открытии порта — ждём загрузки bootloader+sketch
+            import time as _time
+            _time.sleep(3.0)
+            self._ser.reset_input_buffer()
             self.get_logger().info("Opened serial %s at %d" % (self._port_path, self._baud))
         except Exception as e:
             self.get_logger().warn("Could not open serial %s: %s" % (self._port_path, e))
             self._ser = None
 
     def _motor_cb(self, msg: MotorCommand):
-        self._pending_left = clamp_pwm(msg.left_pwm)
-        self._pending_right = clamp_pwm(msg.right_pwm)
+        left = msg.left_pwm if not self._left_motor_inv else -msg.left_pwm
+        right = msg.right_pwm if not self._right_motor_inv else -msg.right_pwm
+        self._pending_left = clamp_pwm(left)
+        self._pending_right = clamp_pwm(right)
         self._has_pending = True
 
     def _timer_cb(self):
         if self._ser is None or not self._ser.is_open:
+            self._open_serial()
             return
         try:
             if self._ser.in_waiting >= TX_PACKET_SIZE:
@@ -94,10 +109,10 @@ class ArduinoBridgeNode(Node):
                     report.header = Header()
                     report.header.stamp = self.get_clock().now().to_msg()
                     report.header.frame_id = "base_link"
-                    report.left_count = int(left_cnt)
-                    report.right_count = int(right_cnt)
-                    report.left_speed = left_speed
-                    report.right_speed = right_speed
+                    report.left_count = int(-left_cnt if self._left_enc_inv else left_cnt)
+                    report.right_count = int(-right_cnt if self._right_enc_inv else right_cnt)
+                    report.left_speed = -left_speed if self._left_enc_inv else left_speed
+                    report.right_speed = -right_speed if self._right_enc_inv else right_speed
                     self._encoder_pub.publish(report)
         except Exception as e:
             self.get_logger().warn("Serial read error: %s" % e)
@@ -107,7 +122,7 @@ class ArduinoBridgeNode(Node):
                 pass
             self._ser = None
             self._open_serial()
-            return
+            # не делаем return — write всё равно должен отработать если порт переоткрылся
 
         now = time.monotonic()
         if self._has_pending and (now - self._last_motor_send_time) >= self._min_send_interval:
