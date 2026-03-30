@@ -4,10 +4,12 @@ arduino_bridge:
     baud_rate: 115200
     read_timeout_sec: 0.5
     publish_rate: 10.0
+    command_mode: "wheel_velocity"
     motor_command_topic: "motor_command"
+    wheel_velocity_command_topic: "wheel_velocity_command"
     encoder_report_topic: "encoder_report"
     min_motor_send_interval_sec: 0.05
     left_motor_inverted: false
     right_motor_inverted: false
-    left_encoder_inverted: false
+    left_encoder_inverted: true
     right_encoder_inverted: false

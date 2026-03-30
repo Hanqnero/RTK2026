@@ -1,16 +1,26 @@
 # Docker
 
-Build from repository root:
+## Raspberry Pi (arm64)
+
+Сборка на Mac (Apple Silicon):
 
 ```bash
-docker build -f docker/Dockerfile -t rtk2026:latest .
+./scripts/build_pi.sh
+# или вручную:
+docker buildx build --platform linux/arm64 -t rtk2026:latest -f docker/pi/Dockerfile .
 ```
 
-Or with compose:
+Загрузка на Pi и запуск:
 
 ```bash
-docker compose -f docker/docker-compose.yml build
-docker compose -f docker/docker-compose.yml up
+./scripts/deploy_pi.sh
+# или вручную:
+docker save rtk2026:latest | gzip | ssh pi@192.168.2.2 "gunzip | docker load"
+ssh pi@192.168.2.2 "docker run -d --name rtk2026 --privileged -v /dev:/dev --network host rtk2026:latest"
 ```
 
-Default command runs: `ros2 launch rtk2026_bringup rtk2026.launch.py`
+## Windows (симуляция, amd64)
+
+```powershell
+.\scripts\run_rtk2026_diff_robot.ps1 -Build -Explore -World track
+```

@@ -23,17 +23,18 @@ slam_toolbox:
     minimum_time_interval: 0.01
     transform_timeout: 0.2
     tf_buffer_duration: 10.0
-    stack_size_to_use: 40000000
-    enable_interactive_mode: true
+    stack_size_to_use: 10000000
+    enable_interactive_mode: false
 
     use_scan_matching: true
     use_scan_barycenter: true
-    minimum_travel_distance: 0.15
-    minimum_travel_heading: 0.15
+    # Без энкодеров odom статичный → обрабатываем каждый скан независимо от odom
+    minimum_travel_distance: 0.0
+    minimum_travel_heading: 0.0
     scan_buffer_size: 25
     scan_buffer_maximum_scan_distance: 5.0
     link_match_minimum_response_fine: 0.1
-    link_scan_maximum_distance: 0.5
+    link_scan_maximum_distance: 1.5
     loop_search_maximum_distance: 3.0
     do_loop_closing: true
     loop_match_minimum_chain_size: 10

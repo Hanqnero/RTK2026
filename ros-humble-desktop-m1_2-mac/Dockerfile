@@ -23,11 +23,8 @@ RUN apt-get -y update \
 # Some of the environment will vary depending on your setup.
 ENV DISPLAY=:0
 ENV SHELL=/bin/bash
-# cyclonedds doesn't quite work with this setup yet. there are a few open issues around this topic.
-# ENV RMW_IMPLEMENTATION rmw_cyclonedds_cpp
-# Используем поддерживаемый RMW по умолчанию (fast RTPS)
-ENV RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-ENV ROS_DOMAIN_ID=1
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+ENV ROS_DOMAIN_ID=0
 ENV ROS_LOCALHOST_ONLY=0
 RUN echo source /opt/ros/humble/setup.bash >> /home/$username/.bashrc
 COPY scripts/start.sh /usr/bin/start.sh

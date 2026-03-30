@@ -1,0 +1,63 @@
+{
+  "configById": {
+    "ImageView!bird_eye": {
+      "cameraTopic": "/camera/image_projected/compressed",
+      "enabledMarkerTopics": [],
+      "mode": "fit",
+      "rotation": 0,
+      "flipHorizontal": false,
+      "flipVertical": false,
+      "minValue": null,
+      "maxValue": null
+    },
+    "ImageView!edges": {
+      "cameraTopic": "/detect/image_output_sub1/compressed",
+      "enabledMarkerTopics": [],
+      "mode": "fit",
+      "rotation": 0,
+      "flipHorizontal": false,
+      "flipVertical": false,
+      "minValue": null,
+      "maxValue": null
+    },
+    "ImageView!hough": {
+      "cameraTopic": "/detect/image_output_sub2/compressed",
+      "enabledMarkerTopics": [],
+      "mode": "fit",
+      "rotation": 0,
+      "flipHorizontal": false,
+      "flipVertical": false,
+      "minValue": null,
+      "maxValue": null
+    },
+    "ImageView!result": {
+      "cameraTopic": "/detect/image_output/compressed",
+      "enabledMarkerTopics": [],
+      "mode": "fit",
+      "rotation": 0,
+      "flipHorizontal": false,
+      "flipVertical": false,
+      "minValue": null,
+      "maxValue": null
+    }
+  },
+  "globalVariables": {},
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "ImageView!bird_eye",
+      "second": "ImageView!edges",
+      "splitPercentage": 50
+    },
+    "second": {
+      "direction": "column",
+      "first": "ImageView!hough",
+      "second": "ImageView!result",
+      "splitPercentage": 50
+    },
+    "splitPercentage": 50
+  },
+  "playbackConfig": { "speed": 1 },
+  "userNodes": {}
+}
