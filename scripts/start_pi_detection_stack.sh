@@ -16,7 +16,7 @@ sleep 4
 ssh "${PI_HOST}" "docker exec ${CONTAINER} bash -lc 'source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash && ros2 topic pub --once /camera/ipm_tuning/set std_msgs/msg/Float32MultiArray \"{data: ${IPM_DATA}}\" >/dev/null 2>&1'"
 
 echo "[4/4] Sanity checks:"
-ssh "${PI_HOST}" "docker exec ${CONTAINER} bash -lc 'source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash && ros2 node list | grep -E \"^/(detect_sign|image_relay_autorace|ipm_tuner|foxglove_bridge)$\" && ros2 param get /detect_sign dataset_root && timeout 4 ros2 topic echo /camera/ipm_tuning/current --once'"
+ssh "${PI_HOST}" "docker exec ${CONTAINER} bash -lc 'source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash && ros2 node list | grep -E \"^/(detect_sign|image_relay_autorace|ipm_tuner|foxglove_bridge)$\" && ros2 param get /detect_sign dataset_root && timeout 4 ros2 topic echo /camera/ipm_tuning/current --once || true && grep -n \"SIFT sign detector\" /tmp/ros_launch.log | tail -n 1 || true'"
 
 echo
 echo "Foxglove: ws://192.168.2.2:8765"
