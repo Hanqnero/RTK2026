@@ -31,6 +31,7 @@ setup(
             "lane_mission = rtk2026_peripherals.lane_mission_node:main",
             "sign_distance = rtk2026_peripherals.sign_distance_node:main",
             "detect_sign_yolo = rtk2026_peripherals.detect_sign_yolo_node:main",
+            "detect_sign_sift = rtk2026_peripherals.detect_sign_sift_node:main",
             "board_calibration = rtk2026_peripherals.board_calibration_node:main",
             "projection_tuner = rtk2026_peripherals.projection_tuner_node:main",
             "ipm_tuner = rtk2026_peripherals.ipm_tuner_node:main",

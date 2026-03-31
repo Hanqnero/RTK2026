@@ -29,6 +29,7 @@ def generate_launch_description():
     camera_driver = LaunchConfiguration("camera_driver", default="realsense")
     use_lane = LaunchConfiguration("use_lane", default="false")
     lane_detector_mode = LaunchConfiguration("lane_detector_mode", default="lane")
+    sign_detector_backend = LaunchConfiguration("sign_detector_backend", default="sift")
 
     lidar_launch = PathJoinSubstitution([
         FindPackageShare("rtk2026_peripherals"), "launch", "lidar.launch.py"
@@ -70,6 +71,8 @@ def generate_launch_description():
                               description="Запустить lane detection + control_lane + sign_distance + lane_mission."),
         DeclareLaunchArgument("lane_detector_mode", default_value="lane",
                               description="Детектор для линии: lane или centerline."),
+        DeclareLaunchArgument("sign_detector_backend", default_value="sift",
+                              description="Детектор знаков: yolo или sift."),
 
         # Описание робота (robot_state_publisher + joint_state_publisher, без RViz)
         IncludeLaunchDescription(
@@ -247,6 +250,31 @@ def generate_launch_description():
                 "curvature_ref_lin_vel_mps": 0.03,
             }],
             condition=IfCondition(use_lane),
+        ),
+
+        # detect_sign_sift — детекция знаков SIFT (альтернатива YOLO)
+        Node(
+            package="rtk2026_peripherals",
+            executable="detect_sign_sift",
+            name="detect_sign",
+            output="screen",
+            parameters=[os.path.join(
+                get_package_share_directory("rtk2026_peripherals"),
+                "config", "sign_detector_sift.yaml")],
+            condition=IfCondition(PythonExpression([
+                "'", use_lane, "' == 'true' and '", sign_detector_backend, "' == 'sift'"
+            ])),
+        ),
+
+        # detect_sign_yolo — старый backend (по запросу)
+        Node(
+            package="rtk2026_peripherals",
+            executable="detect_sign_yolo",
+            name="detect_sign",
+            output="screen",
+            condition=IfCondition(PythonExpression([
+                "'", use_lane, "' == 'true' and '", sign_detector_backend, "' == 'yolo'"
+            ])),
         ),
 
         # sign_distance — глубина до знака через RealSense aligned depth
