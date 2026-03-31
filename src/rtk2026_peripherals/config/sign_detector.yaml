@@ -1,0 +1,25 @@
+sign_detector:
+  ros__parameters:
+    # Absolute path to the YOLO dataset directory containing data.yaml
+    # and train/{images,labels}.
+    dataset_root: /home/robot/RTK2026/yolo/dataset
+
+    # Camera image topic to subscribe to.
+    camera_topic: /camera/image_raw
+
+    # Detection thresholds — lower ratio_thresh = stricter matching.
+    ratio_thresh: 0.75
+    min_good: 6
+    min_inliers: 6
+    min_inlier_ratio: 0.3
+
+    # Appearance verification: minimum normalised cross-correlation
+    # between the warped reference and the query region.
+    min_ncc: 0.1
+
+    # Non-maximum suppression IoU threshold (suppress overlapping boxes).
+    nms_thresh: 0.4
+
+    # Maximum reference crops kept per class (higher = better recall,
+    # slower per-frame matching).
+    max_refs_per_class: 3

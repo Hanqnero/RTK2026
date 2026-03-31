@@ -35,6 +35,7 @@ setup(
             "autorace_max_vel_publisher = rtk2026_peripherals.autorace_max_vel_publisher_node:main",
             "lane_path_publisher = rtk2026_peripherals.lane_path_publisher:main",
             "lane_mission = rtk2026_peripherals.lane_mission_node:main",
+            "sign_detector = rtk2026_peripherals.sign_detection_node:main",
         ],
     },
 )
