@@ -75,7 +75,9 @@ class ImageProjection(Node):
         if self.is_calibration_mode:
             self.add_on_set_parameters_callback(self.cbGetImageProjectionParam)
 
-        self.sub_image_type = 'compressed'  # you can choose image type 'compressed', 'raw'
+        # image_compensation publishes raw Image on /camera/image_output.
+        # Keep projection subscriber in raw mode to avoid transport mismatch.
+        self.sub_image_type = 'raw'  # you can choose image type 'compressed', 'raw'
         self.pub_image_type = 'raw'  # you can choose image type 'compressed', 'raw'
 
         if self.sub_image_type == 'compressed':
