@@ -17,7 +17,9 @@ from .sift_sign_detection import build_reference_signs, create_sift, detect_sign
 class DetectSignSiftNode(Node):
     def __init__(self):
         super().__init__("detect_sign_sift")
-        self.declare_parameter("dataset_root", "/workspace/yolo/dataset")
+        self.declare_parameter(
+            "dataset_root", "/workspace/src/rtk2026_peripherals/sift_dataset"
+        )
         self.declare_parameter("camera_topic", "/camera/color/image_raw")
         self.declare_parameter("ratio_thresh", 0.75)
         self.declare_parameter("min_good", 6)
@@ -31,15 +33,22 @@ class DetectSignSiftNode(Node):
         self._every_n = int(self.get_parameter("every_n").value)
 
         dataset_root = Path(self.get_parameter("dataset_root").value)
-        sift = create_sift()
-        self._refs = build_reference_signs(
-            dataset_root=dataset_root,
-            sift=sift,
-            max_refs_per_class=int(self.get_parameter("max_refs_per_class").value),
-        )
-        self.get_logger().info(
-            f"SIFT sign detector: loaded {len(self._refs)} references from {dataset_root}"
-        )
+        self._refs = []
+        try:
+            sift = create_sift()
+            self._refs = build_reference_signs(
+                dataset_root=dataset_root,
+                sift=sift,
+                max_refs_per_class=int(self.get_parameter("max_refs_per_class").value),
+            )
+            self.get_logger().info(
+                f"SIFT sign detector: loaded {len(self._refs)} references from {dataset_root}"
+            )
+        except Exception as e:
+            self.get_logger().warn(
+                f"SIFT references are unavailable ({e}). "
+                "Node will run in pass-through mode (sign_id=0) until dataset_root is fixed."
+            )
 
         camera_topic = self.get_parameter("camera_topic").value
         self.create_subscription(Image, camera_topic, self._cb, 1)
@@ -55,14 +64,16 @@ class DetectSignSiftNode(Node):
             return
 
         frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-        detections = detect_signs(
-            frame,
-            self._refs,
-            ratio_thresh=float(self.get_parameter("ratio_thresh").value),
-            min_good=int(self.get_parameter("min_good").value),
-            min_inliers=int(self.get_parameter("min_inliers").value),
-            min_inlier_ratio=float(self.get_parameter("min_inlier_ratio").value),
-        )
+        detections = []
+        if self._refs:
+            detections = detect_signs(
+                frame,
+                self._refs,
+                ratio_thresh=float(self.get_parameter("ratio_thresh").value),
+                min_good=int(self.get_parameter("min_good").value),
+                min_inliers=int(self.get_parameter("min_inliers").value),
+                min_inlier_ratio=float(self.get_parameter("min_inlier_ratio").value),
+            )
 
         sign_id = 0
         best = None
@@ -113,4 +124,3 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
-

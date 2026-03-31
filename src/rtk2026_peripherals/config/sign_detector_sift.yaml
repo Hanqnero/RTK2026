@@ -1,6 +1,6 @@
 detect_sign_sift:
   ros__parameters:
-    dataset_root: /workspace/yolo/dataset
+    dataset_root: /workspace/src/rtk2026_peripherals/sift_dataset
     camera_topic: /camera/color/image_raw
     ratio_thresh: 0.75
     min_good: 6
@@ -8,4 +8,3 @@ detect_sign_sift:
     min_inlier_ratio: 0.30
     max_refs_per_class: 3
     every_n: 2
-

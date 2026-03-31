@@ -156,39 +156,39 @@ def generate_launch_description():
 
         # === Lane following pipeline (use_lane:=true) ===
 
-        # image_compensation → image_projection → /camera/image_projected
+        # Единый IPM пайплайн (bird-eye + trapezoid overlay)
         Node(
-            package="turtlebot3_autorace_camera",
-            executable="image_compensation",
-            name="image_compensation",
-            namespace="camera",
+            package="rtk2026_peripherals",
+            executable="image_relay_autorace",
+            name="image_relay_autorace",
             output="screen",
-            parameters=[os.path.join(
-                get_package_share_directory("turtlebot3_autorace_camera"),
-                "calibration", "extrinsic_calibration", "compensation.yaml")],
-            remappings=[
-                ("/camera/image_input",            "/camera/color/image_raw"),
-                ("/camera/image_input/compressed",  "/camera/color/image_raw/compressed"),
-                ("/camera/image_output",            "/camera/image_compensated"),
-                ("/camera/image_output/compressed", "/camera/image_compensated/compressed"),
-            ],
+            parameters=[{
+                "use_ipm": True,
+                "camera_height_m": 0.17,
+                "camera_pitch_rad": 0.0,
+                "y_near_m": 0.45,
+                "y_far_m": 0.55,
+                "x_left_m": -0.03,
+                "x_right_m": 0.03,
+                "image_topic": "/camera/color/image_raw",
+                "camera_info_topic": "/camera/color/camera_info",
+                "projected_topic": "/camera/image_projected",
+                "compensated_topic": "/camera/image_compensated",
+            }],
             condition=IfCondition(use_lane),
         ),
+        # ipm_tuner — применяет /camera/ipm_tuning/set к параметрам image_relay_autorace
         Node(
-            package="turtlebot3_autorace_camera",
-            executable="image_projection",
-            name="image_projection",
-            namespace="camera",
+            package="rtk2026_peripherals",
+            executable="ipm_tuner",
+            name="ipm_tuner",
             output="screen",
-            parameters=[os.path.join(
-                get_package_share_directory("turtlebot3_autorace_camera"),
-                "calibration", "extrinsic_calibration", "projection.yaml")],
-            remappings=[
-                ("/camera/image_input",            "/camera/image_compensated"),
-                ("/camera/image_input/compressed",  "/camera/image_compensated/compressed"),
-                ("/camera/image_output",            "/camera/image_projected"),
-                ("/camera/image_output/compressed", "/camera/image_projected/compressed"),
-            ],
+            parameters=[{
+                "target_node": "/image_relay_autorace",
+                "set_topic": "/camera/ipm_tuning/set",
+                "current_topic": "/camera/ipm_tuning/current",
+                "status_topic": "/camera/ipm_tuning/status",
+            }],
             condition=IfCondition(use_lane),
         ),
 
