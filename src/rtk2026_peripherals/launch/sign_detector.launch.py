@@ -1,6 +1,6 @@
 # Copyright 2026 RTK2026
 # SPDX-License-Identifier: Apache-2.0
-# Sign detector node (SIFT-based). Subscribes to a camera topic,
+# Sign detector node (YOLO ONNX). Subscribes to a RealSense color topic,
 # publishes SignDetection on /sign_detections.
 
 import os
@@ -16,10 +16,6 @@ def generate_launch_description():
     pkg_share = get_package_share_directory("rtk2026_peripherals")
     default_config = os.path.join(pkg_share, "config", "sign_detector.yaml")
 
-    config = LaunchConfiguration("config")
-    camera_topic = LaunchConfiguration("camera_topic")
-    dataset_root = LaunchConfiguration("dataset_root")
-
     return LaunchDescription([
         DeclareLaunchArgument(
             "config",
@@ -28,13 +24,13 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "camera_topic",
-            default_value="/camera/image_raw",
-            description="Camera image topic to subscribe to",
+            default_value="/camera/color/image_raw",
+            description="RealSense color image topic",
         ),
         DeclareLaunchArgument(
-            "dataset_root",
-            default_value="",
-            description="Override dataset_root from config (leave empty to use config value)",
+            "depth_topic",
+            default_value="/camera/aligned_depth_to_color/image_raw",
+            description="Aligned depth topic — set to '' to disable depth gating",
         ),
         Node(
             package="rtk2026_peripherals",
@@ -42,10 +38,11 @@ def generate_launch_description():
             name="sign_detector",
             output="screen",
             parameters=[
-                config,
-                # Command-line overrides take priority over the yaml file.
-                # Empty string means "don't override" — the yaml value is used.
-                {"camera_topic": camera_topic},
+                LaunchConfiguration("config"),
+                {
+                    "camera_topic": LaunchConfiguration("camera_topic"),
+                    "depth_topic": LaunchConfiguration("depth_topic"),
+                },
             ],
         ),
     ])

@@ -1,25 +1,35 @@
 sign_detector:
   ros__parameters:
-    # Absolute path to the YOLO dataset directory containing data.yaml
-    # and train/{images,labels}.
-    dataset_root: /home/robot/RTK2026/yolo/dataset
+    # Absolute path to the exported ONNX model.
+    model_path: /home/robot/RTK2026/yolo/yolov8n_finetuned.onnx
 
-    # Camera image topic to subscribe to.
-    camera_topic: /camera/image_raw
+    # Class names matching the training dataset (data.yaml names list).
+    class_names:
+      - bus_stop
+      - move_forward
+      - no_turn_left
+      - no_turn_right
+      - obstacle
+      - parking_spot
+      - turn_left
+      - turn_right
 
-    # Detection thresholds — lower ratio_thresh = stricter matching.
-    ratio_thresh: 0.75
-    min_good: 6
-    min_inliers: 6
-    min_inlier_ratio: 0.3
+    # RealSense color image topic.
+    camera_topic: /camera/color/image_raw
 
-    # Appearance verification: minimum normalised cross-correlation
-    # between the warped reference and the query region.
-    min_ncc: 0.1
+    # Aligned depth topic — leave empty to disable depth gating.
+    depth_topic: /camera/aligned_depth_to_color/image_raw
 
-    # Non-maximum suppression IoU threshold (suppress overlapping boxes).
-    nms_thresh: 0.4
+    # Inference image size (must match export_onnx.py --imgsz).
+    imgsz: 320
 
-    # Maximum reference crops kept per class (higher = better recall,
-    # slower per-frame matching).
-    max_refs_per_class: 3
+    # Detection thresholds.
+    conf_thresh: 0.40
+    iou_thresh: 0.45
+
+    # Depth gating range in metres.
+    min_depth: 0.3
+    max_depth: 15.0
+
+    # ONNX Runtime CPU threads.
+    num_threads: 4
