@@ -172,7 +172,7 @@ def preprocess_gray(image_bgr: np.ndarray, enhance: bool = True) -> np.ndarray:
 
 
 def build_reference_signs(
-    dataset_root: Path, sift: cv2.SIFT, max_refs_per_class: int = 3
+    dataset_root: Path, sift: cv2.SIFT, max_refs_per_class: int = 5
 ) -> list[ReferenceSign]:
     """Build reference signs by cropping each annotation's bounding box ROI.
 
@@ -227,8 +227,8 @@ def build_reference_signs(
 
             # Upscale small signs so SIFT can find enough keypoints
             min_dim = min(roi.shape[:2])
-            if min_dim < 64:
-                scale = 64.0 / min_dim
+            if min_dim < 128:
+                scale = 128.0 / min_dim
                 roi = cv2.resize(
                     roi, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC
                 )
@@ -510,7 +510,7 @@ def detect_signs(
             if m.distance < ratio_thresh * n.distance:
                 good_matches.append(m)
 
-        if len(good_matches) < min_good:
+        if len(good_matches) < max(min_good, 4):
             continue
 
         ref_pts = np.float32(
@@ -688,8 +688,8 @@ def tune_parameters(
     print("Testing parameter combinations to find best detection...\n")
 
     ratio_thresholds = [0.70, 0.75, 0.80]
-    min_good_vals = [4, 8, 12]
-    min_inliers_vals = [4, 8]
+    min_good_vals = [4, 8, 12, 16]
+    min_inliers_vals = [4, 8, 12]
     min_inlier_ratios = [0.20, 0.35, 0.50]
 
     best_result = {
