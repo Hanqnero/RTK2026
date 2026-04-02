@@ -1,0 +1,9 @@
+# Training (finetune_yolo8.py, export_onnx.py)
+ultralytics>=8.4.33
+torch>=2.11.0          # M1/MPS: pip install torch torchvision — no extra index needed
+numpy>=1.24
+opencv-python>=4.8.0
+pyyaml>=6.0
+
+# Deployment testing (webcam_test.py with .onnx model)
+onnxruntime>=1.18.0
