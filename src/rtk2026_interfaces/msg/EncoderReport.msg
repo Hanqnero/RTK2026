@@ -1,5 +1,8 @@
+# Encoder telemetry from Arduino
+# Published at fixed control period (e.g. 50Hz)
+# Counts are cumulative since Arduino startup
+
 std_msgs/Header header
-int64 left_count
-int64 right_count
-int32 left_speed
-int32 right_speed
+
+int32 left_count   # cumulative tick count, left wheel (signed)
+int32 right_count  # cumulative tick count, right wheel (signed)

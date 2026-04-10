@@ -1,210 +1,197 @@
-#include "motor_interface.h"
+/*
+  motor_interface.ino — прошивка дифференциального привода RTK2026-2
+
+  Протокол Pi -> Arduino (7 байт):
+    [0xA5][0x5A][left_tps_lo][left_tps_hi][right_tps_lo][right_tps_hi][checksum]
+
+  Протокол Arduino -> Pi (11 байт):
+    [0x5A][0xA5][left_cnt b0..b3][right_cnt b0..b3][checksum]
+
+  PID библиотека: uPID (https://github.com/GyverLibs/uPID)
+  Вход PID:  тики/сек (измеренная скорость за CONTROL_PERIOD_MS)
+  Выход PID: PWM [-255, 255]
+*/
+
+#include <uPID.h>
+#include "config.h"
 #include "encoder.h"
+#include "motor.h"
 
-namespace {
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PID контроллеры для каждого борта
+//
+// D_INPUT    — дифференцирование по входу, а не по ошибке
+//              устраняет derivative kick при резком изменении setpoint
+// I_SATURATE — интегрирование только когда выход не насыщен
+//              защита от integral windup
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+uPID pid_left (D_INPUT | I_SATURATE, CONTROL_PERIOD_MS);
+uPID pid_right(D_INPUT | I_SATURATE, CONTROL_PERIOD_MS);
 
-constexpr uint8_t VELOCITY_PACKET_SIZE = 7;
-constexpr uint8_t VELOCITY_HEADER_0 = 0xA5;
-constexpr uint8_t VELOCITY_HEADER_1 = 0x5A;
-constexpr uint8_t TELEMETRY_HEADER_0 = 0x5A;
-constexpr uint8_t TELEMETRY_HEADER_1 = 0xA5;
-
-constexpr uint32_t CONTROL_PERIOD_MS = 100;
-constexpr uint32_t COMMAND_TIMEOUT_MS = 300;
-
-constexpr int LEFT_MOTOR_SIGN = 1;
-constexpr int RIGHT_MOTOR_SIGN = 1;
-constexpr int LEFT_ENCODER_SIGN = -1;
-constexpr int RIGHT_ENCODER_SIGN = -1;
-
-// Feedforward from system identification log (sysid_steps_20260330_230848.csv).
-constexpr float LEFT_TPS_TO_PWM = 0.077f;
-constexpr float RIGHT_TPS_TO_PWM = 0.076f;
-constexpr int LEFT_PWM_STATIC = 25;
-constexpr int RIGHT_PWM_STATIC = 25;
-
-// Lyapunov-form speed feedback gain:
-// e = v - v_ref, u = u_ff - K_E * e
-// with saturation in [-255, 255].
-constexpr float K_E = 0.11f;
-
-struct __attribute__((packed)) TelemetryPacket {
-    uint8_t header0;
-    uint8_t header1;
-    int32_t left_speed;
-    int32_t left_cnt;
-    int32_t right_speed;
-    int32_t right_cnt;
-    uint8_t checksum;
-};
-
-int16_t target_left_tps = 0;
+// целевые скорости бортов (тики/сек), приходят с Pi
+int16_t target_left_tps  = 0;
 int16_t target_right_tps = 0;
 
-uint32_t last_command_millis = 0;
-uint32_t last_control_millis = 0;
-uint32_t last_telemetry_millis = 0;
+// время последней команды от Pi — для таймаута
+uint32_t last_cmd_ms = 0;
 
-uint8_t packet_checksum(const uint8_t* data, size_t size) {
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Переменные управляющего цикла
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+uint32_t last_control_ms  = 0;
+int32_t  prev_left_count  = 0;
+int32_t  prev_right_count = 0;
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Вспомогательные функции протокола
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+static uint8_t checksum(const uint8_t* data, uint8_t len) {
     uint8_t sum = 0;
-    for (size_t i = 0; i < size; ++i) {
-        sum += data[i];
-    }
+    for (uint8_t i = 0; i < len; i++) sum += data[i];
     return sum;
 }
 
-int feedforward_pwm(int16_t target_tps, float gain, int pwm_static) {
-    if (target_tps == 0) {
-        return 0;
-    }
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Чтение команды с Pi
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    float pwm = static_cast<float>(target_tps) * gain;
-    pwm += (target_tps > 0) ? static_cast<float>(pwm_static) : -static_cast<float>(pwm_static);
-    return static_cast<int>(constrain(pwm, -255.0f, 255.0f));
-}
-
-int wheel_control_pwm(
-    int16_t target_tps,
-    int32_t measured_tps,
-    float ff_gain,
-    int ff_static)
-{
-    if (target_tps == 0) {
-        return 0;
-    }
-
-    const float ff = static_cast<float>(feedforward_pwm(target_tps, ff_gain, ff_static));
-    const float error = static_cast<float>(measured_tps) - static_cast<float>(target_tps);
-    const float u = ff - K_E * error;
-    return static_cast<int>(constrain(u, -255.0f, 255.0f));
-}
-
-void stop_motion() {
-    target_left_tps = 0;
-    target_right_tps = 0;
-    left_stop();
-    right_stop();
-}
-
-void process_serial_commands() {
+static void read_command() {
     while (Serial.available() > 0) {
-        if (Serial.peek() != VELOCITY_HEADER_0) {
+        // ищем первый байт заголовка
+        if (Serial.peek() != CMD_HEADER_0) {
             Serial.read();
             continue;
         }
+        // ждём полный пакет
+        if (Serial.available() < CMD_PACKET_SIZE) return;
 
-        if (Serial.available() < VELOCITY_PACKET_SIZE) {
-            return;
-        }
+        uint8_t frame[CMD_PACKET_SIZE];
+        Serial.readBytes(frame, CMD_PACKET_SIZE);
 
-        uint8_t frame[VELOCITY_PACKET_SIZE];
-        if (Serial.readBytes(reinterpret_cast<char*>(frame), VELOCITY_PACKET_SIZE) != VELOCITY_PACKET_SIZE) {
-            return;
-        }
+        // проверяем второй байт заголовка
+        if (frame[1] != CMD_HEADER_1) continue;
 
-        if (frame[0] != VELOCITY_HEADER_0 || frame[1] != VELOCITY_HEADER_1) {
-            continue;
-        }
+        // проверяем контрольную сумму
+        if (checksum(frame, CMD_PACKET_SIZE - 1) != frame[CMD_PACKET_SIZE - 1]) continue;
 
-        if (packet_checksum(frame, VELOCITY_PACKET_SIZE - 1) != frame[VELOCITY_PACKET_SIZE - 1]) {
-            continue;
-        }
-
-        target_left_tps = static_cast<int16_t>(frame[2] | (frame[3] << 8));
-        target_right_tps = static_cast<int16_t>(frame[4] | (frame[5] << 8));
-        last_command_millis = millis();
-        return;
+        // распаковываем int16 LE
+        target_left_tps  = (int16_t)(frame[2] | (frame[3] << 8));
+        target_right_tps = (int16_t)(frame[4] | (frame[5] << 8));
+        last_cmd_ms = millis();
     }
 }
 
-}  // namespace
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Отправка телеметрии на Pi
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-void left_set_speed(int pwm) {
-    pwm *= LEFT_MOTOR_SIGN;
-    pwm = constrain(pwm, -255, 255);
-    if (pwm >= 0) {
-        analogWrite(LEFT_RPWM, pwm);
-        analogWrite(LEFT_LPWM, 0);
-    } else {
-        analogWrite(LEFT_RPWM, 0);
-        analogWrite(LEFT_LPWM, -pwm);
-    }
+static void send_telemetry(int32_t left_cnt, int32_t right_cnt) {
+    uint8_t frame[TEL_PACKET_SIZE];
+    frame[0] = TEL_HEADER_0;
+    frame[1] = TEL_HEADER_1;
+
+    // left_count (int32 LE)
+    frame[2] = (left_cnt >>  0) & 0xFF;
+    frame[3] = (left_cnt >>  8) & 0xFF;
+    frame[4] = (left_cnt >> 16) & 0xFF;
+    frame[5] = (left_cnt >> 24) & 0xFF;
+
+    // right_count (int32 LE)
+    frame[6] = (right_cnt >>  0) & 0xFF;
+    frame[7] = (right_cnt >>  8) & 0xFF;
+    frame[8] = (right_cnt >> 16) & 0xFF;
+    frame[9] = (right_cnt >> 24) & 0xFF;
+
+    frame[10] = checksum(frame, TEL_PACKET_SIZE - 1);
+    Serial.write(frame, TEL_PACKET_SIZE);
 }
 
-void right_set_speed(int pwm) {
-    pwm *= RIGHT_MOTOR_SIGN;
-    pwm = constrain(pwm, -255, 255);
-    if (pwm >= 0) {
-        analogWrite(RIGHT_RPWM, pwm);
-        analogWrite(RIGHT_LPWM, 0);
-    } else {
-        analogWrite(RIGHT_RPWM, 0);
-        analogWrite(RIGHT_LPWM, -pwm);
-    }
-}
-
-inline void left_stop() {
-    left_set_speed(0);
-}
-
-inline void right_stop() {
-    right_set_speed(0);
-}
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Setup
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 void setup() {
-    pinMode(LEFT_RPWM, OUTPUT);
-    pinMode(LEFT_LPWM, OUTPUT);
-    pinMode(RIGHT_RPWM, OUTPUT);
-    pinMode(RIGHT_LPWM, OUTPUT);
-    analogWrite(LEFT_RPWM, 0);
-    analogWrite(LEFT_LPWM, 0);
-    analogWrite(RIGHT_RPWM, 0);
-    analogWrite(RIGHT_LPWM, 0);
+    Serial.begin(SERIAL_BAUD);
+    Serial.setTimeout(10);
 
-    Serial.begin(115200);
-    Serial.setTimeout(30);
+    motors_begin();
+    encoders_begin();
 
-    interrupts();
-    enc_start();
+    // настройка PID левого борта
+    pid_left.setKp(PID_KP);
+    pid_left.setKi(PID_KI);
+    pid_left.setKd(PID_KD);
+    pid_left.outMax = PWM_MAX;
+    pid_left.outMin = PWM_MIN;
 
-    const uint32_t now = millis();
-    last_command_millis = now;
-    last_control_millis = now;
-    last_telemetry_millis = now;
-    stop_motion();
+    // настройка PID правого борта
+    pid_right.setKp(PID_KP);
+    pid_right.setKi(PID_KI);
+    pid_right.setKd(PID_KD);
+    pid_right.outMax = PWM_MAX;
+    pid_right.outMin = PWM_MIN;
+
+    last_cmd_ms      = millis();
+    last_control_ms  = millis();
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Loop
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 void loop() {
-    process_serial_commands();
+    // читаем команды от Pi на каждой итерации loop
+    read_command();
 
-    left_enc.refresh();
-    right_enc.refresh();
+    uint32_t now = millis();
 
-    const uint32_t now = millis();
-    if ((uint32_t)(now - last_command_millis) > COMMAND_TIMEOUT_MS) {
-        target_left_tps = 0;
+    // жёсткий период управляющего цикла
+    if ((uint32_t)(now - last_control_ms) < CONTROL_PERIOD_MS) return;
+    last_control_ms = now;
+
+    // таймаут команды — Pi молчит слишком долго
+    if ((uint32_t)(now - last_cmd_ms) > COMMAND_TIMEOUT_MS) {
+        target_left_tps  = 0;
         target_right_tps = 0;
     }
 
-    if ((uint32_t)(now - last_control_millis) >= CONTROL_PERIOD_MS) {
-        last_control_millis = now;
-        const int32_t left_meas = LEFT_ENCODER_SIGN * left_enc.speed();
-        const int32_t right_meas = RIGHT_ENCODER_SIGN * right_enc.speed();
-        left_set_speed(wheel_control_pwm(target_left_tps, left_meas, LEFT_TPS_TO_PWM, LEFT_PWM_STATIC));
-        right_set_speed(wheel_control_pwm(target_right_tps, right_meas, RIGHT_TPS_TO_PWM, RIGHT_PWM_STATIC));
+    // читаем энкодеры атомарно
+    int32_t left_cnt, right_cnt;
+    noInterrupts();
+    left_cnt  = enc_left.count;
+    right_cnt = enc_right.count;
+    interrupts();
+
+    // применяем знаки энкодеров
+    left_cnt  *= LEFT_ENC_SIGN;
+    right_cnt *= RIGHT_ENC_SIGN;
+
+    // вычисляем скорость за период (тики/сек)
+    int32_t left_speed  = (int32_t)((left_cnt  - prev_left_count)  * (1000 / CONTROL_PERIOD_MS));
+    int32_t right_speed = (int32_t)((right_cnt - prev_right_count) * (1000 / CONTROL_PERIOD_MS));
+    prev_left_count  = left_cnt;
+    prev_right_count = right_cnt;
+
+    if (target_left_tps == 0 && target_right_tps == 0) {
+        // явная остановка — не вычисляем PID, сразу стоп
+        // это предотвращает integral windup при стоянке
+        motor_left_set(0);
+        motor_right_set(0);
+        pid_left.integral  = 0;
+        pid_right.integral = 0;
+    } else {
+        // вычисляем PID для каждого борта
+        pid_left.setpoint  = (float)target_left_tps;
+        pid_right.setpoint = (float)target_right_tps;
+
+        int pwm_left  = (int)pid_left.compute(left_speed);
+        int pwm_right = (int)pid_right.compute(right_speed);
+
+        motor_left_set(pwm_left);
+        motor_right_set(pwm_right);
     }
 
-    if ((uint32_t)(now - last_telemetry_millis) >= CONTROL_PERIOD_MS) {
-        last_telemetry_millis = now;
-
-        TelemetryPacket pkt{};
-        pkt.header0 = TELEMETRY_HEADER_0;
-        pkt.header1 = TELEMETRY_HEADER_1;
-        pkt.left_speed = LEFT_ENCODER_SIGN * left_enc.speed();
-        pkt.left_cnt = LEFT_ENCODER_SIGN * static_cast<int32_t>(left_enc.cnt());
-        pkt.right_speed = RIGHT_ENCODER_SIGN * right_enc.speed();
-        pkt.right_cnt = RIGHT_ENCODER_SIGN * static_cast<int32_t>(right_enc.cnt());
-        pkt.checksum = packet_checksum(reinterpret_cast<const uint8_t*>(&pkt), sizeof(pkt) - 1);
-        Serial.write(reinterpret_cast<const uint8_t*>(&pkt), sizeof(pkt));
-    }
+    // отправляем телеметрию (накопленные тики) на Pi
+    send_telemetry(left_cnt, right_cnt);
 }

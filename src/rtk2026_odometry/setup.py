@@ -1,25 +1,24 @@
 from setuptools import find_packages, setup
 from glob import glob
 
-package_name = "rtk2026_driver"
+package_name = "rtk2026_odometry"
 
 setup(
     name=package_name,
     version="0.1.0",
     packages=find_packages(exclude=["test"]),
     data_files=[
-        # маркер для ament — обязателен для обнаружения пакета
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
         (f"share/{package_name}", ["package.xml"]),
-        # конфиг устанавливается в share — launch файл найдёт его через get_package_share_directory
         (f"share/{package_name}/config", glob("config/*.yaml")),
+        (f"share/{package_name}/launch", glob("launch/*.launch.py")),
     ],
-    install_requires=["setuptools", "pyserial"],
+    install_requires=["setuptools"],
     zip_safe=True,
     entry_points={
         "console_scripts": [
-            # имя команды = rtk2026_driver.arduino_bridge_node:main
-            "arduino_bridge = rtk2026_driver.arduino_bridge_node:main",
+            "wheel_odometry = rtk2026_odometry.wheel_odometry_node:main",
+            "sim_encoder = rtk2026_odometry.sim_encoder_node:main",
         ],
     },
 )
