@@ -7,6 +7,8 @@
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) для Windows
 - Клонированный репозиторий RTK2026
 
+**Использование видеокарты (GPU) для Gazebo:** чтобы симуляция рендерилась на GPU, нужны Docker на базе WSL2 и [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) в WSL2. Тогда при запуске скрипта diff_robot добавьте флаг `-UseGpu` (контейнер запустится с `--gpus all`). Без этого Gazebo использует программный рендер.
+
 ## Сборка образа
 
 ```powershell

@@ -28,8 +28,8 @@ slam_toolbox:
 
     use_scan_matching: true
     use_scan_barycenter: true
-    minimum_travel_distance: 0.15
-    minimum_travel_heading: 0.15
+    minimum_travel_distance: 0.02
+    minimum_travel_heading: 0.02
     scan_buffer_size: 25
     scan_buffer_maximum_scan_distance: 5.0
     link_match_minimum_response_fine: 0.1

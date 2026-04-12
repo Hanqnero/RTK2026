@@ -1,0 +1,68 @@
+# Nav2 controller_server for dynamic lane following (diff_robot_fifth, 1/10 scale).
+# No global planner. Lane centerline path provided by lane_path_publisher at ~10 Hz.
+
+controller_server:
+  ros__parameters:
+    use_sim_time: true
+    controller_frequency: 20.0
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.5
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 1.0
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["lane_goal_checker"]
+    controller_plugins: ["FollowPath"]
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.02
+      movement_time_allowance: 30.0
+
+    lane_goal_checker:
+      plugin: "nav2_controller::SimpleGoalChecker"
+      stateful: false
+      xy_goal_tolerance: 999.0
+      yaw_goal_tolerance: 6.28
+
+    FollowPath:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.032
+      lookahead_dist: 0.12
+      min_lookahead_dist: 0.08
+      max_lookahead_dist: 0.20
+      lookahead_time: 1.5
+      rotate_to_heading_angular_vel: 0.8
+      transform_tolerance: 0.3
+      use_velocity_scaled_lookahead_dist: true
+      min_approach_linear_velocity: 0.010
+      approach_velocity_scaling_dist: 0.08
+      use_collision_detection: false
+      use_regulated_linear_velocity_scaling: true
+      use_cost_regulated_linear_velocity_scaling: false
+      regulated_linear_scaling_min_radius: 0.08
+      regulated_linear_scaling_min_speed: 0.010
+      use_fixed_curvature_lookahead: false
+      allow_reversing: false
+      max_robot_pose_search_dist: 1.00
+      use_interpolation: true
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      use_sim_time: true
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      global_frame: odom
+      robot_base_frame: base_link
+      rolling_window: true
+      width: 1
+      height: 1
+      resolution: 0.05
+      footprint: "[[0.045, 0.03], [0.045, -0.03], [-0.045, -0.03], [-0.045, 0.03]]"
+      always_send_full_costmap: true
+  local_costmap_client:
+    ros__parameters:
+      use_sim_time: true
+  local_costmap_rclcpp_node:
+    ros__parameters:
+      use_sim_time: true
