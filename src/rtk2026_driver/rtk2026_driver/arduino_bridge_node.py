@@ -1,8 +1,14 @@
-# Copyright 2025 RTK2026
-# SPDX-License-Identifier: Apache-2.0
+"""
+ROS2 нода: мост между Arduino и ROS2.
 
-import struct
-import time
+Отвечает за:
+  - открытие serial порта и handshake с Arduino (через SerialTransport)
+  - периодическое чтение телеметрии и публикацию /encoder_report
+  - подписку на /wheel_velocity_command и отправку команд на Arduino
+  - корректную остановку моторов при завершении ноды
+
+Все параметры берутся из config/arduino_bridge.yaml.
+"""
 
 import rclpy
 from rclpy.node import Node
@@ -181,10 +187,14 @@ class ArduinoBridgeNode(Node):
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = ArduinoBridgeNode()
-    if serial is not None:
-        try:
-            rclpy.spin(node)
-        except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
-            pass
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

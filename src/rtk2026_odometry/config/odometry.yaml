@@ -1,0 +1,21 @@
+wheel_odometry:
+  ros__parameters:
+
+    # --- Кинематика ---
+    # Теоретическое значение: 11 PPR × gear_ratio × 2 (режим 2x) / (π × d)
+    # Уточнить физической калибровкой: проехать 1м, считать тики
+    ticks_per_meter: 1268.0
+    wheel_separation: 0.2123  # расстояние между колёсами, метры
+
+    # --- Топики ---
+    encoder_report_topic: "encoder_report"
+    odom_topic: "odom"
+
+    # --- TF фреймы ---
+    odom_frame: "odom"
+    base_frame: "base_footprint"
+
+    # --- Публикация TF ---
+    # true  — нода публикует TF odom->base_footprint сама
+    # false — TF публикует robot_localization EKF (когда добавишь IMU)
+    publish_tf: true
