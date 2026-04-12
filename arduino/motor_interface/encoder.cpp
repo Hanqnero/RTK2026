@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <util/atomic.h>
 #include <stdint.h>
 
 #include "encoder.h"
@@ -19,11 +20,44 @@ Encoder::Encoder(int A, int B):
     pinMode(B, INPUT);
 }
 
-bool Encoder::direction() { return _direction; }
-int64_t Encoder::cnt() { return _cnt; }
-int32_t Encoder::speed() { return _speed; }
+bool Encoder::direction() {
+    bool direction = false;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        direction = _direction;
+    }
+    return direction;
+}
+
+int64_t Encoder::cnt() {
+    int64_t cnt = 0;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        cnt = _cnt;
+    }
+    return cnt;
+}
+
+int32_t Encoder::speed() {
+    int32_t speed = 0;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        speed = _speed;
+    }
+    return speed;
+}
+
+void Encoder::refresh() {
+    const uint32_t now = millis();
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        if (now - static_cast<uint32_t>(last_time) >= SPEED_PERIOD_MS) {
+            _speed = (_cnt - _cnt_old) * SPEED_MULT;
+            _cnt_old = _cnt;
+            last_time = now;
+        }
+    }
+}
 
 void Encoder::Handler() {
+    const uint32_t now = millis();
+
     if (digitalRead(B)) {
         // Clock-wise rotation
         ++_cnt;
@@ -35,10 +69,10 @@ void Encoder::Handler() {
     }
 
     // update speed
-    if (millis() - last_time >= SPEED_PERIOD_MS) {
+    if (now - static_cast<uint32_t>(last_time) >= SPEED_PERIOD_MS) {
         _speed = (_cnt - _cnt_old) * SPEED_MULT;
         _cnt_old = _cnt;
-        last_time = millis();
+        last_time = now;
     }
 }
 

@@ -117,6 +117,7 @@ class ArduinoBridgeNode(Node):
 
     def _read_reports(self) -> None:
         if self._ser is None or not self._ser.is_open:
+            self._open_serial()
             return
 
         try:
