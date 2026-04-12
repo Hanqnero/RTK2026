@@ -17,17 +17,16 @@ constexpr int RIGHT_MOTOR_SIGN = 1;
 constexpr int LEFT_ENCODER_SIGN = -1;
 constexpr int RIGHT_ENCODER_SIGN = -1;
 
-// Conservative feedforward retune from floor logs.
-constexpr float LEFT_TPS_TO_PWM = 0.068f;
-constexpr float RIGHT_TPS_TO_PWM = 0.067f;
-constexpr int LEFT_PWM_STATIC = 22;
-constexpr int RIGHT_PWM_STATIC = 22;
+// Feedforward from system identification log (sysid_steps_20260330_230848.csv).
+constexpr float LEFT_TPS_TO_PWM = 0.077f;
+constexpr float RIGHT_TPS_TO_PWM = 0.076f;
+constexpr int LEFT_PWM_STATIC = 25;
+constexpr int RIGHT_PWM_STATIC = 25;
 
-// PI correction on top of feedforward.
-constexpr float PI_KP = 0.04f;
-constexpr float PI_KI = 0.06f;
-constexpr float I_LIMIT = 250.0f;
-constexpr float DT_S = static_cast<float>(CONTROL_PERIOD_MS) / 1000.0f;
+// Lyapunov-form speed feedback gain:
+// e = v - v_ref, u = u_ff - K_E * e
+// with saturation in [-255, 255].
+constexpr float K_E = 0.11f;
 
 struct __attribute__((packed)) TelemetryPacket {
     uint8_t header0;
@@ -41,8 +40,6 @@ struct __attribute__((packed)) TelemetryPacket {
 
 int16_t target_left_tps = 0;
 int16_t target_right_tps = 0;
-float left_i = 0.0f;
-float right_i = 0.0f;
 
 uint32_t last_command_millis = 0;
 uint32_t last_control_millis = 0;
@@ -69,29 +66,16 @@ int feedforward_pwm(int16_t target_tps, float gain, int pwm_static) {
 int wheel_control_pwm(
     int16_t target_tps,
     int32_t measured_tps,
-    float& integral_state,
     float ff_gain,
     int ff_static)
 {
     if (target_tps == 0) {
-        integral_state = 0.0f;
         return 0;
     }
 
     const float ff = static_cast<float>(feedforward_pwm(target_tps, ff_gain, ff_static));
-    const float error = static_cast<float>(target_tps) - static_cast<float>(measured_tps);
-
-    // Simple anti-windup: freeze integrator if control is saturated and
-    // error pushes deeper into saturation.
-    const float i_candidate = constrain(integral_state + error * DT_S, -I_LIMIT, I_LIMIT);
-    const float u_candidate = ff + PI_KP * error + PI_KI * i_candidate;
-    const bool sat_high = (u_candidate > 255.0f) && (error > 0.0f);
-    const bool sat_low = (u_candidate < -255.0f) && (error < 0.0f);
-    if (!sat_high && !sat_low) {
-        integral_state = i_candidate;
-    }
-
-    const float u = ff + PI_KP * error + PI_KI * integral_state;
+    const float error = static_cast<float>(measured_tps) - static_cast<float>(target_tps);
+    const float u = ff - K_E * error;
     return static_cast<int>(constrain(u, -255.0f, 255.0f));
 }
 
@@ -206,8 +190,8 @@ void loop() {
         last_control_millis = now;
         const int32_t left_meas = LEFT_ENCODER_SIGN * left_enc.speed();
         const int32_t right_meas = RIGHT_ENCODER_SIGN * right_enc.speed();
-        left_set_speed(wheel_control_pwm(target_left_tps, left_meas, left_i, LEFT_TPS_TO_PWM, LEFT_PWM_STATIC));
-        right_set_speed(wheel_control_pwm(target_right_tps, right_meas, right_i, RIGHT_TPS_TO_PWM, RIGHT_PWM_STATIC));
+        left_set_speed(wheel_control_pwm(target_left_tps, left_meas, LEFT_TPS_TO_PWM, LEFT_PWM_STATIC));
+        right_set_speed(wheel_control_pwm(target_right_tps, right_meas, RIGHT_TPS_TO_PWM, RIGHT_PWM_STATIC));
     }
 
     if ((uint32_t)(now - last_telemetry_millis) >= CONTROL_PERIOD_MS) {

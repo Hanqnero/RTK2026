@@ -1,100 +1,87 @@
-# Визуализация робота с ПК (Foxglove Studio)
+# Foxglove Studio — подключение к роботу с Mac
 
-Робот (Raspberry Pi) публикует ROS2-топики: одометрию, TF, скан лидара, карту. ПК (Mac или Windows) подключается через Foxglove Studio и отображает все данные в реальном времени.
-
-## Архитектура
+Робот (Raspberry Pi) публикует ROS2-топики через `foxglove_bridge` на порту `8765`.
+Mac подключается напрямую через Ethernet.
 
 ```
-Raspberry Pi (10.40.69.246)            PC (Mac / Windows)
-+---------------------------+          +---------------------+
-| ROS2 ноды                 |          | Foxglove Studio     |
-|  arduino_bridge           |   ws://  |  (нативное прил.)   |
-|  base_controller          | -------> |  Карта, робот,      |
-|  robot_state_publisher    |  :8765   |  одометрия, TF,     |
-|  foxglove_bridge          |          |  скан лидара         |
-+---------------------------+          +---------------------+
+Raspberry Pi 192.168.2.2              Mac 192.168.2.1
+┌──────────────────────────┐          ┌─────────────────────┐
+│  ROS2 ноды               │          │  Foxglove Studio    │
+│   sllidar_node  /scan    │  ws://   │  (Desktop-приложение│
+│   slam_toolbox  /map     │ ──────►  │   ws://192.168.2.2  │
+│   base_controller /odom  │  :8765   │   :8765)            │
+│   usb_cam  /camera/...   │          └─────────────────────┘
+│   foxglove_bridge        │
+└──────────────────────────┘
 ```
 
-Pi и ПК должны быть в одной локальной сети.
+---
 
-## 1. На Raspberry Pi
+## Подключение
 
-`foxglove_bridge` уже включен в `docker/pi/Dockerfile` и запускается по умолчанию через CMD (`use_foxglove:=true`).
+1. Установить [Foxglove Studio Desktop](https://foxglove.dev/download) (не браузер — `ws://` блокируется HTTPS-страницами).
+2. Open connection → **Foxglove WebSocket**.
+3. URL: `ws://192.168.2.2:8765`
+4. Open.
 
-### Сборка и запуск
+> Если Pi не видна напрямую (например, Docker VM на Mac изолирует сеть),
+> используй SSH-туннель: `ssh -f -N -L 8765:localhost:8765 pi@192.168.2.2`
+> и подключайся к `ws://localhost:8765`.
 
-```bash
-cd ~/RTK2026
-docker build -t rtk2026:latest -f docker/pi/Dockerfile .
-docker run -d --name rtk2026 --privileged -v /dev:/dev --network host rtk2026:latest
-```
+---
 
-### Проверка
+## Настройка панелей для 2D-карты
 
-```bash
-docker logs rtk2026 2>&1 | grep foxglove
-```
+### 3D-панель (карта + скан + модель робота)
 
-Должно быть: `foxglove_bridge: WebSocket server started on port 8765`.
+1. Добавить панель **3D**.
+2. В левом дереве топиков включить:
+   - `/map` — серая 2D-карта от SLAM
+   - `/scan` — точки лидара
+   - `/tf` + `/tf_static` — позиционирование
+   - `/robot_description` — модель робота (коробка)
+3. Камера: нажать **"Top"** (вид сверху) для 2D-режима.
+   Или в настройках панели → Camera → установить `distance` большим, `phi = 0`.
 
-### Ручной запуск (если не через CMD)
+### Убрать оси TF-фреймов
 
-```bash
-docker exec -d rtk2026 bash -c "source /opt/ros/humble/setup.bash && \
-  source /workspace/install/setup.bash && \
-  ros2 launch rtk2026_bringup rtk2026_driver_base.launch.py use_rviz:=false use_foxglove:=true"
-```
+В настройках 3D-панели (шестерёнка) → раздел **Transforms** → `Axis scale: 0`
+или отключить **"Show frame axes"**.
 
-## 2. На ПК (Mac / Windows)
+### Дополнительные панели
 
-### Установка Foxglove Studio
+- **Image** → `/camera/image_raw` — картинка с камеры.
+- **Raw Messages** → `/odom`, `/encoder_report` — числовые данные.
+- **Plot** → `/odom/twist/twist/linear/x` — график скорости.
+- **Publish** → `/cmd_vel` — отправка команд движения.
 
-Скачайте бесплатную версию: [https://foxglove.dev/download](https://foxglove.dev/download)
-
-- macOS: `.dmg`
-- Windows: `.exe` установщик
-
-### Подключение
-
-1. Откройте Foxglove Studio.
-2. Выберите "Open connection".
-3. Тип: **Foxglove WebSocket**.
-4. URL: `ws://10.40.69.246:8765` (подставьте IP вашего Pi).
-5. Нажмите "Open".
-
-### Настройка панелей
-
-Добавьте панели для визуализации:
-
-- **3D** -- модель робота, TF-фреймы, скан лидара (`/scan`), карта (`/map`)
-- **Map** -- 2D-карта из SLAM
-- **Raw Messages** -- просмотр любых топиков (`/odom`, `/encoder_report`, `/motor_command`)
-- **Diagnostics** -- состояние нод
-- **Plot** -- графики значений (скорость, PWM)
-
-### Отправка команд
-
-Foxglove поддерживает публикацию сообщений. Через панель "Publish" можно отправлять `/cmd_vel` или `/motor_command` напрямую.
+---
 
 ## Доступные топики
 
 | Топик | Тип | Описание |
 |-------|-----|----------|
-| `/tf`, `/tf_static` | TF | Дерево фреймов робота |
+| `/scan` | LaserScan | 2D-скан лидара (RPLIDAR C1) |
+| `/map` | OccupancyGrid | Карта от SLAM Toolbox |
+| `/odom` | Odometry | Одометрия |
+| `/tf` | TFMessage | Динамические трансформы |
+| `/tf_static` | TFMessage | Статические трансформы |
 | `/robot_description` | String | URDF модель |
-| `/odom` | Odometry | Одометрия от base_controller |
+| `/camera/image_raw` | Image | USB-камера |
+| `/cmd_vel` | Twist | Команды движения |
 | `/encoder_report` | EncoderReport | Данные энкодеров |
 | `/motor_command` | MotorCommand | Команды моторов |
-| `/scan` | LaserScan | 2D-лидар (когда подключен) |
-| `/map` | OccupancyGrid | Карта от SLAM (когда запущен) |
-| `/cmd_vel` | Twist | Команды скорости |
 
-## Без Foxglove (альтернатива)
+---
 
-Если нужен полноценный RViz, используйте VNC-контейнер на Mac:
+## Проверка на Pi
 
 ```bash
-./scripts/run_rtk2026_diff_robot_mac_vnc.sh
-```
+ssh pi@192.168.2.2
 
-Или Docker + X-сервер на Windows.
+# foxglove_bridge запущен?
+docker logs rtk2026 2>&1 | grep foxglove
+
+# Все ноды живы?
+docker logs rtk2026 2>&1 | grep -E 'ERROR|died' | head -20
+```
