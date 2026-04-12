@@ -11,12 +11,19 @@ ROS2 нода: мост между Arduino и ROS2.
 """
 
 import rclpy
-from rclpy.node import Node
 from rclpy.executors import ExternalShutdownException
+from rclpy.node import Node
 
+from rtk2026_driver.protocol import InvalidChecksumError, pack_command, parse_telemetry
+from rtk2026_driver.transport import HandshakeTimeoutError, SerialTransport
 from rtk2026_interfaces.msg import EncoderReport, WheelVelocityCommand
-from rtk2026_driver.protocol import pack_command, parse_telemetry, InvalidChecksumError
-from rtk2026_driver.transport import SerialTransport, HandshakeTimeoutError
+
+
+def pwm_to_dir_bytes(pwm: int) -> tuple[int, int]:
+    pwm = clamp_pwm(pwm)
+    if pwm >= 0:
+        return pwm & 0xFF, 0
+    return 0, (-pwm) & 0xFF
 
 
 class ArduinoBridgeNode(Node):
@@ -36,16 +43,24 @@ class ArduinoBridgeNode(Node):
         self.declare_parameter("left_wheel_inverted", False)
         self.declare_parameter("right_wheel_inverted", False)
 
-        port       = self.get_parameter("serial_port").value
-        baudrate   = self.get_parameter("baudrate").value
+        port = self.get_parameter("serial_port").value
+        baudrate = self.get_parameter("baudrate").value
         hs_timeout = self.get_parameter("handshake_timeout_sec").value
-        hs_poll    = self.get_parameter("handshake_poll_interval_sec").value
+        hs_poll = self.get_parameter("handshake_poll_interval_sec").value
 
         # инверсия знака через yaml — не трогаем прошивку Arduino
-        self._left_enc_sign  = -1 if self.get_parameter("left_encoder_inverted").value  else 1
-        self._right_enc_sign = -1 if self.get_parameter("right_encoder_inverted").value else 1
-        self._left_mot_sign  = -1 if self.get_parameter("left_wheel_inverted").value    else 1
-        self._right_mot_sign = -1 if self.get_parameter("right_wheel_inverted").value   else 1
+        self._left_enc_sign = (
+            -1 if self.get_parameter("left_encoder_inverted").value else 1
+        )
+        self._right_enc_sign = (
+            -1 if self.get_parameter("right_encoder_inverted").value else 1
+        )
+        self._left_mot_sign = (
+            -1 if self.get_parameter("left_wheel_inverted").value else 1
+        )
+        self._right_mot_sign = (
+            -1 if self.get_parameter("right_wheel_inverted").value else 1
+        )
 
         # --- serial транспорт ---
         self._transport = SerialTransport(
@@ -128,9 +143,9 @@ class ArduinoBridgeNode(Node):
                 break
 
             msg = EncoderReport()
-            msg.header.stamp    = self.get_clock().now().to_msg()
+            msg.header.stamp = self.get_clock().now().to_msg()
             msg.header.frame_id = "base_link"
-            msg.left_count  = self._left_enc_sign  * frame.left_count
+            msg.left_count = self._left_enc_sign * frame.left_count
             msg.right_count = self._right_enc_sign * frame.right_count
             self._encoder_pub.publish(msg)
 
@@ -141,7 +156,7 @@ class ArduinoBridgeNode(Node):
         Инверсия знака мотора применяется здесь через yaml параметры —
         прошивка Arduino знаков не меняет.
         """
-        left_tps  = self._left_mot_sign  * int(msg.left_tps)
+        left_tps = self._left_mot_sign * int(msg.left_tps)
         right_tps = self._right_mot_sign * int(msg.right_tps)
         self._transport.write(pack_command(left_tps, right_tps))
 
