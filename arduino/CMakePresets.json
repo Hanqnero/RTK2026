@@ -1,0 +1,55 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 23,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "windows-bundled",
+      "displayName": "AVR Debug (Windows Bundled)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/avr-bundled-windows.cmake"
+      }
+    },
+    {
+      "name": "macos-system",
+      "displayName": "AVR Debug (macOS/System)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/avr-system.cmake"
+      }
+    },
+    {
+      "name": "default",
+      "displayName": "Default AVR Debug",
+      "inherits": "windows-bundled"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-bundled",
+      "configurePreset": "windows-bundled"
+    },
+    {
+      "name": "macos-system",
+      "configurePreset": "macos-system"
+    },
+    {
+      "name": "default",
+      "configurePreset": "default"
+    }
+  ]
+}

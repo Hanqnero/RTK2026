@@ -20,6 +20,7 @@ setup(
             "share/" + package_name + "/config",
             [
                 "config/nav2_params_slam.yaml",
+                "config/slam_toolbox_autorace.yaml",
             ],
         ),
     ],

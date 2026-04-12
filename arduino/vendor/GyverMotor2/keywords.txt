@@ -1,0 +1,47 @@
+#######################################
+# Syntax Coloring Map For GyverMotor2
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+GyverMotor2	KEYWORD1
+GM2	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+setDeadtime	KEYWORD2
+getDeadTime	KEYWORD2
+setReverse	KEYWORD2
+getReverse	KEYWORD2
+setMinDuty	KEYWORD2
+setMinDutyPerc	KEYWORD2
+getMinDuty	KEYWORD2
+getMaxDuty	KEYWORD2
+runSpeed	KEYWORD2
+runSpeedPerc	KEYWORD2
+getSpeed	KEYWORD2
+getDir	KEYWORD2
+stop	KEYWORD2
+brake	KEYWORD2
+disable	KEYWORD2
+setAccel	KEYWORD2
+setAccelPerc	KEYWORD2
+getDt	KEYWORD2
+getTarget	KEYWORD2
+tick	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+ONLY_PWM	LITERAL1
+DIR_DIR	LITERAL1
+DIR_PWM	LITERAL1
+DIR_PWM_INV	LITERAL1
+PWM_PWM_SPEED	LITERAL1
+PWM_PWM_POWER	LITERAL1
+DIR_DIR_PWM	LITERAL1
