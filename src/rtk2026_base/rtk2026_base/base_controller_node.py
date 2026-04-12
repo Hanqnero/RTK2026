@@ -9,7 +9,7 @@ from rclpy.parameter import ParameterType
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from rtk2026_interfaces.msg import EncoderReport, MotorCommand
+from rtk2026_interfaces.msg import EncoderReport, MotorCommand, WheelVelocityCommand
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped, Quaternion
 
@@ -27,6 +27,7 @@ class BaseControllerNode(Node):
         self.declare_parameter("cmd_vel_topic", "cmd_vel")
         self.declare_parameter("encoder_report_topic", "encoder_report")
         self.declare_parameter("motor_command_topic", "motor_command")
+        self.declare_parameter("wheel_velocity_command_topic", "wheel_velocity_command")
         self.declare_parameter("odom_topic", "odom")
         self.declare_parameter("odom_frame_id", "odom")
         self.declare_parameter("base_frame_id", "base_link")
@@ -61,6 +62,11 @@ class BaseControllerNode(Node):
         self._motor_pub = self.create_publisher(
             MotorCommand,
             self.get_parameter("motor_command_topic").get_parameter_value().string_value,
+            10,
+        )
+        self._wheel_vel_pub = self.create_publisher(
+            WheelVelocityCommand,
+            self.get_parameter("wheel_velocity_command_topic").get_parameter_value().string_value,
             10,
         )
         self._odom_pub = self.create_publisher(
@@ -112,6 +118,14 @@ class BaseControllerNode(Node):
         # both full-forward and in-place rotation can use the full PWM range.
         v_norm = (v / self._max_linear) if self._max_linear > 0 else 0.0
         omega_norm = (omega / self._max_angular) if self._max_angular > 0 else 0.0
+        wheel_left = v - omega * self._wheel_sep / 2.0
+        wheel_right = v + omega * self._wheel_sep / 2.0
+        self._wheel_vel_pub.publish(
+            WheelVelocityCommand(
+                left_ticks_per_sec=int(wheel_left * self._ticks_per_m),
+                right_ticks_per_sec=int(wheel_right * self._ticks_per_m),
+            )
+        )
         pwm_l = int((v_norm - omega_norm) * self._max_pwm)
         pwm_r = int((v_norm + omega_norm) * self._max_pwm)
         pwm_l = max(-self._max_pwm, min(self._max_pwm, pwm_l))

@@ -8,7 +8,13 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Header
-from rtk2026_interfaces.msg import EncoderReport, MotorCommand
+try:
+    from rtk2026_interfaces.msg import EncoderReport, MotorCommand, WheelVelocityCommand
+    HAS_WHEEL_VELOCITY_MSG = True
+except ImportError:
+    from rtk2026_interfaces.msg import EncoderReport, MotorCommand
+    WheelVelocityCommand = None
+    HAS_WHEEL_VELOCITY_MSG = False
 
 try:
     import serial
@@ -40,6 +46,7 @@ class ArduinoBridgeNode(Node):
         self.declare_parameter("read_timeout_sec", 0.05)
         self.declare_parameter("publish_rate", 100.0)
         self.declare_parameter("motor_command_topic", "motor_command")
+        self.declare_parameter("wheel_velocity_command_topic", "wheel_velocity_command")
         self.declare_parameter("encoder_report_topic", "encoder_report")
         self.declare_parameter("min_motor_send_interval_sec", 0.02)
 
@@ -56,9 +63,9 @@ class ArduinoBridgeNode(Node):
         self._ser = None
         self._rx_buf = bytearray()
         self._last_motor_send_time = 0.0
-        self._pending_left = 0
-        self._pending_right = 0
+        self._pending_payload = None
         self._has_pending = False
+        self._telemetry_rx = bytearray()
 
         if serial is None:
             self.get_logger().error("pyserial is not installed")
@@ -175,7 +182,10 @@ def main(args=None) -> None:
     rclpy.init(args=args)
     node = ArduinoBridgeNode()
     if serial is not None:
-        rclpy.spin(node)
+        try:
+            rclpy.spin(node)
+        except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
+            pass
     node.destroy_node()
     rclpy.shutdown()
 

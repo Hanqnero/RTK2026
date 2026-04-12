@@ -1,125 +1,188 @@
 # RTK2026
 
-ROS2 workspace для мобильного робота RTK2026: гусеничная база, стереокамера, 2D-лидар, два мотора с энкодерами, IMU. Моторы управляются через Arduino Mega; Raspberry Pi 5 запускает ROS2 и общается с Arduino и датчиками.
+ROS2 Humble workspace для мобильного робота RTK2026.
+Гусеничная база 300×250×113 мм, diff-drive, Raspberry Pi 5.
 
-## Платформы и Dockerfile
+## Железо
 
-| Платформа | Dockerfile | Назначение |
-|-----------|-----------|------------|
-| **Raspberry Pi** (arm64) | `docker/pi/Dockerfile` | Headless: драйвер, база, SLAM, Nav2. Без Gazebo и RViz. |
-| **Windows** (amd64) | `docker/windows/Dockerfile` | Gazebo + diff_robot + SLAM + Nav2 + explorer. Полная симуляция на трассе. |
-| **macOS M1/M2/M3** | `ros-humble-desktop-m1_2-mac/Dockerfile` | Desktop-образ с VNC. Gazebo headless, RViz через TigerVNC. |
+| Компонент | Порт |
+|-----------|------|
+| Arduino (моторы + энкодеры) | `/dev/ttyUSB0` |
+| LiDAR Slamtec RPLIDAR C1 | `/dev/ttyUSB2` |
+| USB-камера | `/dev/video0` |
+| Raspberry Pi 5 | `192.168.2.2` |
+| Mac (через Ethernet) | `192.168.2.1` |
 
-## Быстрый старт
+---
 
-### Raspberry Pi
+## Быстрый старт: Mac → Raspberry Pi
 
-```bash
-cd ~/RTK2026
-docker build -t rtk2026:latest -f docker/pi/Dockerfile .
-docker run -d --name rtk2026 --privileged -v /dev:/dev --network host rtk2026:latest
-```
+### 1. Сетевое подключение
 
-По умолчанию запускается `rtk2026_driver_base.launch.py use_rviz:=false` (arduino_bridge + base_controller + robot_state_publisher).
+Прямой Ethernet-кабель Mac ↔ Pi. На Mac включить **Internet Sharing**:
+System Settings → General → Sharing → Internet Sharing → Share via Thunderbolt/USB Ethernet.
 
-### Windows (PowerShell)
-
-```powershell
-cd C:\path\to\RTK2026
-.\scripts\run_rtk2026_diff_robot.ps1 -Build -Explore -World track
-```
-
-Подробно: [DOCKER_WINDOWS.md](DOCKER_WINDOWS.md), [RTK_DIFF_TRACK_SIM.md](RTK_DIFF_TRACK_SIM.md).
-
-### macOS (M1/M2/M3)
+После этого Pi получает IP `192.168.2.2`, Mac — `192.168.2.1`.
 
 ```bash
-cd /path/to/RTK2026
-chmod +x scripts/run_rtk2026_diff_robot_mac_vnc.sh
-./scripts/run_rtk2026_diff_robot_mac_vnc.sh
+ping 192.168.2.2      # проверить связь
+ssh pi@192.168.2.2    # войти на Pi
 ```
 
-Подключение: TigerVNC Viewer -> `localhost:5900`. Подробно: [RTK_DIFF_TRACK_SIM_MAC_TIGERVNC.md](RTK_DIFF_TRACK_SIM_MAC_TIGERVNC.md).
+Подробнее: [ETHERNET_MAC_PI_CONNECTION.md](ETHERNET_MAC_PI_CONNECTION.md)
 
-## Сборка (локально)
+### 2. Сборка Docker-образа на Mac (arm64)
 
 ```bash
-rosdep install -y -i --from-paths src
-colcon build --symlink-install
-source install/setup.bash
+./scripts/build_pi.sh
 ```
 
-## Профили запуска
-
-### Реальный робот (драйвер + база)
+Или вручную:
 
 ```bash
-ros2 launch rtk2026_bringup rtk2026_driver_base.launch.py
+docker buildx build --platform linux/arm64 -t rtk2026:latest -f docker/pi/Dockerfile .
 ```
 
-Аргументы:
-- `use_rviz` (default `true`): `false` для headless (Pi).
-- `publish_tf` (default `true`): `false` если используется EKF.
-- `use_fake_encoder` (default `false`): `true` для теста без Arduino.
+Сборка ~15–20 мин (первый раз). Собирает: `sllidar_ros2`, `realsense-ros`, `foxglove_bridge` из исходников + все ROS2-пакеты.
 
-### Полный стек
+### 3. Загрузка образа на Pi и запуск
 
 ```bash
-ros2 launch rtk2026_bringup full.launch.py use_fake_encoder:=true
-ros2 launch rtk2026_bringup full.launch.py use_localization:=true
-ros2 launch rtk2026_bringup full.launch.py use_slam:=true
-ros2 launch rtk2026_bringup full.launch.py use_navigation:=true
+./scripts/deploy_pi.sh
 ```
 
-### Симуляция: diff_robot на трассе
-
-Скрипт `scripts/run_rtk2026_diff_robot.ps1` (Windows) или `scripts/run_rtk2026_diff_robot_mac_vnc.sh` (Mac). Запускает Gazebo с diff_robot на трассе Silverstone + SLAM + Nav2 + explorer.
-
-Подробно: [RTK_DIFF_TRACK_SIM.md](RTK_DIFF_TRACK_SIM.md).
-
-**Пакет `src/diff_robot`** -- пример симуляционной платформы (не код RTK). Используется только для тестов навигации на трассе.
-
-## Тест без железа
+Или вручную:
 
 ```bash
-ros2 launch rtk2026_bringup rtk2026_driver_base.launch.py use_description:=false use_fake_encoder:=true
+# Передать образ (3–5 мин):
+docker save rtk2026:latest | gzip | ssh pi@192.168.2.2 "gunzip | docker load"
+
+# Запустить контейнер:
+ssh pi@192.168.2.2 "docker run -d --name rtk2026 \
+  --privileged -v /dev:/dev --network host rtk2026:latest"
 ```
+
+### 4. Подключение Foxglove Studio
+
+1. Открыть [Foxglove Studio](https://foxglove.dev/download) (Desktop-приложение).
+2. Open connection → **Foxglove WebSocket** → `ws://192.168.2.2:8765`.
+3. Добавить панель **3D** → добавить топики `/map`, `/scan`, `/tf`.
+
+Подробнее: [FOXGLOVE_VIEWER.md](FOXGLOVE_VIEWER.md)
+
+---
+
+## Управление контейнером на Pi
 
 ```bash
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.1}, angular: {z: 0.0}}"
-ros2 topic echo /odom
+ssh pi@192.168.2.2
+
+# Статус
+docker ps
+docker logs rtk2026 --tail 30
+
+# Перезапуск
+docker restart rtk2026
+
+# Остановка
+docker stop rtk2026 && docker rm rtk2026
+
+# Shell внутри контейнера
+docker exec -it rtk2026 bash
+
+# Освободить место (если диск заполнен)
+docker system prune -af
 ```
 
-## Тесты
+---
+
+## Топики
+
+| Топик | Тип | Источник |
+|-------|-----|----------|
+| `/scan` | LaserScan | sllidar_node (RPLIDAR C1) |
+| `/map` | OccupancyGrid | slam_toolbox |
+| `/odom` | Odometry | base_controller |
+| `/tf`, `/tf_static` | TF | robot_state_publisher, base_controller |
+| `/robot_description` | String | robot_state_publisher |
+| `/camera/image_raw` | Image | usb_cam |
+| `/cmd_vel` | Twist | телеуправление |
+
+---
+
+## TF-дерево
+
+```
+map
+ └── odom          ← slam_toolbox
+      └── base_link  ← base_controller (odom→base_link)
+           ├── lidar_link   ← robot_state_publisher (static)
+           ├── camera_link  ← robot_state_publisher (static)
+           └── imu_link     ← robot_state_publisher (static)
+```
+
+> **Важно:** `odom→base_link` публикуется только при наличии данных с энкодеров.
+> Без подключённых моторов SLAM не может трансформировать скан лидара.
+> Временный обход: добавить `static_transform_publisher odom base_link`.
+
+---
+
+## Параметры запуска (`pi_full.launch.py`)
 
 ```bash
-source install/setup.bash
-python3 -m pytest src/rtk2026_driver/test src/rtk2026_base/test -v --tb=short
+# Без SLAM (только база + сенсоры + foxglove):
+ros2 launch rtk2026_bringup pi_full.launch.py use_slam:=false
+
+# Без камеры:
+ros2 launch rtk2026_bringup pi_full.launch.py use_camera:=false
+
+# Intel RealSense вместо usb_cam:
+ros2 launch rtk2026_bringup pi_full.launch.py camera_driver:=realsense
 ```
 
-## Периферия (2D-лидар, камера, IMU)
+---
 
-- **2D-лидар** (`/scan`, `lidar_link`): `ros2 launch rtk2026_peripherals lidar.launch.py`
-- **USB-камера:** `ros2 launch rtk2026_peripherals depth_camera.launch.py`
-- **Фильтр IMU:** `ros2 launch rtk2026_peripherals imu_filter.launch.py`
+## Симуляция (Gazebo, только для разработки на Mac/Windows)
+
+| Платформа | Скрипт |
+|-----------|--------|
+| macOS (VNC) | `./scripts/run_rtk2026_diff_robot_mac_vnc.sh` |
+| Windows (PowerShell) | `./scripts/run_rtk2026_diff_robot.ps1` |
+
+Подробнее: [RTK_DIFF_TRACK_SIM.md](RTK_DIFF_TRACK_SIM.md), [RTK_DIFF_TRACK_SIM_MAC_TIGERVNC.md](RTK_DIFF_TRACK_SIM_MAC_TIGERVNC.md)
+
+---
 
 ## Документация
 
-- [Визуализация робота с ПК (Foxglove)](FOXGLOVE_VIEWER.md) -- подключение Mac/Windows к Pi
-- [Docker на Windows](DOCKER_WINDOWS.md)
-- [Симуляция на трассе (Windows)](RTK_DIFF_TRACK_SIM.md)
-- [Симуляция на Mac (VNC)](RTK_DIFF_TRACK_SIM_MAC_TIGERVNC.md)
-- [Протокол Arduino](protocol_arduino.md) -- 4 байта RX, 16 байт TX
+- [Ethernet: Mac ↔ Pi](ETHERNET_MAC_PI_CONNECTION.md)
+- [Foxglove Studio](FOXGLOVE_VIEWER.md)
+- [Калибровка RealSense](CALIBRATION.md)
+- [Протокол Arduino](protocol_arduino.md)
 - [Спецификация моторов](MOTOR_SPEC.md)
 - [Энкодер MT6701](ENCODER_MT6701.md)
+- [Docker на Windows](DOCKER_WINDOWS.md)
+
+---
 
 ## Структура репозитория
 
-- `arduino/` -- прошивка Arduino Mega (моторы, энкодеры).
-- `docs/` -- протоколы, инструкции.
-- `docker/` -- `pi/Dockerfile` (Raspberry Pi), `windows/Dockerfile` (Windows).
-- `ros-humble-desktop-m1_2-mac/` -- базовый desktop-образ для Mac (VNC, Xvfb).
-- `scripts/` -- скрипты запуска для Windows (.ps1) и Mac (.sh).
-- `src/` -- пакеты ROS2:
-  - **Ядро RTK:** `rtk2026`, `rtk2026_bringup`, `rtk2026_description`, `rtk2026_interfaces`, `rtk2026_driver`, `rtk2026_base`, `rtk2026_localization`, `rtk2026_slam`, `rtk2026_navigation`, `rtk2026_simulation`, `rtk2026_peripherals`, `rtk2026_nav2_explorer`.
-  - **Симуляция:** `diff_robot` -- URDF и миры для тестов навигации на трассе.
+```
+arduino/          — прошивка Arduino (моторы, энкодеры)
+docker/pi/        — Dockerfile для Raspberry Pi (arm64)
+docker/windows/   — Dockerfile для симуляции на Windows
+scripts/
+  build_pi.sh     — сборка образа на Mac
+  deploy_pi.sh    — загрузка образа на Pi + запуск
+src/
+  rtk2026_interfaces/   — кастомные msg (EncoderReport, MotorCommand)
+  rtk2026_description/  — URDF xacro
+  rtk2026_driver/       — arduino_bridge (serial ↔ ROS2)
+  rtk2026_base/         — base_controller (одометрия, TF, cmd_vel)
+  rtk2026_bringup/      — launch-файлы (pi_full.launch.py)
+  rtk2026_peripherals/  — lidar.launch.py, depth_camera.launch.py
+  rtk2026_slam/         — slam_toolbox конфиг
+  rtk2026_navigation/   — Nav2 конфиг
+  rtk2026_localization/ — robot_localization (EKF)
+  diff_robot/           — URDF для симуляции (не RTK)
+```

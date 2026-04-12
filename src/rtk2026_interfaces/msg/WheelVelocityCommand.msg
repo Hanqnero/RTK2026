@@ -1,0 +1,2 @@
+int32 left_ticks_per_sec
+int32 right_ticks_per_sec

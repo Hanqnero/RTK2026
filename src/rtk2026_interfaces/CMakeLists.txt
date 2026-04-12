@@ -12,6 +12,7 @@ find_package(std_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/EncoderReport.msg"
   "msg/MotorCommand.msg"
+  "msg/WheelVelocityCommand.msg"
   DEPENDENCIES std_msgs
 )
 

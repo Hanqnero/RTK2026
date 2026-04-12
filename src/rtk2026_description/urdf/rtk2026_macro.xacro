@@ -3,17 +3,17 @@
   <xacro:macro name="rtk2026_macro" params="prefix:=">
     <link name="${prefix}base_footprint"/>
 
-    <!-- Robot: 250 mm width, 300 mm length, 130 mm height. Diff-drive, sprocket 17 teeth. -->
+    <!-- Robot: 300 mm length, 250 mm width, 113 mm height. Diff-drive. -->
     <joint name="${prefix}base_footprint_joint" type="fixed">
       <parent link="${prefix}base_footprint"/>
       <child link="${prefix}base_link"/>
-      <origin xyz="0 0 0.065" rpy="0 0 0"/>
+      <origin xyz="0 0 0.0565" rpy="0 0 0"/>
     </joint>
 
     <link name="${prefix}base_link">
       <visual>
         <geometry>
-          <box size="0.3 0.25 0.13"/>
+          <box size="0.3 0.25 0.113"/>
         </geometry>
         <material name="base_grey">
           <color rgba="0.4 0.4 0.4 1"/>
@@ -21,7 +21,7 @@
       </visual>
       <collision>
         <geometry>
-          <box size="0.3 0.25 0.13"/>
+          <box size="0.3 0.25 0.113"/>
         </geometry>
       </collision>
       <inertial>
