@@ -1,0 +1,95 @@
+networks:
+  sim_net:
+    driver: bridge
+
+services:
+  # ── gzserver: только мир turtlebot3_world ────────────────────────────────
+  gazebo:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.sim
+    image: rtk2026-sim:latest
+    command: ["/scripts/start_gazebo.sh"]
+    volumes:
+      - ../src/rtk2026_description/urdf:/workspace/urdf:ro
+    environment:
+      - ROS_DOMAIN_ID=0
+      - LIBGL_ALWAYS_SOFTWARE=1
+      - GAZEBO_MODEL_DATABASE_URI=
+    networks:
+      - sim_net
+
+  # ── robot_state_publisher с нашим URDF ───────────────────────────────────
+  robot:
+    image: rtk2026-sim:latest
+    command: ["/scripts/start_robot.sh"]
+    volumes:
+      - ../src/rtk2026_description/urdf:/workspace/urdf:ro
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - sim_net
+    depends_on:
+      - gazebo
+
+  # ── spawn нашего робота — ждёт /spawn_entity ─────────────────────────────
+  spawn:
+    image: rtk2026-sim:latest
+    command: ["/scripts/spawn_robot.sh"]
+    volumes:
+      - ../src/rtk2026_description/urdf:/workspace/urdf:ro
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - sim_net
+    depends_on:
+      - robot
+    restart: on-failure
+
+  # ── наша одометрия: /joint_states -> /encoder_report -> /odom ───────────
+  odometry:
+    image: rtk2026-sim:latest
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+      source /workspace/install/setup.bash &&
+      exec ros2 launch rtk2026_odometry sim_odometry.launch.py"
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - sim_net
+    depends_on:
+      - spawn
+
+  # ── slam_toolbox ──────────────────────────────────────────────────────────
+  slam:
+    image: rtk2026-sim:latest
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+      source /workspace/install/setup.bash &&
+      ros2 launch slam_toolbox online_async_launch.py
+      use_sim_time:=true
+      slam_params_file:=/workspace/slam_toolbox.yaml"
+    volumes:
+      - ../src/rtk2026_bringup/config/slam_toolbox.yaml:/workspace/slam_toolbox.yaml:ro
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - sim_net
+    depends_on:
+      - odometry
+
+  # ── foxglove bridge ───────────────────────────────────────────────────────
+  foxglove:
+    image: rtk2026-sim:latest
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+      source /workspace/install/setup.bash &&
+      ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765"
+    ports:
+      - "8765:8765"
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - sim_net
+    depends_on:
+      - gazebo

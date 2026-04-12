@@ -1,0 +1,22 @@
+FROM --platform=linux/arm64 osrf/ros:humble-desktop
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-turtlebot3 \
+    ros-humble-turtlebot3-simulations \
+    ros-humble-slam-toolbox \
+    ros-humble-foxglove-bridge \
+    ros-humble-teleop-twist-keyboard \
+    python3-colcon-common-extensions \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV TURTLEBOT3_MODEL=burger
+ENV LIBGL_ALWAYS_SOFTWARE=1
+ENV GAZEBO_MODEL_PATH=/opt/ros/humble/share/turtlebot3_gazebo/models:/usr/share/gazebo-11/models
+
+WORKDIR /workspace
+
+COPY docker/scripts /scripts
+RUN chmod +x /scripts/*.sh
+
+COPY src /workspace/src
+RUN . /opt/ros/humble/setup.sh && colcon build --symlink-install

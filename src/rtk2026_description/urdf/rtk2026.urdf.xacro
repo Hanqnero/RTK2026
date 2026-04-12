@@ -1,5 +1,116 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="rtk2026">
-  <xacro:include filename="rtk2026_macro.xacro"/>
-  <xacro:rtk2026_macro prefix="" />
+
+  <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       Параметры робота
+       Корпус: 300×250×113 мм, дифференциальный привод
+       Колёса: диаметр 51.7 мм, расстояние между колёсами 212.3 мм
+       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+
+  <xacro:property name="base_length"     value="0.300"/>
+  <xacro:property name="base_width"      value="0.240"/>
+  <xacro:property name="base_height"     value="0.113"/>
+  <xacro:property name="wheel_radius"    value="0.02585"/>  <!-- 51.7 мм / 2 -->
+  <xacro:property name="wheel_width"     value="0.030"/>
+  <xacro:property name="wheel_sep"       value="0.2123"/>   <!-- между центрами колёс -->
+  <xacro:property name="base_z_offset"   value="0.0565"/>   <!-- центр корпуса над полом -->
+
+  <!-- ── base_footprint — точка на полу под роботом ── -->
+  <link name="base_footprint"/>
+
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${base_z_offset}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ── base_link — центр корпуса ── -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="${base_length} ${base_width} ${base_height}"/>
+      </geometry>
+      <material name="base_grey">
+        <color rgba="0.4 0.4 0.4 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${base_length} ${base_width} ${base_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="5.0"/>
+      <inertia ixx="0.05" ixy="0" ixz="0" iyy="0.05" iyz="0" izz="0.05"/>
+    </inertial>
+  </link>
+
+  <!-- ── левое колесо ── -->
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="left_wheel_link"/>
+    <origin xyz="0 ${wheel_sep/2} ${-base_z_offset + wheel_radius}" rpy="-1.5708 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <link name="left_wheel_link">
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <material name="wheel_black">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.3"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <!-- ── правое колесо ── -->
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="right_wheel_link"/>
+    <origin xyz="0 ${-wheel_sep/2} ${-base_z_offset + wheel_radius}" rpy="-1.5708 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <link name="right_wheel_link">
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <material name="wheel_black"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.3"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <!-- ── лидар — спереди сверху корпуса ── -->
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="0.15 0 0.08" rpy="0 0 0"/>
+  </joint>
+  <link name="lidar_link"/>
+
+  <!-- ── IMU ── -->
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0 0 0.04" rpy="0 0 0"/>
+  </joint>
+  <link name="imu_link"/>
+
 </robot>

@@ -1,9 +1,0 @@
-# USB camera (usb_cam). For stereo use realsense or ascamera launch.
-usb_cam:
-  ros__parameters:
-    video_device: /dev/video0
-    image_width: 640
-    image_height: 480
-    pixel_format: yuyv
-    camera_frame_id: camera_link
-    io_method: mmap

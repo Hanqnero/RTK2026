@@ -1,24 +1,43 @@
-    #pragma once
+#pragma once
+#include <Arduino.h>
+#include "config.h"
 
-class Encoder {
-    public:
-        Encoder(int, int);
-        bool direction();
-        int64_t cnt();
-        int32_t speed();
-        void refresh();
-        void Handler();
-        void start();
-        const int A, B;
-    private:
-        volatile int64_t _cnt;
-        volatile int64_t _cnt_old;
-        volatile int32_t last_time;
-        volatile bool _direction; // true for clock-wise and false for counter clock-wise
-        volatile int32_t _speed; // average speed over a SPEED_PERIOD_MS ms period
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Энкодер в режиме 2x квадратуры (CHANGE на канале A)
+//
+// Направление определяется состоянием каналов A и B
+// в момент прерывания:
+//   A == B → вперёд (+1)
+//   A != B → назад  (-1)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+struct Encoder {
+    const uint8_t pin_a;
+    const uint8_t pin_b;
+
+    volatile int32_t count = 0;  // накопленные тики с момента старта
+
+    Encoder(uint8_t a, uint8_t b) : pin_a(a), pin_b(b) {}
+
+    void begin() {
+        pinMode(pin_a, INPUT_PULLUP);
+        pinMode(pin_b, INPUT_PULLUP);
+    }
+
+    // вызывается из ISR на CHANGE канала A
+    void on_change() {
+        bool a = digitalRead(pin_a);
+        bool b = digitalRead(pin_b);
+        if (a == b) ++count;
+        else        --count;
+    }
 };
 
-extern Encoder left_enc;
-extern Encoder right_enc;
+extern Encoder enc_left;
+extern Encoder enc_right;
 
-void enc_start();
+// ISR обёртки — attachInterrupt не принимает методы класса
+void enc_left_isr();
+void enc_right_isr();
+
+void encoders_begin();
