@@ -32,10 +32,8 @@ int32_t EncoderCounter::readAndResetDelta() {
 }
 
 int64_t EncoderCounter::readCount() const {
-    noInterrupts();
-    const int64_t count = _count;
-    interrupts();
-    return count;
+    // Use volatile read to safely access shared counter
+    return _count;
 }
 
 int8_t EncoderCounter::directionFromState(uEncoderVirt::State state) {

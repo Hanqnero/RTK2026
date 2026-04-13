@@ -29,7 +29,9 @@
       "displayName": "AVR Debug (macOS/System)",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/avr-system.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/avr-system.cmake",
+        "AVR_TOOLCHAIN_ROOT": "/opt/homebrew/Cellar/avr-gcc@9/9.5.0",
+        "AVR_STDLIB_INCLUDE_DIR": "/opt/homebrew/Cellar/avr-gcc@9/9.5.0/avr/include"
       }
     },
     {

@@ -17,7 +17,15 @@ set(VENDOR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor)
 set(HEX_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.hex)
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Generic")
-    message(FATAL_ERROR "Configure this project with an AVR toolchain file. See CMakePresets.json.")
+  message(FATAL_ERROR "Configure this project with an AVR toolchain file. See CMakePresets.json.")
+endif()
+
+if(DEFINED AVR_TOOLCHAIN_ROOT AND AVR_TOOLCHAIN_ROOT)
+  set(CMAKE_FIND_ROOT_PATH "${AVR_TOOLCHAIN_ROOT};${CMAKE_FIND_ROOT_PATH}")
+endif()
+
+if(DEFINED AVR_STDLIB_INCLUDE_DIR AND AVR_STDLIB_INCLUDE_DIR)
+  add_compile_options(-isystem "${AVR_STDLIB_INCLUDE_DIR}")
 endif()
 
 find_program(AVR_OBJCOPY_PROGRAM NAMES avr-objcopy REQUIRED)
@@ -37,6 +45,7 @@ file(GLOB ARDUINO_CORE_SOURCES CONFIGURE_DEPENDS
     ${ARDUINO_CORE_DIR}/*.c
     ${ARDUINO_CORE_DIR}/*.cpp
     ${ARDUINO_CORE_DIR}/*.S
+    ${ARDUINO_VARIANT_DIR}/*.c
 )
 
 add_library(arduino_core STATIC ${ARDUINO_CORE_SOURCES})
@@ -93,10 +102,14 @@ target_compile_options(${PROJECT_NAME}.elf PRIVATE
     -flto
     $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
 )
+target_compile_features(${PROJECT_NAME}.elf PRIVATE c_std_11 cxx_std_11)
 target_link_options(${PROJECT_NAME}.elf PRIVATE
     -mmcu=${MCU}
     -Wl,--gc-sections
     -flto
+    -Wl,--whole-archive
+    $<TARGET_FILE:arduino_core>
+    -Wl,--no-whole-archive
 )
 target_link_libraries(${PROJECT_NAME}.elf PRIVATE arduino_core)
 
@@ -111,7 +124,7 @@ add_custom_command(
 )
 
 if(AVRDUDE_PROGRAM)
-    add_custom_target(flash
+  add_custom_target(flash
         COMMAND ${AVRDUDE_PROGRAM}
             -C ${AVRDUDE_CONFIG}
             -p ${MCU}
@@ -125,7 +138,7 @@ if(AVRDUDE_PROGRAM)
         VERBATIM
     )
 else()
-    add_custom_target(flash
+  add_custom_target(flash
         COMMAND ${CMAKE_COMMAND} -E echo "avrdude was not found. Set AVRDUDE_PROGRAM to the avrdude executable path."
         COMMAND ${CMAKE_COMMAND} -E false
         DEPENDS ${PROJECT_NAME}.elf

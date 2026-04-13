@@ -2,3 +2,5 @@ avr8-gnu-toolchain-win32_x86_64/
 build/
 *.elf
 *.hex
+
+.cache

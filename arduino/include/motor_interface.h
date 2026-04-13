@@ -5,8 +5,8 @@
 // Update these pins to match the actual Arduino Mega wiring.
 #define LEFT_LPWM 6
 #define LEFT_RPWM 7
-#define RIGHT_LPWM 1
-#define RIGHT_RPWM 1
+#define RIGHT_LPWM 4
+#define RIGHT_RPWM 5
 
 #define LEFT_ENC_CLK 2
 #define LEFT_ENC_DT 3
