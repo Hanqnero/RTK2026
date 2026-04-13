@@ -13,6 +13,15 @@ ROS2 нода: мост между Arduino и ROS2.
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import Header
+try:
+    from rtk2026_interfaces.msg import EncoderReport, MotorCommand, WheelVelocityCommand
+    HAS_WHEEL_VELOCITY_MSG = True
+except ImportError:
+    from rtk2026_interfaces.msg import EncoderReport, MotorCommand
+    WheelVelocityCommand = None
+    HAS_WHEEL_VELOCITY_MSG = False
 
 from rtk2026_driver.protocol import InvalidChecksumError, pack_command, parse_telemetry
 from rtk2026_driver.transport import HandshakeTimeoutError, SerialTransport
@@ -31,22 +40,25 @@ class ArduinoBridgeNode(Node):
     def __init__(self) -> None:
         super().__init__("arduino_bridge")
 
-        # --- параметры из arduino_bridge.yaml ---
-        self.declare_parameter("serial_port", "/dev/ttyUSB0")
-        self.declare_parameter("baudrate", 115200)
-        self.declare_parameter("handshake_timeout_sec", 5.0)
-        self.declare_parameter("handshake_poll_interval_sec", 0.01)
-        self.declare_parameter("encoder_report_topic", "encoder_report")
+        # Raspberry Pi GPIO UART alias (pins 8/10)
+        self.declare_parameter("serial_port", "/dev/serial0")
+        self.declare_parameter("baud_rate", 115200)
+        self.declare_parameter("read_timeout_sec", 0.05)
+        self.declare_parameter("publish_rate", 100.0)
+        self.declare_parameter("motor_command_topic", "motor_command")
         self.declare_parameter("wheel_velocity_command_topic", "wheel_velocity_command")
-        self.declare_parameter("left_encoder_inverted", False)
-        self.declare_parameter("right_encoder_inverted", False)
-        self.declare_parameter("left_wheel_inverted", False)
-        self.declare_parameter("right_wheel_inverted", False)
+        self.declare_parameter("encoder_report_topic", "encoder_report")
+        self.declare_parameter("min_motor_send_interval_sec", 0.02)
 
-        port = self.get_parameter("serial_port").value
-        baudrate = self.get_parameter("baudrate").value
-        hs_timeout = self.get_parameter("handshake_timeout_sec").value
-        hs_poll = self.get_parameter("handshake_poll_interval_sec").value
+        self._port_path = str(self.get_parameter("serial_port").value)
+        self._baud = int(self.get_parameter("baud_rate").value)
+        self._read_timeout = float(self.get_parameter("read_timeout_sec").value)
+        self._publish_rate = float(self.get_parameter("publish_rate").value)
+        self._motor_topic = str(self.get_parameter("motor_command_topic").value)
+        self._encoder_topic = str(self.get_parameter("encoder_report_topic").value)
+        self._min_send_interval = float(
+            self.get_parameter("min_motor_send_interval_sec").value
+        )
 
         # инверсия знака через yaml — не трогаем прошивку Arduino
         self._left_enc_sign = (
@@ -70,6 +82,10 @@ class ArduinoBridgeNode(Node):
             handshake_poll_interval_sec=hs_poll,
         )
         self._rx_buf = bytearray()
+        self._last_motor_send_time = 0.0
+        self._pending_payload = None
+        self._has_pending = False
+        self._telemetry_rx = bytearray()
 
         # --- публикатор /encoder_report ---
         enc_topic = self.get_parameter("encoder_report_topic").value
@@ -100,28 +116,44 @@ class ArduinoBridgeNode(Node):
                 f"(left_count={first_frame.left_count}, "
                 f"right_count={first_frame.right_count})"
             )
-        except HandshakeTimeoutError as e:
-            # нода не может работать без Arduino — завершаемся
-            self.get_logger().fatal(f"Handshake failed: {e}")
-            raise SystemExit(1)
+            self._ser.reset_input_buffer()
+            self._ser.reset_output_buffer()
+            self._rx_buf.clear()
+            self.get_logger().info(f"Opened UART {self._port_path} at {self._baud} bps")
+        except Exception as e:
+            self.get_logger().warning(f"Could not open UART {self._port_path}: {e}")
+            self._ser = None
 
-    def _read_telemetry(self) -> None:
-        """
-        Таймер: читаем байты из serial буфера и публикуем EncoderReport.
+    def _reconnect_serial(self, reason: str) -> None:
+        self.get_logger().warning(reason)
+        try:
+            if self._ser is not None:
+                self._ser.close()
+        except Exception:
+            pass
+        self._ser = None
+        self._open_serial()
 
-        Извлекаем все полные фреймы за один вызов — буфер может накопить
-        несколько фреймов если таймер сработал позже обычного.
-        """
-        raw = self._transport.read(256)
-        if not raw:
+    def _motor_cb(self, msg: MotorCommand) -> None:
+        self._pending_left = clamp_pwm(msg.left_pwm)
+        self._pending_right = clamp_pwm(msg.right_pwm)
+        self._has_pending = True
+
+    def _read_reports(self) -> None:
+        if self._ser is None or not self._ser.is_open:
+            self._open_serial()
             return
 
-        self._rx_buf.extend(raw)
+        try:
+            waiting = self._ser.in_waiting
+            if waiting > 0:
+                self._rx_buf.extend(self._ser.read(waiting))
 
         # извлекаем все доступные фреймы из буфера за один вызов
         consecutive_errors = 0
         max_consecutive_errors = 10
 
+<<<<<<< HEAD
         while True:
             try:
                 frame = parse_telemetry(self._rx_buf)
@@ -137,6 +169,27 @@ class ArduinoBridgeNode(Node):
                     self._rx_buf.clear()
                     break
                 continue
+=======
+                left_speed, left_cnt, right_speed, right_cnt = struct.unpack(
+                    "<iiii", raw
+                )
+
+                report = EncoderReport()
+                report.header = Header()
+                report.header.stamp = self.get_clock().now().to_msg()
+                report.header.frame_id = "base_link"
+                report.left_count = int(left_cnt)
+                report.right_count = int(right_cnt)
+                report.left_speed = int(left_speed)
+                report.right_speed = int(right_speed)
+                self._encoder_pub.publish(report)
+        except Exception as e:
+            self._reconnect_serial(f"UART read error on {self._port_path}: {e}")
+
+    def _write_motor_command(self) -> None:
+        if self._ser is None or not self._ser.is_open or not self._has_pending:
+            return
+>>>>>>> arduino
 
             if frame is None:
                 # буфер не накопил полный фрейм — ждём следующего вызова
