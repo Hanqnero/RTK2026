@@ -1,0 +1,22 @@
+base_controller:
+  ros__parameters:
+    # Diff-drive: 250 mm width -> wheel_separation 0.25 m. Encoder: MT6701 ABZ.
+    # Calibration: drive 1 m forward, read left_cnt from telemetry -> ticks_per_meter = left_cnt.
+    # Current value: 2150 tks/s = max (~0.3 m/s) -> 2150/0.3 ~7150, but encoder ISR counts
+    # only RISING on A (1x quadrature), so adjust empirically.
+    # TODO: calibrate physically with serial_test.py + telemetry cnt reading.
+    wheel_separation: 0.25
+    ticks_per_meter: 3000.0
+    max_linear_speed: 0.5
+    max_angular_speed: 1.0
+    max_pwm: 127
+    cmd_vel_timeout_sec: 0.5
+    cmd_vel_topic: "cmd_vel"
+    encoder_report_topic: "encoder_report"
+    motor_command_topic: "motor_command"
+    wheel_velocity_command_topic: "wheel_velocity_command"
+    odom_topic: "odom"
+    odom_frame_id: "odom"
+    base_frame_id: "base_link"
+    tf_publish_rate: 20.0
+    publish_tf: true
