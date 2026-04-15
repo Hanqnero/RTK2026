@@ -123,6 +123,9 @@ class ImageRelayAutorace(Node):
         self.pub_projected = self.create_publisher(Image, projected_topic, 10)
         self.pub_compensated = self.create_publisher(Image, compensated_topic, 10)
         self.pub_trapezoid = self.create_publisher(Image, "/rtk_autorace_ipm/image_trapezoid", 10)
+        self.pub_trapezoid_compressed = self.create_publisher(
+            CompressedImage, "/rtk_autorace_ipm/image_trapezoid/compressed", 10
+        )
         # Также публикуем JPEG для транспорта image_transport-style вида: <topic>/compressed.
         # Это делает вход для detect_lane более совместимым с реализациями,
         # которые подписываются на .../compressed (например, ROS1 TurtleBot3 Autorace).
@@ -260,6 +263,13 @@ class ImageRelayAutorace(Node):
         trap_msg = self.bridge.cv2_to_imgmsg(trap_img, encoding="bgr8")
         trap_msg.header = msg.header
         self.pub_trapezoid.publish(trap_msg)
+        trap_ok, trap_buf = cv2.imencode(".jpg", trap_img)
+        if trap_ok:
+            trap_comp = CompressedImage()
+            trap_comp.header = msg.header
+            trap_comp.format = "jpeg"
+            trap_comp.data = trap_buf.tobytes()
+            self.pub_trapezoid_compressed.publish(trap_comp)
         maps = self._get_ipm_maps(raw_width=w, raw_height=h)
         if maps is not None:
             map_x, map_y = maps

@@ -1,22 +1,18 @@
 <?xml version="1.0"?>
-<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>rtk2026_bringup</name>
   <version>0.1.0</version>
-  <description>Launch and config for RTK2026 robot</description>
-  <maintainer email=""></maintainer>
-  <license>Apache-2.0</license>
-  <depend>rtk2026_description</depend>
-  <depend>rtk2026_driver</depend>
-  <depend>rtk2026_base</depend>
-  <depend>rtk2026_localization</depend>
-  <depend>rtk2026_slam</depend>
-  <depend>rtk2026_navigation</depend>
-  <depend>robot_state_publisher</depend>
-  <depend>joint_state_publisher</depend>
-  <depend>rviz2</depend>
-  <depend>launch</depend>
-  <depend>launch_ros</depend>
+  <description>Launch файлы для запуска RTK2026</description>
+  <maintainer email="todo@todo.com">rtk2026</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>rtk2026_driver</exec_depend>
+  <exec_depend>rtk2026_odometry</exec_depend>
+  <exec_depend>rtk2026_description</exec_depend>
+  <exec_depend>slam_toolbox</exec_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>

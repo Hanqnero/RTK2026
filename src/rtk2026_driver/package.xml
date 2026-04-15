@@ -3,13 +3,15 @@
 <package format="3">
   <name>rtk2026_driver</name>
   <version>0.1.0</version>
-  <description>Arduino serial bridge: encoder report publisher, motor command subscriber</description>
-  <maintainer email=""></maintainer>
+  <description>Arduino serial bridge node for RTK2026 robot</description>
+  <maintainer email="kamilisxakof@gmail.com">RTK2026</maintainer>
   <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
   <depend>rclpy</depend>
   <depend>rtk2026_interfaces</depend>
-  <depend>std_msgs</depend>
-  <test_depend>python3-pytest</test_depend>
+
   <export>
     <build_type>ament_python</build_type>
   </export>

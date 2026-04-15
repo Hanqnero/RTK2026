@@ -1,9 +1,25 @@
 arduino_bridge:
   ros__parameters:
-    serial_port: "/dev/ttyUSB0"
-    baud_rate: 115200
-    read_timeout_sec: 0.5
-    publish_rate: 10.0
-    motor_command_topic: "motor_command"
+
+    # --- Serial порт ---
+    serial_port: "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
+    baudrate: 115200
+
+    # --- Handshake ---
+    # Сколько ждать первого фрейма телеметрии от Arduino после открытия порта
+    handshake_timeout_sec: 5.0
+    # Пауза между попытками чтения во время handshake
+    handshake_poll_interval_sec: 0.01
+
+    # --- Топики ---
     encoder_report_topic: "encoder_report"
-    min_motor_send_interval_sec: 0.05
+    wheel_velocity_command_topic: "wheel_velocity_command"
+
+    # --- Знаки колёс ---
+    # Инвертировать если мотор физически установлен зеркально
+    left_wheel_inverted: false
+    right_wheel_inverted: false
+
+    # Инвертировать если энкодер считает в обратную сторону
+    left_encoder_inverted: false
+    right_encoder_inverted: false

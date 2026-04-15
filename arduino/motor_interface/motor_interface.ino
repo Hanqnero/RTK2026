@@ -1,96 +1,197 @@
-#include "motor_interface.h"
+/*
+  motor_interface.ino — прошивка дифференциального привода RTK2026-2
+
+  Протокол Pi -> Arduino (7 байт):
+    [0xA5][0x5A][left_tps_lo][left_tps_hi][right_tps_lo][right_tps_hi][checksum]
+
+  Протокол Arduino -> Pi (11 байт):
+    [0x5A][0xA5][left_cnt b0..b3][right_cnt b0..b3][checksum]
+
+  PID библиотека: uPID (https://github.com/GyverLibs/uPID)
+  Вход PID:  тики/сек (измеренная скорость за CONTROL_PERIOD_MS)
+  Выход PID: PWM [-255, 255]
+*/
+
+#include <uPID.h>
+#include "config.h"
 #include "encoder.h"
+#include "motor.h"
 
-volatile int64_t left_cnt = 0;
-volatile int64_t right_cnt = 0;
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PID контроллеры для каждого борта
+//
+// D_INPUT    — дифференцирование по входу, а не по ошибке
+//              устраняет derivative kick при резком изменении setpoint
+// I_SATURATE — интегрирование только когда выход не насыщен
+//              защита от integral windup
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+uPID pid_left (D_INPUT | I_SATURATE, CONTROL_PERIOD_MS);
+uPID pid_right(D_INPUT | I_SATURATE, CONTROL_PERIOD_MS);
 
-void left_set_speed(int pwm) {
-    pwm = constrain(pwm, -255, 255);
-    if (pwm >= 0) {
-        analogWrite(LEFT_RPWM, pwm);
-        analogWrite(LEFT_LPWM, 0);
-    } else {
-        analogWrite(LEFT_RPWM, 0);
-        analogWrite(LEFT_LPWM, -pwm);
+// целевые скорости бортов (тики/сек), приходят с Pi
+int16_t target_left_tps  = 0;
+int16_t target_right_tps = 0;
+
+// время последней команды от Pi — для таймаута
+uint32_t last_cmd_ms = 0;
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Переменные управляющего цикла
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+uint32_t last_control_ms  = 0;
+int32_t  prev_left_count  = 0;
+int32_t  prev_right_count = 0;
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Вспомогательные функции протокола
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+static uint8_t checksum(const uint8_t* data, uint8_t len) {
+    uint8_t sum = 0;
+    for (uint8_t i = 0; i < len; i++) sum += data[i];
+    return sum;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Чтение команды с Pi
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+static void read_command() {
+    while (Serial.available() > 0) {
+        // ищем первый байт заголовка
+        if (Serial.peek() != CMD_HEADER_0) {
+            Serial.read();
+            continue;
+        }
+        // ждём полный пакет
+        if (Serial.available() < CMD_PACKET_SIZE) return;
+
+        uint8_t frame[CMD_PACKET_SIZE];
+        Serial.readBytes(frame, CMD_PACKET_SIZE);
+
+        // проверяем второй байт заголовка
+        if (frame[1] != CMD_HEADER_1) continue;
+
+        // проверяем контрольную сумму
+        if (checksum(frame, CMD_PACKET_SIZE - 1) != frame[CMD_PACKET_SIZE - 1]) continue;
+
+        // распаковываем int16 LE
+        target_left_tps  = (int16_t)(frame[2] | (frame[3] << 8));
+        target_right_tps = (int16_t)(frame[4] | (frame[5] << 8));
+        last_cmd_ms = millis();
     }
 }
 
-void right_set_speed(int pwm) {
-    pwm = constrain(pwm, -255, 255);
-    if (pwm >= 0) {
-        analogWrite(RIGHT_RPWM, pwm);
-        analogWrite(RIGHT_LPWM, 0);
-    } else {
-        analogWrite(RIGHT_RPWM, 0);
-        analogWrite(RIGHT_LPWM, -pwm);
-    }
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Отправка телеметрии на Pi
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+static void send_telemetry(int32_t left_cnt, int32_t right_cnt) {
+    uint8_t frame[TEL_PACKET_SIZE];
+    frame[0] = TEL_HEADER_0;
+    frame[1] = TEL_HEADER_1;
+
+    // left_count (int32 LE)
+    frame[2] = (left_cnt >>  0) & 0xFF;
+    frame[3] = (left_cnt >>  8) & 0xFF;
+    frame[4] = (left_cnt >> 16) & 0xFF;
+    frame[5] = (left_cnt >> 24) & 0xFF;
+
+    // right_count (int32 LE)
+    frame[6] = (right_cnt >>  0) & 0xFF;
+    frame[7] = (right_cnt >>  8) & 0xFF;
+    frame[8] = (right_cnt >> 16) & 0xFF;
+    frame[9] = (right_cnt >> 24) & 0xFF;
+
+    frame[10] = checksum(frame, TEL_PACKET_SIZE - 1);
+    Serial.write(frame, TEL_PACKET_SIZE);
 }
 
-inline void left_stop() {
-    left_set_speed(0);
-}
-
-inline void right_stop() {
-    right_set_speed(0);
-}
-
-// left_forward_pwm   [1]
-// left_backward_pwm  [1]
-// right_forward_pwm  [1]
-// right_backward_pwm [1]
-byte rx_buf[4];
-
-struct __attribute__((packed)) TxPacket {
-    int32_t left_speed;   // [4] encoder speed left
-    int32_t left_cnt;     // [4] encoder count left
-    int32_t right_speed;  // [4] encoder speed right
-    int32_t right_cnt;    // [4] encoder count right
-};
-
-TxPacket tx_pkt;
-
-uint32_t last_millis;
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Setup
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 void setup() {
+    Serial.begin(SERIAL_BAUD);
+    Serial.setTimeout(10);
 
+    motors_begin();
+    encoders_begin();
 
-    // pinMode(LEFT_LEN, OUTPUT);
-    // pinMode(LEFT_REN, OUTPUT);
-    // pinMode(RIGHT_LEN, OUTPUT);
-    // pinMode(RIGHT_REN, OUTPUT);
+    // настройка PID левого борта
+    pid_left.setKp(PID_KP);
+    pid_left.setKi(PID_KI);
+    pid_left.setKd(PID_KD);
+    pid_left.outMax = PWM_MAX;
+    pid_left.outMin = PWM_MIN;
 
-    // digitalWrite(LEFT_LEN, HIGH);
-    // digitalWrite(LEFT_REN, HIGH);
-    // digitalWrite(RIGHT_LEN, HIGH);
-    // digitalWrite(RIGHT_REN, HIGH);
+    // настройка PID правого борта
+    pid_right.setKp(PID_KP);
+    pid_right.setKi(PID_KI);
+    pid_right.setKd(PID_KD);
+    pid_right.outMax = PWM_MAX;
+    pid_right.outMin = PWM_MIN;
 
-    Serial.begin(115200);
-    while (!Serial); // wait for serial to open
-    Serial.setTimeout(30);
-
-    interrupts(); // enable interrupts
-    // enc_start();
-
-    last_millis = millis();
+    last_cmd_ms      = millis();
+    last_control_ms  = millis();
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Loop
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 void loop() {
-    if (Serial.available() >= 4) {
-        Serial.readBytes(rx_buf, 4);
-        int left_pwm  = (int)rx_buf[0] - (int)rx_buf[1];
-        int right_pwm = (int)rx_buf[2] - (int)rx_buf[3];
-        left_set_speed(left_pwm);
-        right_set_speed(right_pwm);
+    // читаем команды от Pi на каждой итерации loop
+    read_command();
+
+    uint32_t now = millis();
+
+    // жёсткий период управляющего цикла
+    if ((uint32_t)(now - last_control_ms) < CONTROL_PERIOD_MS) return;
+    last_control_ms = now;
+
+    // таймаут команды — Pi молчит слишком долго
+    if ((uint32_t)(now - last_cmd_ms) > COMMAND_TIMEOUT_MS) {
+        target_left_tps  = 0;
+        target_right_tps = 0;
     }
 
-    tx_pkt.left_speed  = (int32_t)left_enc.speed();
-    tx_pkt.left_cnt    = (int32_t)left_enc.cnt();
-    tx_pkt.right_speed = (int32_t)right_enc.speed();
-    tx_pkt.right_cnt   = (int32_t)right_enc.cnt();
-    Serial.write((byte*)&tx_pkt, sizeof(tx_pkt));
+    // читаем энкодеры атомарно
+    int32_t left_cnt, right_cnt;
+    noInterrupts();
+    left_cnt  = enc_left.count;
+    right_cnt = enc_right.count;
+    interrupts();
 
-    while (millis() - last_millis < 100) {
-    } // Ждёт чтобы каждый цикл занимал одинаковое (время как на ВПД)
-    last_millis = millis();
+    // применяем знаки энкодеров
+    left_cnt  *= LEFT_ENC_SIGN;
+    right_cnt *= RIGHT_ENC_SIGN;
+
+    // вычисляем скорость за период (тики/сек)
+    int32_t left_speed  = (int32_t)((left_cnt  - prev_left_count)  * (1000 / CONTROL_PERIOD_MS));
+    int32_t right_speed = (int32_t)((right_cnt - prev_right_count) * (1000 / CONTROL_PERIOD_MS));
+    prev_left_count  = left_cnt;
+    prev_right_count = right_cnt;
+
+    if (target_left_tps == 0 && target_right_tps == 0) {
+        // явная остановка — не вычисляем PID, сразу стоп
+        // это предотвращает integral windup при стоянке
+        motor_left_set(0);
+        motor_right_set(0);
+        pid_left.integral  = 0;
+        pid_right.integral = 0;
+    } else {
+        // вычисляем PID для каждого борта
+        pid_left.setpoint  = (float)target_left_tps;
+        pid_right.setpoint = (float)target_right_tps;
+
+        int pwm_left  = (int)pid_left.compute(left_speed);
+        int pwm_right = (int)pid_right.compute(right_speed);
+
+        motor_left_set(pwm_left);
+        motor_right_set(pwm_right);
+    }
+
+    // отправляем телеметрию (накопленные тики) на Pi
+    send_telemetry(left_cnt, right_cnt);
 }

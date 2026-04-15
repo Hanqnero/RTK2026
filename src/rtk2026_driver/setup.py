@@ -1,4 +1,5 @@
 from setuptools import find_packages, setup
+from glob import glob
 
 package_name = "rtk2026_driver"
 
@@ -7,21 +8,18 @@ setup(
     version="0.1.0",
     packages=find_packages(exclude=["test"]),
     data_files=[
-        ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
-        ("share/" + package_name, ["package.xml"]),
-        ("share/" + package_name + "/config", ["config/arduino_bridge.yaml"]),
+        # маркер для ament — обязателен для обнаружения пакета
+        ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
+        (f"share/{package_name}", ["package.xml"]),
+        # конфиг устанавливается в share — launch файл найдёт его через get_package_share_directory
+        (f"share/{package_name}/config", glob("config/*.yaml")),
     ],
     install_requires=["setuptools", "pyserial"],
     zip_safe=True,
-    maintainer="RTK2026",
-    maintainer_email="user@example.com",
-    description="Arduino serial bridge for RTK2026",
-    license="Apache-2.0",
-    tests_require=["pytest"],
     entry_points={
         "console_scripts": [
+            # имя команды = rtk2026_driver.arduino_bridge_node:main
             "arduino_bridge = rtk2026_driver.arduino_bridge_node:main",
-            "fake_encoder = rtk2026_driver.fake_encoder_node:main",
         ],
     },
 )
