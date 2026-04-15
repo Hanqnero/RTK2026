@@ -50,7 +50,6 @@ CompileFlags:
 # Clangd-specific settings
 InlayHints:
   Enabled: true
-  ParameterHints: true
   DeducedTypes: true
 
 # Diagnostics configuration
@@ -67,7 +66,6 @@ Diagnostics:
       - readability-make-member-function-const
     Remove:
       - modernize-use-trailing-return-type
-      - readability-avoid-magic-numbers
       - readability-magic-numbers
 
 # Use compilation database for accurate project understanding
