@@ -1,227 +1,240 @@
-"""
-ROS2 нода: мост между Arduino и ROS2.
+#!/usr/bin/env python3
 
-Отвечает за:
-  - открытие serial порта и handshake с Arduino (через SerialTransport)
-  - периодическое чтение телеметрии и публикацию /encoder_report
-  - подписку на /wheel_velocity_command и отправку команд на Arduino
-  - корректную остановку моторов при завершении ноды
-
-Все параметры берутся из config/arduino_bridge.yaml.
-"""
+import struct
+import threading
+import time
+from typing import Optional
 
 import rclpy
-from rclpy.executors import ExternalShutdownException
+from geometry_msgs.msg import Twist
 from rclpy.node import Node
-from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
-from std_msgs.msg import Header
-try:
-    from rtk2026_interfaces.msg import EncoderReport, MotorCommand, WheelVelocityCommand
-    HAS_WHEEL_VELOCITY_MSG = True
-except ImportError:
-    from rtk2026_interfaces.msg import EncoderReport, MotorCommand
-    WheelVelocityCommand = None
-    HAS_WHEEL_VELOCITY_MSG = False
+from serial import Serial, SerialException
 
-from rtk2026_driver.protocol import InvalidChecksumError, pack_command, parse_telemetry
-from rtk2026_driver.transport import HandshakeTimeoutError, SerialTransport
-from rtk2026_interfaces.msg import EncoderReport, WheelVelocityCommand
-
-
-def pwm_to_dir_bytes(pwm: int) -> tuple[int, int]:
-    pwm = clamp_pwm(pwm)
-    if pwm >= 0:
-        return pwm & 0xFF, 0
-    return 0, (-pwm) & 0xFF
+from rtk2026_driver.msg import TelemetryPacket
 
 
 class ArduinoBridgeNode(Node):
+    """
+    ROS2 <-> Arduino serial bridge.
+
+    - Subscribes:  /cmd_vel (geometry_msgs/Twist)
+    - Publishes:   /arduino/telemetry (rtk2026_driver/TelemetryPacket)
+    - Sends control packet every 100 ms
+    - Reads telemetry packet every 100 ms (best-effort with buffered parser)
+
+    Protocol layout is mirrored from arduino/include/control_protocol.h:
+
+      ControlPacket (8 bytes):
+        float target_linear_mps
+        float target_angular_rps
+
+      TelemetryPacket (48 bytes):
+        float   target_linear_mps
+        float   target_angular_rps
+        float   current_linear_mps
+        float   current_angular_rps
+        float   target_left_wheel_mps
+        float   target_right_wheel_mps
+        float   current_left_wheel_mps
+        float   current_right_wheel_mps
+        int16   left_pwm
+        int16   right_pwm
+        int32   left_count
+        int32   right_count
+    """
+
+    CONTROL_PERIOD_S = 0.1  # 100 ms
+    TELEMETRY_PERIOD_S = 0.1  # 100 ms
+
+    # Little-endian, tightly packed
+    CONTROL_STRUCT = struct.Struct("<ff")
+    TELEMETRY_STRUCT = struct.Struct("<ffffffffhhii")
 
     def __init__(self) -> None:
-        super().__init__("arduino_bridge")
+        super().__init__("arduino_bridge_node")
 
-        # Raspberry Pi GPIO UART alias (pins 8/10)
-        self.declare_parameter("serial_port", "/dev/serial0")
-        self.declare_parameter("baud_rate", 115200)
-        self.declare_parameter("read_timeout_sec", 0.05)
-        self.declare_parameter("publish_rate", 100.0)
-        self.declare_parameter("motor_command_topic", "motor_command")
-        self.declare_parameter("wheel_velocity_command_topic", "wheel_velocity_command")
-        self.declare_parameter("encoder_report_topic", "encoder_report")
-        self.declare_parameter("min_motor_send_interval_sec", 0.02)
+        # Parameters
+        self.declare_parameter("port", "/dev/ttyUSB0")
+        self.declare_parameter("baudrate", 115200)
+        self.declare_parameter("cmd_vel_topic", "/cmd_vel")
+        self.declare_parameter("telemetry_topic", "/arduino/telemetry")
+        self.declare_parameter("serial_timeout_s", 0.02)  # non-blocking-ish reads
+        self.declare_parameter("reconnect_period_s", 1.0)
+        self.declare_parameter("drop_stale_cmd_after_s", 0.5)
 
-        self._port_path = str(self.get_parameter("serial_port").value)
-        self._baud = int(self.get_parameter("baud_rate").value)
-        self._read_timeout = float(self.get_parameter("read_timeout_sec").value)
-        self._publish_rate = float(self.get_parameter("publish_rate").value)
-        self._motor_topic = str(self.get_parameter("motor_command_topic").value)
-        self._encoder_topic = str(self.get_parameter("encoder_report_topic").value)
-        self._min_send_interval = float(
-            self.get_parameter("min_motor_send_interval_sec").value
+        self._port = self.get_parameter("port").get_parameter_value().string_value
+        self._baudrate = (
+            self.get_parameter("baudrate").get_parameter_value().integer_value
+        )
+        self._cmd_vel_topic = (
+            self.get_parameter("cmd_vel_topic").get_parameter_value().string_value
+        )
+        self._telemetry_topic = (
+            self.get_parameter("telemetry_topic").get_parameter_value().string_value
+        )
+        self._serial_timeout_s = (
+            self.get_parameter("serial_timeout_s").get_parameter_value().double_value
+        )
+        self._reconnect_period_s = (
+            self.get_parameter("reconnect_period_s").get_parameter_value().double_value
+        )
+        self._drop_stale_cmd_after_s = (
+            self.get_parameter("drop_stale_cmd_after_s")
+            .get_parameter_value()
+            .double_value
         )
 
-        # инверсия знака через yaml — не трогаем прошивку Arduino
-        self._left_enc_sign = (
-            -1 if self.get_parameter("left_encoder_inverted").value else 1
+        # ROS interfaces
+        self._telemetry_pub = self.create_publisher(
+            TelemetryPacket, self._telemetry_topic, 20
         )
-        self._right_enc_sign = (
-            -1 if self.get_parameter("right_encoder_inverted").value else 1
-        )
-        self._left_mot_sign = (
-            -1 if self.get_parameter("left_wheel_inverted").value else 1
-        )
-        self._right_mot_sign = (
-            -1 if self.get_parameter("right_wheel_inverted").value else 1
-        )
-
-        # --- serial транспорт ---
-        self._transport = SerialTransport(
-            port=port,
-            baudrate=baudrate,
-            handshake_timeout_sec=hs_timeout,
-            handshake_poll_interval_sec=hs_poll,
-        )
-        self._rx_buf = bytearray()
-        self._last_motor_send_time = 0.0
-        self._pending_payload = None
-        self._has_pending = False
-        self._telemetry_rx = bytearray()
-
-        # --- публикатор /encoder_report ---
-        enc_topic = self.get_parameter("encoder_report_topic").value
-        self._encoder_pub = self.create_publisher(EncoderReport, enc_topic, 10)
-
-        # --- подписка на /wheel_velocity_command ---
-        cmd_topic = self.get_parameter("wheel_velocity_command_topic").value
         self._cmd_sub = self.create_subscription(
-            WheelVelocityCommand,
-            cmd_topic,
-            self._on_wheel_velocity_command,
-            10,
+            Twist, self._cmd_vel_topic, self._on_cmd_vel, 20
         )
 
-        # --- таймер чтения телеметрии ---
-        # вызывается часто чтобы не накапливать данные в буфере
-        self._read_timer = self.create_timer(0.01, self._read_telemetry)
+        # Shared command state
+        self._lock = threading.Lock()
+        self._target_linear_mps = 0.0
+        self._target_angular_rps = 0.0
+        self._last_cmd_time = self.get_clock().now()
 
-        # --- открываем порт и ждём handshake ---
-        self._open_transport(port)
+        # Serial
+        self._serial: Optional[Serial] = None
+        self._rx_buffer = bytearray()
 
-    def _open_transport(self, port: str) -> None:
-        """Открыть serial порт и выполнить handshake с Arduino."""
-        try:
-            first_frame = self._transport.open()
-            self.get_logger().info(
-                f"Arduino handshake successful on {port} "
-                f"(left_count={first_frame.left_count}, "
-                f"right_count={first_frame.right_count})"
-            )
-            self._ser.reset_input_buffer()
-            self._ser.reset_output_buffer()
-            self._rx_buf.clear()
-            self.get_logger().info(f"Opened UART {self._port_path} at {self._baud} bps")
-        except Exception as e:
-            self.get_logger().warning(f"Could not open UART {self._port_path}: {e}")
-            self._ser = None
+        # Timers
+        self._tx_timer = self.create_timer(
+            self.CONTROL_PERIOD_S, self._send_control_packet
+        )
+        self._rx_timer = self.create_timer(
+            self.TELEMETRY_PERIOD_S, self._read_and_publish_telemetry
+        )
+        self._reconnect_timer = self.create_timer(
+            self._reconnect_period_s, self._ensure_serial_connected
+        )
 
-    def _reconnect_serial(self, reason: str) -> None:
-        self.get_logger().warning(reason)
-        try:
-            if self._ser is not None:
-                self._ser.close()
-        except Exception:
-            pass
-        self._ser = None
         self._open_serial()
 
-    def _motor_cb(self, msg: MotorCommand) -> None:
-        self._pending_left = clamp_pwm(msg.left_pwm)
-        self._pending_right = clamp_pwm(msg.right_pwm)
-        self._has_pending = True
+        self.get_logger().info(
+            f"Arduino bridge started | port={self._port}, baudrate={self._baudrate}, "
+            f"control_period={self.CONTROL_PERIOD_S}s, telemetry_period={self.TELEMETRY_PERIOD_S}s"
+        )
 
-    def _read_reports(self) -> None:
-        if self._ser is None or not self._ser.is_open:
-            self._open_serial()
+    def _open_serial(self) -> None:
+        if self._serial is not None and self._serial.is_open:
             return
 
         try:
-            waiting = self._ser.in_waiting
-            if waiting > 0:
-                self._rx_buf.extend(self._ser.read(waiting))
+            self._serial = Serial(
+                port=self._port,
+                baudrate=int(self._baudrate),
+                timeout=float(self._serial_timeout_s),
+                write_timeout=float(self._serial_timeout_s),
+            )
+            # Let Arduino settle after reset on serial open
+            time.sleep(1.5)
+            self._rx_buffer.clear()
+            self.get_logger().info(f"Connected to Arduino serial: {self._port}")
+        except SerialException as exc:
+            self._serial = None
+            self.get_logger().warn(f"Serial open failed ({self._port}): {exc}")
 
-        # извлекаем все доступные фреймы из буфера за один вызов
-        consecutive_errors = 0
-        max_consecutive_errors = 10
-
-<<<<<<< HEAD
-        while True:
-            try:
-                frame = parse_telemetry(self._rx_buf)
-                consecutive_errors = 0  # сбрасываем счётчик при успехе
-            except InvalidChecksumError as e:
-                self.get_logger().warn(f"Telemetry checksum error: {e}")
-                consecutive_errors += 1
-                if consecutive_errors >= max_consecutive_errors:
-                    # слишком много битых фреймов подряд — буфер рассинхронизирован
-                    self.get_logger().error(
-                        f"Too many consecutive checksum errors ({consecutive_errors}), clearing buffer"
-                    )
-                    self._rx_buf.clear()
-                    break
-                continue
-=======
-                left_speed, left_cnt, right_speed, right_cnt = struct.unpack(
-                    "<iiii", raw
-                )
-
-                report = EncoderReport()
-                report.header = Header()
-                report.header.stamp = self.get_clock().now().to_msg()
-                report.header.frame_id = "base_link"
-                report.left_count = int(left_cnt)
-                report.right_count = int(right_cnt)
-                report.left_speed = int(left_speed)
-                report.right_speed = int(right_speed)
-                self._encoder_pub.publish(report)
-        except Exception as e:
-            self._reconnect_serial(f"UART read error on {self._port_path}: {e}")
-
-    def _write_motor_command(self) -> None:
-        if self._ser is None or not self._ser.is_open or not self._has_pending:
+    def _close_serial(self) -> None:
+        if self._serial is None:
             return
->>>>>>> arduino
+        try:
+            if self._serial.is_open:
+                self._serial.close()
+        except Exception:
+            pass
+        finally:
+            self._serial = None
 
-            if frame is None:
-                # буфер не накопил полный фрейм — ждём следующего вызова
-                break
+    def _ensure_serial_connected(self) -> None:
+        if self._serial is None or not self._serial.is_open:
+            self._open_serial()
 
-            msg = EncoderReport()
-            msg.header.stamp = self.get_clock().now().to_msg()
-            msg.header.frame_id = "base_link"
-            msg.left_count = self._left_enc_sign * frame.left_count
-            msg.right_count = self._right_enc_sign * frame.right_count
-            self._encoder_pub.publish(msg)
+    def _on_cmd_vel(self, msg: Twist) -> None:
+        with self._lock:
+            self._target_linear_mps = float(msg.linear.x)
+            self._target_angular_rps = float(msg.angular.z)
+            self._last_cmd_time = self.get_clock().now()
 
-    def _on_wheel_velocity_command(self, msg: WheelVelocityCommand) -> None:
-        """
-        Подписка: получаем целевые скорости бортов и отправляем на Arduino.
+    def _get_command_for_tx(self) -> tuple[float, float]:
+        with self._lock:
+            linear = self._target_linear_mps
+            angular = self._target_angular_rps
+            last_cmd_time = self._last_cmd_time
 
-        Инверсия знака мотора применяется здесь через yaml параметры —
-        прошивка Arduino знаков не меняет.
-        """
-        left_tps = self._left_mot_sign * int(msg.left_tps)
-        right_tps = self._right_mot_sign * int(msg.right_tps)
-        self._transport.write(pack_command(left_tps, right_tps))
+        age_s = (self.get_clock().now() - last_cmd_time).nanoseconds * 1e-9
+        if age_s > self._drop_stale_cmd_after_s:
+            return 0.0, 0.0
+        return linear, angular
 
-    def _stop_motors(self) -> None:
-        """Отправить нулевую команду — остановить оба мотора."""
-        self._transport.write(pack_command(0, 0))
+    def _send_control_packet(self) -> None:
+        if self._serial is None or not self._serial.is_open:
+            return
 
-    def destroy_node(self) -> None:
-        """Корректное завершение: останавливаем моторы и закрываем порт."""
-        self._stop_motors()
-        self._transport.close()
-        super().destroy_node()
+        linear, angular = self._get_command_for_tx()
+        payload = self.CONTROL_STRUCT.pack(linear, angular)
+
+        try:
+            self._serial.write(payload)
+        except (SerialException, OSError) as exc:
+            self.get_logger().warn(f"Serial write failed: {exc}")
+            self._close_serial()
+
+    def _read_and_publish_telemetry(self) -> None:
+        if self._serial is None or not self._serial.is_open:
+            return
+
+        packet_size = self.TELEMETRY_STRUCT.size
+
+        try:
+            available = self._serial.in_waiting
+            if available > 0:
+                data = self._serial.read(available)
+                if data:
+                    self._rx_buffer.extend(data)
+
+            # Parse any complete packets in the buffer.
+            # With no explicit framing/checksum in protocol header, we consume
+            # fixed-size chunks best-effort.
+            while len(self._rx_buffer) >= packet_size:
+                raw = bytes(self._rx_buffer[:packet_size])
+                del self._rx_buffer[:packet_size]
+
+                fields = self.TELEMETRY_STRUCT.unpack(raw)
+
+                msg = TelemetryPacket()
+                msg.target_linear_mps = float(fields[0])
+                msg.target_angular_rps = float(fields[1])
+                msg.current_linear_mps = float(fields[2])
+                msg.current_angular_rps = float(fields[3])
+                msg.target_left_wheel_mps = float(fields[4])
+                msg.target_right_wheel_mps = float(fields[5])
+                msg.current_left_wheel_mps = float(fields[6])
+                msg.current_right_wheel_mps = float(fields[7])
+                msg.left_pwm = int(fields[8])
+                msg.right_pwm = int(fields[9])
+                msg.left_count = int(fields[10])
+                msg.right_count = int(fields[11])
+
+                self._telemetry_pub.publish(msg)
+
+            # Prevent unbounded growth in case of line noise / desync
+            max_buffer = packet_size * 20
+            if len(self._rx_buffer) > max_buffer:
+                # Keep only the most recent bytes
+                self._rx_buffer = self._rx_buffer[-packet_size:]
+
+        except (SerialException, OSError) as exc:
+            self.get_logger().warn(f"Serial read failed: {exc}")
+            self._close_serial()
+
+    def destroy_node(self) -> bool:
+        self._close_serial()
+        return super().destroy_node()
 
 
 def main(args=None) -> None:
@@ -229,7 +242,7 @@ def main(args=None) -> None:
     node = ArduinoBridgeNode()
     try:
         rclpy.spin(node)
-    except (KeyboardInterrupt, ExternalShutdownException):
+    except KeyboardInterrupt:
         pass
     finally:
         node.destroy_node()
