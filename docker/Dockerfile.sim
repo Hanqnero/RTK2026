@@ -1,17 +1,31 @@
-FROM --platform=linux/arm64 osrf/ros:humble-desktop
+FROM arm64v8/ros:jazzy
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-humble-turtlebot3 \
-    ros-humble-turtlebot3-simulations \
-    ros-humble-slam-toolbox \
-    ros-humble-foxglove-bridge \
-    ros-humble-teleop-twist-keyboard \
+RUN apt-get update -o Acquire::Retries=5 && apt-get install -y --no-install-recommends --fix-missing \
+    ros-jazzy-turtlebot3 \
+    ros-jazzy-turtlebot3-simulations \
+    ros-jazzy-ros-gz \
+    ros-jazzy-ros-gz-sim \
+    ros-jazzy-ros-gz-bridge \
+    ros-jazzy-slam-toolbox \
+    ros-jazzy-nav2-amcl \
+    ros-jazzy-nav2-map-server \
+    ros-jazzy-nav2-lifecycle-manager \
+    ros-jazzy-nav2-costmap-2d \
+    ros-jazzy-nav2-msgs \
+    ros-jazzy-nav2-rviz-plugins \
+    ros-jazzy-foxglove-bridge \
+    ros-jazzy-teleop-twist-keyboard \
     python3-colcon-common-extensions \
+    xvfb \
+    x11vnc \
+    fluxbox \
+    novnc \
+    websockify \
     && rm -rf /var/lib/apt/lists/*
 
 ENV TURTLEBOT3_MODEL=burger
 ENV LIBGL_ALWAYS_SOFTWARE=1
-ENV GAZEBO_MODEL_PATH=/opt/ros/humble/share/turtlebot3_gazebo/models:/usr/share/gazebo-11/models
+ENV GZ_SIM_RESOURCE_PATH=/opt/ros/jazzy/share/turtlebot3_gazebo/models:/workspace/worlds
 
 WORKDIR /workspace
 
@@ -19,4 +33,4 @@ COPY docker/scripts /scripts
 RUN chmod +x /scripts/*.sh
 
 COPY src /workspace/src
-RUN . /opt/ros/humble/setup.sh && colcon build --symlink-install
+RUN . /opt/ros/jazzy/setup.sh && colcon build --symlink-install

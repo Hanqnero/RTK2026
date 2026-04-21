@@ -1,6 +1,6 @@
 sim_encoder:
   ros__parameters:
-    joint_states_topic: "joint_states"
+    joint_states_topic: "/world/polygon_5x5_cells/model/rtk2026/joint_state"
     encoder_report_topic: "encoder_report"
     left_joint_name: "left_wheel_joint"
     right_joint_name: "right_wheel_joint"

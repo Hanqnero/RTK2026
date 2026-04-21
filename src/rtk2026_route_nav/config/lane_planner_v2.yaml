@@ -1,0 +1,746 @@
+version: 2
+initial_lane_mode: lane1
+local_limiter_edges_file: lane_planner_v2_limiter_edges.yaml
+intersection_vertex_ids:
+- 17
+- 18
+- 19
+- 20
+lane_targets:
+  lane1:
+    '5': [4]
+    '16': [20, 14]
+    '14': [12]
+    '12': [19, 10]
+    '10': [8]
+    '8': [18, 6]
+    '6': [4]
+    '4': [2, 17]
+    '2': [16]
+    '17': [20, 19, 18, 2, 4]
+    '18': [20, 19, 17, 8, 6]
+    '19': [20, 18, 17, 12, 10]
+    '20': [19, 18, 17, 14, 16]
+  lane2:
+    '16': [2]
+    '2': [4]
+    '4': [6]
+    '6': [18, 8]
+    '8': [10]
+    '10': [19, 12]
+    '12': [14]
+    '14': [20, 16]
+    '17': [20, 19, 18, 4, 2]
+    '18': [20, 19, 17, 8, 6]
+    '19': [20, 18, 17, 12, 10]
+    '20': [19, 18, 17, 14, 16]
+intersection_exit_lane_targets:
+  lane1:
+    '17': [2]
+    '18': [6]
+    '19': [10]
+    '20': [14]
+  lane2:
+    '17': [4]
+    '18': [8]
+    '19': [12]
+    '20': [16]
+local_goal_rules:
+- current_vertex: 5
+  target_vertex: 4
+  limiter_edges:
+  - - 5
+    - 4
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.629
+      - 0.049
+    lane2:
+    - - -0.562
+      - -0.345
+- current_vertex: 16
+  target_vertex: 20
+  limiter_edges:
+  - - 15
+    - 20
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.314
+      - 1.243
+    lane2:
+    - - -2.314
+      - 1.643
+- current_vertex: 16
+  target_vertex: 14
+  limiter_edges:
+  - - 15
+    - 14
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.85
+      - 2.179
+    lane2:
+    - - -3.25
+      - 2.179
+- current_vertex: 14
+  target_vertex: 12
+  limiter_edges:
+  - - 13
+    - 12
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.271
+      - 2.837
+    lane2:
+    - - -2.338
+      - 3.231
+- current_vertex: 12
+  target_vertex: 19
+  limiter_edges:
+  - - 11
+    - 19
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -1.65
+      - 2.307
+    lane2:
+    - - -1.25
+      - 2.307
+- current_vertex: 12
+  target_vertex: 10
+  limiter_edges:
+  - - 11
+    - 10
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.714
+      - 2.843
+    lane2:
+    - - -0.714
+      - 3.243
+- current_vertex: 10
+  target_vertex: 8
+  limiter_edges:
+  - - 9
+    - 8
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.056
+      - 2.264
+    lane2:
+    - - 0.338
+      - 2.331
+- current_vertex: 8
+  target_vertex: 18
+  limiter_edges:
+  - - 7
+    - 18
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.586
+      - 1.643
+    lane2:
+    - - -0.586
+      - 1.243
+- current_vertex: 8
+  target_vertex: 6
+  limiter_edges:
+  - - 7
+    - 6
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.05
+      - 0.707
+    lane2:
+    - - 0.35
+      - 0.707
+- current_vertex: 6
+  target_vertex: 4
+  limiter_edges:
+  - - 5
+    - 4
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.629
+      - 0.049
+    lane2:
+    - - -0.562
+      - -0.345
+- current_vertex: 4
+  target_vertex: 17
+  limiter_edges:
+  - - 3
+    - 17
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -1.25
+      - 0.579
+    lane2:
+    - - -1.65
+      - 0.579
+- current_vertex: 4
+  target_vertex: 2
+  limiter_edges:
+  - - 3
+    - 2
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.186
+      - 0.043
+    lane2:
+    - - -2.186
+      - -0.357
+- current_vertex: 2
+  target_vertex: 16
+  limiter_edges:
+  - - 2
+    - 1
+  - - 1
+    - 16
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.85
+      - 0.707
+    lane2:
+    - - -3.25
+      - 0.707
+- current_vertex: 20
+  target_vertex: 19
+  limiter_edges:
+  - - 20
+    - 21
+  - - 21
+    - 19
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -1.373
+      - 2.038
+    lane2:
+    - - -1.655
+      - 2.32
+- current_vertex: 20
+  target_vertex: 18
+  limiter_edges:
+  - - 20
+    - 21
+  - - 21
+    - 18
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.778
+      - 1.243
+    lane2:
+    - - -0.778
+      - 1.643
+- current_vertex: 20
+  target_vertex: 17
+  limiter_edges:
+  - - 20
+    - 21
+  - - 21
+    - 17
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -1.655
+      - 0.566
+    lane2:
+    - - -1.373
+      - 0.848
+- current_vertex: 19
+  target_vertex: 20
+  limiter_edges:
+  - - 19
+    - 21
+  - - 21
+    - 20
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.327
+      - 1.648
+    lane2:
+    - - -2.045
+      - 1.366
+- current_vertex: 19
+  target_vertex: 18
+  limiter_edges:
+  - - 19
+    - 21
+  - - 21
+    - 18
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.855
+      - 1.366
+    lane2:
+    - - -0.573
+      - 1.648
+- current_vertex: 19
+  target_vertex: 17
+  limiter_edges:
+  - - 19
+    - 21
+  - - 21
+    - 17
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -1.65
+      - 0.771
+    lane2:
+    - - -1.25
+      - 0.771
+- current_vertex: 18
+  target_vertex: 20
+  limiter_edges:
+  - - 18
+    - 21
+  - - 21
+    - 20
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.122
+      - 1.643
+    lane2:
+    - - -2.122
+      - 1.243
+- current_vertex: 18
+  target_vertex: 19
+  limiter_edges:
+  - - 18
+    - 21
+  - - 21
+    - 19
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -1.245
+      - 2.32
+    lane2:
+    - - -1.527
+      - 2.038
+- current_vertex: 18
+  target_vertex: 17
+  limiter_edges:
+  - - 18
+    - 21
+  - - 21
+    - 17
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -1.527
+      - 0.848
+    lane2:
+    - - -1.245
+      - 0.566
+- current_vertex: 17
+  target_vertex: 20
+  limiter_edges:
+  - - 17
+    - 21
+  - - 21
+    - 20
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.045
+      - 1.52
+    lane2:
+    - - -2.327
+      - 1.238
+- current_vertex: 17
+  target_vertex: 19
+  limiter_edges:
+  - - 17
+    - 21
+  - - 21
+    - 19
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -1.25
+      - 2.115
+    lane2:
+    - - -1.65
+      - 2.115
+- current_vertex: 17
+  target_vertex: 18
+  limiter_edges:
+  - - 17
+    - 21
+  - - 21
+    - 18
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.573
+      - 1.238
+    lane2:
+    - - -0.855
+      - 1.52
+- current_vertex: 17
+  target_vertex: 4
+  limiter_edges:
+  - - 3
+    - 4
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.714
+      - -0.357
+    lane2:
+    - - -0.714
+      - 0.043
+- current_vertex: 17
+  target_vertex: 2
+  limiter_edges:
+  - - 3
+    - 2
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.186
+      - 0.043
+    lane2:
+    - - -2.186
+      - -0.357
+- current_vertex: 18
+  target_vertex: 8
+  limiter_edges:
+  - - 7
+    - 8
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - 0.35
+      - 2.179
+    lane2:
+    - - -0.05
+      - 2.179
+- current_vertex: 18
+  target_vertex: 6
+  limiter_edges:
+  - - 7
+    - 6
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.05
+      - 0.707
+    lane2:
+    - - 0.35
+      - 0.707
+- current_vertex: 19
+  target_vertex: 12
+  limiter_edges:
+  - - 19
+    - 11
+  - - 11
+    - 12
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: 1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -1.25
+      - 2.963
+    - - -2.09
+      - 3.243
+    lane2:
+    - - -1.05
+      - 3.130
+    - - -1.95
+      - 3.330
+- current_vertex: 19
+  target_vertex: 10
+  limiter_edges:
+  - - 11
+    - 10
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.714
+      - 2.843
+    lane2:
+    - - -0.714
+      - 3.243
+- current_vertex: 20
+  target_vertex: 14
+  limiter_edges:
+  - - 15
+    - 14
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.85
+      - 2.179
+    lane2:
+    - - -3.25
+      - 2.179
+- current_vertex: 20
+  target_vertex: 16
+  limiter_edges:
+  - - 15
+    - 16
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -3.25
+      - 0.707
+    lane2:
+    - - -2.85
+      - 0.707
+- current_vertex: 16
+  target_vertex: 2
+  limiter_edges:
+  - - 3
+    - 2
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.186
+      - 0.043
+    lane2:
+    - - -2.186
+      - -0.357
+- current_vertex: 2
+  target_vertex: 4
+  limiter_edges:
+  - - 3
+    - 4
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.714
+      - -0.357
+    lane2:
+    - - -0.714
+      - 0.043
+- current_vertex: 4
+  target_vertex: 6
+  limiter_edges:
+  - - 5
+    - 6
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - 0.338
+      - 0.555
+    lane2:
+    - - -0.056
+      - 0.622
+- current_vertex: 6
+  target_vertex: 18
+  limiter_edges:
+  - - 7
+    - 18
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.586
+      - 1.643
+    lane2:
+    - - -0.586
+      - 1.243
+- current_vertex: 6
+  target_vertex: 8
+  limiter_edges:
+  - - 7
+    - 8
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - 0.35
+      - 2.179
+    lane2:
+    - - -0.05
+      - 2.179
+- current_vertex: 8
+  target_vertex: 10
+  limiter_edges:
+  - - 9
+    - 10
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -0.562
+      - 3.231
+    lane2:
+    - - -0.629
+      - 2.837
+- current_vertex: 10
+  target_vertex: 19
+  limiter_edges:
+  - - 11
+    - 19
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -1.65
+      - 2.307
+    lane2:
+    - - -1.25
+      - 2.307
+- current_vertex: 10
+  target_vertex: 12
+  limiter_edges:
+  - - 11
+    - 12
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.186
+      - 3.243
+    lane2:
+    - - -2.186
+      - 2.843
+- current_vertex: 12
+  target_vertex: 14
+  limiter_edges:
+  - - 12
+    - 13
+  - - 13
+    - 14
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: 1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.898
+      - 3.135
+    - - -3.224
+      - 2.413
+    lane2:
+    - - -2.898
+      - 3.135
+    - - -3.224
+      - 2.413
+- current_vertex: 14
+  target_vertex: 20
+  limiter_edges:
+  - - 15
+    - 20
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: 1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -2.314
+      - 1.243
+    lane2:
+    - - -2.314
+      - 1.243
+- current_vertex: 14
+  target_vertex: 16
+  limiter_edges:
+  - - 15
+    - 16
+  lane_goal_sign_by_lane:
+    lane1: 1
+    lane2: -1
+  nav2_waypoints_by_lane:
+    lane1:
+    - - -3.25
+      - 0.707
+    lane2:
+    - - -2.85
+      - 0.707
