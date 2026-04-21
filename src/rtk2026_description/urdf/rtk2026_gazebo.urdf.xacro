@@ -3,7 +3,7 @@
 
   <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
        Параметры робота
-       Корпус: 300×250×113 мм
+       Корпус: 300×240×113 мм
        Колёса: диаметр 51.7 мм, расстояние 212.3 мм
        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
   <xacro:property name="base_length"  value="0.300"/>
@@ -141,40 +141,35 @@
   </joint>
 
   <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-       Gazebo: дифференциальный привод
+       Gazebo Sim (gz): привод и joint states
        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
   <gazebo>
-    <plugin name="diff_drive" filename="libgazebo_ros_diff_drive.so">
+    <plugin name="gz::sim::v8::systems::DiffDrive" filename="libgz-sim8-diff-drive-system.so">
       <left_joint>left_wheel_joint</left_joint>
       <right_joint>right_wheel_joint</right_joint>
       <wheel_separation>${wheel_sep}</wheel_separation>
-      <wheel_diameter>${wheel_radius * 2}</wheel_diameter>
-      <max_wheel_torque>20</max_wheel_torque>
-      <max_wheel_acceleration>1.0</max_wheel_acceleration>
-      <!-- Gazebo только управляет колёсами; /odom и TF публикует wheel_odometry. -->
-      <publish_odom>false</publish_odom>
-      <publish_odom_tf>false</publish_odom_tf>
-      <publish_wheel_tf>false</publish_wheel_tf>
-      <publish_wheel_joint_state>false</publish_wheel_joint_state>
+      <wheel_radius>${wheel_radius}</wheel_radius>
+      <topic>/cmd_vel</topic>
+      <odom_topic>/odom_gz</odom_topic>
+      <frame_id>odom</frame_id>
+      <child_frame_id>base_footprint</child_frame_id>
     </plugin>
-  </gazebo>
-
-  <gazebo>
-    <plugin name="joint_state_publisher" filename="libgazebo_ros_joint_state_publisher.so">
-      <update_rate>50</update_rate>
+    <plugin name="gz::sim::v8::systems::JointStatePublisher" filename="libgz-sim8-joint-state-publisher-system.so">
       <joint_name>left_wheel_joint</joint_name>
       <joint_name>right_wheel_joint</joint_name>
     </plugin>
   </gazebo>
 
   <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-       Gazebo: лидар
+       Gazebo Sim (gz): лидар
        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
   <gazebo reference="lidar_link">
-    <sensor name="lidar" type="ray">
+    <sensor name="lidar" type="gpu_lidar">
       <always_on>true</always_on>
       <visualize>false</visualize>
       <update_rate>10</update_rate>
+      <topic>scan</topic>
+      <frame_id>lidar_link</frame_id>
       <ray>
         <scan>
           <horizontal>
@@ -195,11 +190,6 @@
           <stddev>0.01</stddev>
         </noise>
       </ray>
-      <plugin name="lidar_plugin" filename="libgazebo_ros_ray_sensor.so">
-        <ros><remapping>~/out:=scan</remapping></ros>
-        <output_type>sensor_msgs/LaserScan</output_type>
-        <frame_name>lidar_link</frame_name>
-      </plugin>
     </sensor>
   </gazebo>
 

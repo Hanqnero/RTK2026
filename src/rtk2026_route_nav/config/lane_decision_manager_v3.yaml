@@ -1,0 +1,18 @@
+lane_decision_manager:
+  ros__parameters:
+    planner_v2_config_filepath: "/workspace/runtime_config/lane_planner_v2.yaml"
+    use_sim_time: true
+    current_vertex: 5
+    previous_vertex: -1
+    detected_sign_target_vertex: -1
+    active_lane_mode: "lane1"
+    tick_rate_hz: 2.0
+    log_every_n_ticks: 1
+    enable_nav2_action: true
+    nav2_through_poses_action_name: "/navigate_through_poses"
+    goal_result_timeout_sec: 0.0
+    retry_same_goal_on_failure: true
+    advance_vertex_distance_threshold_m: 0.35
+    robot_base_frame: "base_footprint"
+    enable_fallback_visit_balancing: true
+    block_immediate_backtrack: true

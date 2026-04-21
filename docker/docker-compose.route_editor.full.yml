@@ -1,0 +1,41 @@
+services:
+  route_editor_full:
+    platform: linux/arm64/v8
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.route_editor_full
+    image: rtk2026-route-editor:jazzy-full
+    command: ["/scripts/start_route_editor.sh"]
+    ports:
+      - "6085:6084"
+    volumes:
+      - ./saved_maps:/workspace/maps:rw
+      - ../src/rtk2026_route_nav/config:/workspace/runtime_config:ro
+    environment:
+      ROS_DOMAIN_ID: "0"
+      NOVNC_PORT: "6084"
+      MAP_YAML: ${MAP_YAML:-/workspace/maps/new_map.yaml}
+      USE_SIM_TIME: ${USE_SIM_TIME:-true}
+      USE_VECTOR_SERVER: ${USE_VECTOR_SERVER:-true}
+      AUTO_LOAD_KEEPOUT: ${AUTO_LOAD_KEEPOUT:-true}
+      START_RVIZ: ${START_RVIZ:-true}
+      ENABLE_LANE_MANAGER: ${ENABLE_LANE_MANAGER:-true}
+      PUBLISH_MAP_ODOM_STATIC_TF: ${PUBLISH_MAP_ODOM_STATIC_TF:-false}
+      GRAPH_FILEPATH: ${GRAPH_FILEPATH:-/workspace/runtime_config/graph.geojson}
+      COSTMAP_PARAMS_FILE: ${COSTMAP_PARAMS_FILE:-/workspace/runtime_config/route_editor_global_costmap_full.yaml}
+      NAV2_EXECUTION_PARAMS_FILE: ${NAV2_EXECUTION_PARAMS_FILE:-/workspace/runtime_config/nav2_execution_params.yaml}
+      LANE_PARAMS_FILE: ${LANE_PARAMS_FILE:-/workspace/runtime_config/lane_decision_manager_v3.yaml}
+      LANE_MANAGER_EXECUTABLE: ${LANE_MANAGER_EXECUTABLE:-lane_decision_manager_v3}
+      LANE_POSE_TOPIC: ${LANE_POSE_TOPIC:-/goal_pose}
+      LANE_CURRENT_VERTEX: ${LANE_CURRENT_VERTEX:-5}
+      LANE_PREVIOUS_VERTEX: ${LANE_PREVIOUS_VERTEX:--1}
+      LANE_DETECTED_SIGN_TARGET_VERTEX: ${LANE_DETECTED_SIGN_TARGET_VERTEX:--1}
+      LANE_DIRECTION_MODE: ${LANE_DIRECTION_MODE:-lane1}
+      LANE_TICK_RATE_HZ: ${LANE_TICK_RATE_HZ:-2.0}
+      LANE_LOG_EVERY_N_TICKS: ${LANE_LOG_EVERY_N_TICKS:-1}
+    networks:
+      - sim_net
+
+networks:
+  sim_net:
+    driver: bridge

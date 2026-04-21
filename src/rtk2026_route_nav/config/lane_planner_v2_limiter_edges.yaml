@@ -1,0 +1,137 @@
+version: 2
+local_limiter_edges:
+  - current_vertex: 5
+    target_vertex: 4
+    limiter_edges: [[5, 4]]
+  - current_vertex: 16
+    target_vertex: 20
+    limiter_edges: [[16, 15],[15, 20]]
+  - current_vertex: 16
+    target_vertex: 14
+    limiter_edges: [[16, 15],[15, 14]]
+  - current_vertex: 14
+    target_vertex: 12
+    limiter_edges: [[14, 13],[13, 12]]
+  - current_vertex: 12
+    target_vertex: 19
+    limiter_edges: [[12, 11],[11, 19]]
+  - current_vertex: 12
+    target_vertex: 10
+    limiter_edges: [[12, 11],[11, 10]]
+  - current_vertex: 10
+    target_vertex: 8
+    limiter_edges: [[10, 9],[9, 8]]
+  - current_vertex: 8
+    target_vertex: 18
+    limiter_edges: [[8, 7],[7, 18]]
+  - current_vertex: 8
+    target_vertex: 6
+    limiter_edges: [[8, 7],[7, 6]]
+  - current_vertex: 6
+    target_vertex: 4
+    limiter_edges: [[6, 5],[5, 4]]
+  - current_vertex: 4
+    target_vertex: 17
+    limiter_edges: [[4, 3],[3, 17]]
+  - current_vertex: 4
+    target_vertex: 2
+    limiter_edges: [[4, 3],[3, 2]]
+  - current_vertex: 2
+    target_vertex: 16
+    limiter_edges: [[2, 1], [1, 16]]
+  - current_vertex: 20
+    target_vertex: 19
+    limiter_edges: [[20, 21], [21, 19]]
+  - current_vertex: 20
+    target_vertex: 18
+    limiter_edges: [[20, 21], [21, 18]]
+  - current_vertex: 20
+    target_vertex: 17
+    limiter_edges: [[20, 21],[21, 17]]
+  - current_vertex: 19
+    target_vertex: 20
+    limiter_edges: [[19, 21], [21, 20]]
+  - current_vertex: 19
+    target_vertex: 18
+    limiter_edges: [[19, 21], [21, 18]]
+  - current_vertex: 19
+    target_vertex: 17
+    limiter_edges: [[19, 21], [21, 17]]
+  - current_vertex: 18
+    target_vertex: 20
+    limiter_edges: [[18, 21], [21, 20]]
+  - current_vertex: 18
+    target_vertex: 19
+    limiter_edges: [[18, 21], [21, 19]]
+  - current_vertex: 18
+    target_vertex: 17
+    limiter_edges: [[18, 21], [21, 17]]
+  - current_vertex: 17
+    target_vertex: 20
+    limiter_edges: [[17, 21],[21, 20]]
+  - current_vertex: 17
+    target_vertex: 19
+    limiter_edges: [[17, 21], [21, 19]]
+  - current_vertex: 17
+    target_vertex: 18
+    limiter_edges: [[17, 21], [21, 18]]
+  - current_vertex: 17
+    target_vertex: 4
+    limiter_edges: [[17, 3],[3, 4]]
+  - current_vertex: 2
+    target_vertex: 17
+    limiter_edges: [[2, 3], [3, 17]]
+  - current_vertex: 17
+    target_vertex: 2
+    limiter_edges: [[17, 3],[3, 2]]
+  - current_vertex: 18
+    target_vertex: 8
+    limiter_edges: [[18, 7],[7, 8]]
+  - current_vertex: 18
+    target_vertex: 6
+    limiter_edges: [[18, 7],[7, 6]]
+  - current_vertex: 19
+    target_vertex: 12
+    limiter_edges: [[19, 11], [11, 12]]
+  - current_vertex: 19
+    target_vertex: 10
+    limiter_edges: [[19, 11],[11, 10]]
+  - current_vertex: 20
+    target_vertex: 14
+    limiter_edges: [[20, 15],[15, 14]]
+  - current_vertex: 20
+    target_vertex: 16
+    limiter_edges: [[20, 15],[15, 16]]
+  - current_vertex: 16
+    target_vertex: 2
+    limiter_edges: [[16, 1],[1, 2]]
+  - current_vertex: 2
+    target_vertex: 4
+    limiter_edges: [[2, 3],[3, 4]]
+  - current_vertex: 4
+    target_vertex: 6
+    limiter_edges: [[4, 5],[5, 6]]
+  - current_vertex: 6
+    target_vertex: 18
+    limiter_edges: [[6, 7],[7, 18]]
+  - current_vertex: 6
+    target_vertex: 8
+    limiter_edges: [[6, 7],[7, 8]]
+  - current_vertex: 8
+    target_vertex: 10
+    limiter_edges: [[8, 9],[9, 10]]
+  - current_vertex: 10
+    target_vertex: 19
+    limiter_edges: [[10, 11],[11, 19]]
+  - current_vertex: 10
+    target_vertex: 12
+    limiter_edges: [[10, 11],[11, 12]]
+  - current_vertex: 12
+    target_vertex: 14
+    limiter_edges: [[12, 13], [13, 14]]
+  - current_vertex: 14
+    target_vertex: 20
+    limiter_edges: [[14, 15],[15, 20]]
+  - current_vertex: 14
+    target_vertex: 16
+    limiter_edges: [[14, 15],[15, 16]]

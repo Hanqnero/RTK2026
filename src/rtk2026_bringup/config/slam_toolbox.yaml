@@ -1,4 +1,4 @@
-#спиздил из офиц репы, для построения карты в дин режиме
+# Локализация по готовой карте.
 
 slam_toolbox:
   ros__parameters:
@@ -17,10 +17,9 @@ slam_toolbox:
     base_frame: base_footprint
     scan_topic: /scan
     use_map_saver: true
-    mode: mapping #localization
-
-    #map_file_name: test_steve
-    # map_start_pose: [0.0, 0.0, 0.0]
+    mode: localization
+    map_file_name: /workspace/maps/new_map.yaml
+    map_start_pose: [-0.007, -0.011, 3.141592653589793]
     #map_start_at_dock: true
 
     debug_logging: false

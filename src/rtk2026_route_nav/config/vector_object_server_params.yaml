@@ -1,0 +1,31 @@
+vector_object_server:
+  ros__parameters:
+    use_sim_time: true
+    map_topic: "vo_map"
+    global_frame_id: "map"
+    resolution: 0.05
+    # Вне keepout-объектов маска должна быть "пустой", иначе RViz и costmap
+    # выглядят как сплошная затемненная unknown area.
+    default_value: 0
+    overlay_type: 0
+    update_frequency: 1.0
+    transform_tolerance: 0.1
+    # Пустой список shapes может ломать инициализацию в некоторых сборках.
+    # Держим технический полигон чуть за границей рабочей карты, чтобы не
+    # раздувать размер mask map до тысяч метров.
+    shapes: ["BootstrapOutsideMap"]
+    BootstrapOutsideMap:
+      type: "polygon"
+      frame_id: "map"
+      closed: true
+      value: 100
+      points: [0.56, 3.50, 0.58, 3.50, 0.57, 3.52]
+
+costmap_filter_info_server:
+  ros__parameters:
+    use_sim_time: true
+    type: 0
+    filter_info_topic: "vo_costmap_filter_info"
+    mask_topic: "vo_map"
+    base: 0.0
+    multiplier: 1.0

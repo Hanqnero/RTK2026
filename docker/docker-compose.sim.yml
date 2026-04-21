@@ -3,26 +3,76 @@ networks:
     driver: bridge
 
 services:
-  # ── gzserver: только мир turtlebot3_world ────────────────────────────────
+  # ── Gazebo Sim (gz): headless world runtime ──────────────────────────────
   gazebo:
+    platform: linux/arm64/v8
     build:
       context: ..
       dockerfile: docker/Dockerfile.sim
     image: rtk2026-sim:latest
-    command: ["/scripts/start_gazebo.sh"]
+    command: >
+      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
+      ros2 run ros_gz_bridge parameter_bridge /clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock &
+      ros2 run ros_gz_bridge parameter_bridge /scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan &
+      ros2 run ros_gz_bridge parameter_bridge /world/polygon_5x5_cells/model/rtk2026/joint_state@sensor_msgs/msg/JointState[gz.msgs.Model &
+      ros2 run ros_gz_bridge parameter_bridge /joint_states@sensor_msgs/msg/JointState[gz.msgs.Model &
+      ros2 run ros_gz_bridge parameter_bridge /cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist &
+      ros2 launch ros_gz_sim gz_sim.launch.py gz_args:='-r -s -v 4 $${GAZEBO_WORLD_FILE}' &
+      GZ_PID=$$! &&
+      sleep 8 &&
+      /scripts/spawn_robot.sh || true &&
+      wait $$GZ_PID"
     volumes:
       - ../src/rtk2026_description/urdf:/workspace/urdf:ro
+      - ../worlds:/workspace/worlds:ro
+    ports:
+      - "6080:6080"
     environment:
       - ROS_DOMAIN_ID=0
+      - GAZEBO_WORLD_FILE=/workspace/worlds/polygon_5x5.world
+      - ROBOT_SPAWN_X=${ROBOT_SPAWN_X:-3.45}
+      - ROBOT_SPAWN_Y=${ROBOT_SPAWN_Y:-0.55}
+      - ROBOT_SPAWN_Z=${ROBOT_SPAWN_Z:-0.03}
+      - ROBOT_SPAWN_YAW=${ROBOT_SPAWN_YAW:-3.141592653589793}
       - LIBGL_ALWAYS_SOFTWARE=1
       - GAZEBO_MODEL_DATABASE_URI=
+      - GZ_IP=127.0.0.1
     networks:
       - sim_net
 
+  # GUI Gazebo (gz sim -g) в том же network namespace, что и сервер (-s), иначе в Docker
+  # транспорт не находит симуляцию и viewport остаётся чёрным при видимой нижней панели.
+  gazebo_gui:
+    profiles: ["debug-ui"]
+    platform: linux/arm64/v8
+    image: rtk2026-sim:latest
+    command: ["/scripts/start_gazebo_novnc.sh"]
+    network_mode: service:gazebo
+    depends_on:
+      - gazebo
+    restart: unless-stopped
+    environment:
+      - ROS_DOMAIN_ID=0
+      - LIBGL_ALWAYS_SOFTWARE=1
+      - GALLIUM_DRIVER=llvmpipe
+      - QT_X11_NO_MITSHM=1
+      - QT_OPENGL=desktop
+      - MESA_GL_VERSION_OVERRIDE=3.3
+      - MESA_GLSL_VERSION_OVERRIDE=330
+      - NOVNC_PORT=6080
+      - SCREEN_SIZE=1280x720x24
+      # Явная привязка gz-transport к loopback в общем netns с сервером симуляции
+      - GZ_IP=127.0.0.1
+
+  # Gazebo Sim headless (GUI disabled in start_gazebo.sh).
+
   # ── robot_state_publisher с нашим URDF ───────────────────────────────────
   robot:
+    platform: linux/arm64/v8
     image: rtk2026-sim:latest
-    command: ["/scripts/start_robot.sh"]
+    command: >
+      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
+      exec ros2 launch /scripts/robot.launch.py"
     volumes:
       - ../src/rtk2026_description/urdf:/workspace/urdf:ro
     environment:
@@ -32,57 +82,73 @@ services:
     depends_on:
       - gazebo
 
-  # ── spawn нашего робота — ждёт /spawn_entity ─────────────────────────────
-  spawn:
+  # ── наша одометрия: /joint_states -> /encoder_report -> /odom ───────────
+  odometry:
+    platform: linux/arm64/v8
     image: rtk2026-sim:latest
-    command: ["/scripts/spawn_robot.sh"]
+    command: >
+      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
+      source /workspace/install/setup.bash &&
+      exec ros2 launch rtk2026_odometry sim_odometry.launch.py"
     volumes:
-      - ../src/rtk2026_description/urdf:/workspace/urdf:ro
+      - ../src/rtk2026_odometry/config/sim_encoder.yaml:/workspace/install/rtk2026_odometry/share/rtk2026_odometry/config/sim_encoder.yaml:ro
     environment:
       - ROS_DOMAIN_ID=0
     networks:
       - sim_net
     depends_on:
       - robot
-    restart: on-failure
 
-  # ── наша одометрия: /joint_states -> /encoder_report -> /odom ───────────
-  odometry:
+  # ── AMCL localization on prepared map (no SLAM mapping) ──────────────────
+  localization:
+    platform: linux/arm64/v8
     image: rtk2026-sim:latest
     command: >
-      bash -c "source /opt/ros/humble/setup.bash &&
+      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
       source /workspace/install/setup.bash &&
-      exec ros2 launch rtk2026_odometry sim_odometry.launch.py"
-    environment:
-      - ROS_DOMAIN_ID=0
-    networks:
-      - sim_net
-    depends_on:
-      - spawn
-
-  # ── slam_toolbox ──────────────────────────────────────────────────────────
-  slam:
-    image: rtk2026-sim:latest
-    command: >
-      bash -c "source /opt/ros/humble/setup.bash &&
-      source /workspace/install/setup.bash &&
-      ros2 launch slam_toolbox online_async_launch.py
-      use_sim_time:=true
-      slam_params_file:=/workspace/slam_toolbox.yaml"
+      exec /scripts/start_localization.sh"
     volumes:
-      - ../src/rtk2026_bringup/config/slam_toolbox.yaml:/workspace/slam_toolbox.yaml:ro
+      - ./config/amcl.yaml:/workspace/amcl.yaml:ro
+      - ./saved_maps:/workspace/maps:ro
+      - ../src/rtk2026_route_nav/config:/workspace/runtime_config:ro
     environment:
       - ROS_DOMAIN_ID=0
+      - GRAPH_FILEPATH=${GRAPH_FILEPATH:-/workspace/runtime_config/graph.geojson}
+      - INITIAL_VERTEX_ID=${INITIAL_VERTEX_ID:-5}
+      - ROBOT_SPAWN_YAW=${ROBOT_SPAWN_YAW:-3.141592653589793}
     networks:
       - sim_net
     depends_on:
       - odometry
 
+  # ── RViz (карта SLAM) в браузере: http://localhost:6082/vnc.html ───────────
+  rviz_novnc:
+    profiles: ["debug-ui"]
+    platform: linux/arm64/v8
+    image: rtk2026-sim:latest
+    command: ["/scripts/start_rviz_novnc.sh"]
+    ports:
+      - "6082:6082"
+    volumes:
+      - ./local_rviz/rtk2026_slam.rviz:/workspace/slam.rviz:ro
+    environment:
+      - ROS_DOMAIN_ID=0
+      - LIBGL_ALWAYS_SOFTWARE=1
+      - QT_X11_NO_MITSHM=1
+      - RVIZ_CONFIG=/workspace/slam.rviz
+      - NOVNC_PORT=6082
+    networks:
+      - sim_net
+    depends_on:
+      - localization
+
   # ── foxglove bridge ───────────────────────────────────────────────────────
   foxglove:
+    profiles: ["debug-ui"]
+    platform: linux/arm64/v8
     image: rtk2026-sim:latest
     command: >
-      bash -c "source /opt/ros/humble/setup.bash &&
+      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
       source /workspace/install/setup.bash &&
       ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765"
     ports:

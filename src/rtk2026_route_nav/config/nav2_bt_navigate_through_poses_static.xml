@@ -1,0 +1,25 @@
+<!--
+  Minimal BT for static waypoint chains:
+  - compute once for the provided goals
+  - follow the computed path
+  - no periodic replanning / no recovery round-robin
+-->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="NavigateThroughPosesStatic">
+      <RemovePassedGoals
+        input_goals="{goals}"
+        output_goals="{goals}"
+        radius="0.20"/>
+      <ComputePathThroughPoses
+        goals="{goals}"
+        path="{path}"
+        planner_id="GridBased"
+        error_code_id="{compute_path_error_code}"/>
+      <FollowPath
+        path="{path}"
+        controller_id="FollowPath"
+        error_code_id="{follow_path_error_code}"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

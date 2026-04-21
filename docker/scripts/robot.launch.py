@@ -19,4 +19,11 @@ def generate_launch_description():
                 'use_sim_time': True,
             }],
         ),
+        # Gazebo bridge publishes /scan in frame "rtk2026/base_footprint/lidar".
+        # Add a static alias so RViz can transform LaserScan via existing lidar_link frame.
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            arguments=['0', '0', '0', '0', '0', '0', 'lidar_link', 'rtk2026/base_footprint/lidar'],
+        ),
     ])

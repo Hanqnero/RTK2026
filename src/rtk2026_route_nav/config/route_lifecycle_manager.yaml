@@ -1,0 +1,6 @@
+lifecycle_manager:
+  ros__parameters:
+    use_sim_time: true
+    autostart: true
+    node_names:
+      - route_server

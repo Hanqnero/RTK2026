@@ -1,31 +1,16 @@
-# Colcon workspace
+# ROS / colcon build artifacts
 build/
 install/
 log/
 
-# Python
-*.py[cod]
-*$py.class
+# Python caches
 __pycache__/
-*.egg-info/
-.eggs/
-*.egg
+*.py[cod]
+.pytest_cache/
 
-# IDE / editor
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
+# Local runtime dumps
+src/rtk2026_route_nav/config/local_planner_points_v3_dump.json
+docker/config/local_planner_points_v3_dump.json
 
-# OS
+# OS / editor noise
 .DS_Store
-Thumbs.db
-
-# Docker
-.docker/
-
-# Development screenshots / debug images in repo root
-/*.png
-/*.jpg
-/*.jpeg
