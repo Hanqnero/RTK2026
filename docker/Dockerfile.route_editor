@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-nav2-map-server \
     ros-jazzy-nav2-route \
     ros-jazzy-nav2-rviz-plugins \
+    ros-jazzy-vision-msgs \
     ros-jazzy-rviz2 \
     xvfb \
     x11vnc \

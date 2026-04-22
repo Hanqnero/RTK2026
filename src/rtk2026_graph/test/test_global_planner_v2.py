@@ -35,6 +35,25 @@ def _planner() -> GlobalPlannerV2:
                 20: (16,),
             },
         },
+        lane_direction_targets={
+            "lane1": {
+                8: {"straight": 6, "right": 18},
+            },
+            "lane2": {
+                8: {"straight": 10, "left": 18},
+            },
+        },
+        intersection_direction_targets={
+            19: {
+                "entry": {"straight": 17, "right": 20, "left": 18},
+                "exit": {"right": 10, "left": 12},
+            },
+        },
+        sign_command_mapping={
+            "straight_only": {"preferred": ("straight",), "forbidden": ()},
+            "right_only": {"preferred": ("right",), "forbidden": ("straight", "left")},
+            "no_right_turn": {"preferred": (), "forbidden": ("right",)},
+        },
         initial_lane_mode="lane1",
     )
     return GlobalPlannerV2(cfg)
@@ -108,3 +127,30 @@ def test_exit_to_right_target_forces_lane1() -> None:
     assert step.chosen_target == 2
     assert step.next_lane_mode == "lane1"
     assert step.lane_switched is True
+
+
+def test_route_sign_command_prefers_direction_target() -> None:
+    p = _planner()
+    step = p.pick_next(
+        current_vertex=8,
+        previous_vertex=18,
+        active_lane_mode="lane2",
+        route_sign_command="straight_only",
+        visit_counts={10: 5},
+    )
+    assert step.allowed_targets == (10,)
+    assert step.chosen_target == 10
+    assert step.pick_source == "fallback"
+
+
+def test_intersection_route_sign_filters_exit_targets() -> None:
+    p = _planner()
+    step = p.pick_next(
+        current_vertex=19,
+        previous_vertex=20,
+        active_lane_mode="lane1",
+        route_sign_command="no_right_turn",
+        visit_counts={10: 0, 12: 0},
+    )
+    assert step.allowed_targets == (12,)
+    assert step.chosen_target == 12

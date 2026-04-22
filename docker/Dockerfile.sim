@@ -6,6 +6,7 @@ RUN apt-get update -o Acquire::Retries=5 && apt-get install -y --no-install-reco
     ros-jazzy-ros-gz \
     ros-jazzy-ros-gz-sim \
     ros-jazzy-ros-gz-bridge \
+    ros-jazzy-cv-bridge \
     ros-jazzy-slam-toolbox \
     ros-jazzy-nav2-amcl \
     ros-jazzy-nav2-map-server \
@@ -13,8 +14,11 @@ RUN apt-get update -o Acquire::Retries=5 && apt-get install -y --no-install-reco
     ros-jazzy-nav2-costmap-2d \
     ros-jazzy-nav2-msgs \
     ros-jazzy-nav2-rviz-plugins \
+    ros-jazzy-vision-msgs \
     ros-jazzy-foxglove-bridge \
     ros-jazzy-teleop-twist-keyboard \
+    python3-opencv \
+    python3-pip \
     python3-colcon-common-extensions \
     xvfb \
     x11vnc \
@@ -22,6 +26,8 @@ RUN apt-get update -o Acquire::Retries=5 && apt-get install -y --no-install-reco
     novnc \
     websockify \
     && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m pip install --no-cache-dir --break-system-packages onnxruntime
 
 ENV TURTLEBOT3_MODEL=burger
 ENV LIBGL_ALWAYS_SOFTWARE=1

@@ -20,6 +20,7 @@ from rclpy.action.client import ClientGoalHandle
 from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.parameter import Parameter as RclpyParameter
+from rtk2026_interfaces.msg import DrivingDetection
 from visualization_msgs.msg import Marker
 
 from rtk2026_graph import GlobalPlannerV2, RoadGraph, load_geojson_path, load_planner_v2_config_path, normalize_lane_mode
@@ -35,6 +36,23 @@ class PlannerStateV3:
     limiter_edges: tuple[tuple[int, int], ...]
 
 
+@dataclass
+class PendingRouteSign:
+    command: str
+    class_id: str
+    confidence: float
+    box_area: float
+
+
+@dataclass
+class PendingStopAction:
+    action: str
+    class_id: str
+    confidence: float
+    box_area: float
+    duration_sec: float
+
+
 class LaneDecisionManagerV3(Node):
     def __init__(self) -> None:
         super().__init__("lane_decision_manager_v3")
@@ -42,6 +60,8 @@ class LaneDecisionManagerV3(Node):
         pkg = Path(get_package_share_directory("rtk2026_route_nav"))
         self.declare_parameter("graph_filepath", str(pkg / "config" / "graph.geojson"))
         self.declare_parameter("planner_v2_config_filepath", str(pkg / "config" / "lane_planner_v2.yaml"))
+        self.declare_parameter("sign_direction_topology_filepath", str(pkg / "config" / "sign_direction_topology.yaml"))
+        self.declare_parameter("driving_detection_topic", "/perception/driving_detection")
         self.declare_parameter("current_vertex", 5)
         self.declare_parameter("previous_vertex", -1)
         self.declare_parameter("detected_sign_target_vertex", -1)
@@ -64,11 +84,15 @@ class LaneDecisionManagerV3(Node):
 
         graph_path = str(self.get_parameter("graph_filepath").value)
         planner_cfg_path = str(self.get_parameter("planner_v2_config_filepath").value)
+        sign_topology_path = str(self.get_parameter("sign_direction_topology_filepath").value)
         tick_rate_hz = float(self.get_parameter("tick_rate_hz").value)
         self._log_every_n_ticks = max(1, int(self.get_parameter("log_every_n_ticks").value))
 
         self._graph: RoadGraph = load_geojson_path(graph_path)
-        global_cfg, local_rules = load_planner_v2_config_path(planner_cfg_path)
+        global_cfg, local_rules = load_planner_v2_config_path(
+            planner_cfg_path,
+            sign_direction_topology_path=sign_topology_path,
+        )
         self._global_planner = GlobalPlannerV2(global_cfg)
         self._local_planner = LocalPlannerPointsV3(self._graph, local_rules)
 
@@ -98,12 +122,22 @@ class LaneDecisionManagerV3(Node):
         self._committed_next_lane_mode: Optional[str] = None
         self._committed_final_goal_xy: Optional[tuple[float, float]] = None
         self._active_goal_handle: Optional[ClientGoalHandle] = None
+        self._pending_route_sign: Optional[PendingRouteSign] = None
+        self._pending_stop_action: Optional[PendingStopAction] = None
+        self._pending_bus_detected = False
+        self._pause_until_ns = 0
 
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
         self._target_marker_pub = self.create_publisher(Marker, "/lane_control_target_marker_v3", 10)
         self._nav_through_poses_client = ActionClient(
             self, NavigateThroughPoses, str(self.get_parameter("nav2_through_poses_action_name").value)
+        )
+        self.create_subscription(
+            DrivingDetection,
+            str(self.get_parameter("driving_detection_topic").value),
+            self._on_driving_detection,
+            10,
         )
         self.create_timer(1.0 / max(0.5, tick_rate_hz), self._tick)
 
@@ -132,6 +166,10 @@ class LaneDecisionManagerV3(Node):
             else:
                 self._log_state("waiting_nav2_result", previous_vertex, sign_target, (), "hold")
                 return
+        now_ns = self.get_clock().now().nanoseconds
+        if self._pause_until_ns > now_ns:
+            self._log_state("pause_after_stop", previous_vertex, sign_target, (), "hold")
+            return
 
         visit_counts = self._fallback_choice_counts if bool(self.get_parameter("enable_fallback_visit_balancing").value) else {}
         try:
@@ -140,6 +178,7 @@ class LaneDecisionManagerV3(Node):
                 previous_vertex=previous_vertex,
                 active_lane_mode=active_lane_mode,
                 sign_target_vertex=sign_target,
+                route_sign_command=self._pending_route_sign.command if self._pending_route_sign is not None else None,
                 visit_counts=visit_counts,
                 block_immediate_backtrack=bool(self.get_parameter("block_immediate_backtrack").value),
             )
@@ -212,6 +251,8 @@ class LaneDecisionManagerV3(Node):
         self._committed_next_lane_mode = next_lane
         self._committed_final_goal_xy = (float(poses[-1].pose.position.x), float(poses[-1].pose.position.y))
         self._log_state("active", previous_vertex, sign_target, tuple(step.allowed_targets), step.pick_source)
+        if step.route_sign_applied:
+            self._pending_route_sign = None
 
     def _send_through_poses(self, poses: tuple[PoseStamped, ...]) -> bool:
         if not bool(self.get_parameter("enable_nav2_action").value):
@@ -296,9 +337,82 @@ class LaneDecisionManagerV3(Node):
         self._committed_target_vertex = None
         self._committed_next_lane_mode = None
         self._committed_final_goal_xy = None
+        route_command = self._pending_route_sign.command if self._pending_route_sign is not None else "none"
+        stop_action = self._pending_stop_action.action if self._pending_stop_action is not None else "none"
+        if self._pending_stop_action is not None:
+            duration_sec = max(0.0, float(self._pending_stop_action.duration_sec))
+            self._pause_until_ns = self.get_clock().now().nanoseconds + int(duration_sec * 1e9)
+        else:
+            self._pause_until_ns = 0
         self.get_logger().info(
-            f"navigate_through_poses succeeded; current_vertex={next_current} previous_vertex={old_current} lane={next_lane}"
+            "navigate_through_poses succeeded; "
+            f"current_vertex={next_current} previous_vertex={old_current} lane={next_lane} "
+            f"pending_route={route_command} pending_stop={stop_action} bus={'yes' if self._pending_bus_detected else 'no'}"
         )
+        self._pending_stop_action = None
+        self._pending_bus_detected = False
+
+    def _on_driving_detection(self, msg: DrivingDetection) -> None:
+        updated_route = False
+        updated_stop = False
+        updated_bus = False
+        if msg.route_command:
+            candidate = PendingRouteSign(
+                command=str(msg.route_command),
+                class_id=str(msg.route_class_id),
+                confidence=float(msg.route_confidence),
+                box_area=float(msg.route_box_area),
+            )
+            if self._pending_route_sign is None or self._is_better_detection(
+                candidate.box_area,
+                candidate.confidence,
+                self._pending_route_sign.box_area,
+                self._pending_route_sign.confidence,
+            ):
+                self._pending_route_sign = candidate
+                updated_route = True
+
+        if msg.stop_action:
+            candidate = PendingStopAction(
+                action=str(msg.stop_action),
+                class_id=str(msg.stop_class_id),
+                confidence=float(msg.stop_confidence),
+                box_area=float(msg.stop_box_area),
+                duration_sec=float(msg.stop_duration_sec),
+            )
+            if self._pending_stop_action is None or self._is_better_detection(
+                candidate.box_area,
+                candidate.confidence,
+                self._pending_stop_action.box_area,
+                self._pending_stop_action.confidence,
+            ):
+                self._pending_stop_action = candidate
+                updated_stop = True
+
+        if bool(msg.bus_detected):
+            self._pending_bus_detected = True
+            updated_bus = True
+
+        if updated_route or updated_stop or updated_bus:
+            self.get_logger().info(
+                "driving_detection_applied "
+                f"route={self._pending_route_sign.command if self._pending_route_sign is not None else 'none'} "
+                f"stop={self._pending_stop_action.action if self._pending_stop_action is not None else 'none'} "
+                f"bus={'yes' if self._pending_bus_detected else 'no'}"
+            )
+
+    @staticmethod
+    def _is_better_detection(
+        candidate_box_area: float,
+        candidate_confidence: float,
+        current_box_area: float,
+        current_confidence: float,
+    ) -> bool:
+        if candidate_box_area > current_box_area:
+            return True
+        if candidate_box_area == current_box_area and candidate_confidence > current_confidence:
+            return True
+        return False
 
     def _robot_xy_in_map(self) -> Optional[tuple[float, float]]:
         base = str(self.get_parameter("robot_base_frame").value)
@@ -343,7 +457,9 @@ class LaneDecisionManagerV3(Node):
             f"lane_state_v3 stage={stage} tick={self._tick_idx} current={self._state.current_vertex} "
             f"target={self._state.target_vertex} lane={self._state.active_lane_mode} next_lane={self._state.next_lane_mode} "
             f"pick={pick_source} prev={previous_vertex} sign_target={sign_target_vertex} allowed={allowed_targets} "
-            f"limiter={self._state.limiter_edges}"
+            f"limiter={self._state.limiter_edges} route_cmd={self._pending_route_sign.command if self._pending_route_sign else 'none'} "
+            f"stop={self._pending_stop_action.action if self._pending_stop_action else 'none'} "
+            f"bus={'yes' if self._pending_bus_detected else 'no'}"
         )
 
 

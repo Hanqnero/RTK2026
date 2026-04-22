@@ -12,7 +12,11 @@ from rtk2026_graph.local_planner_v2 import LaneGoalRuleV2
 from rtk2026_graph.lane_mode import normalize_lane_mode
 
 
-def load_planner_v2_config_path(path: str | Path) -> tuple[GlobalPlannerConfigV2, tuple[LaneGoalRuleV2, ...]]:
+def load_planner_v2_config_path(
+    path: str | Path,
+    *,
+    sign_direction_topology_path: str | Path | None = None,
+) -> tuple[GlobalPlannerConfigV2, tuple[LaneGoalRuleV2, ...]]:
     p = Path(path)
     with p.open(encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
@@ -30,6 +34,15 @@ def load_planner_v2_config_path(path: str | Path) -> tuple[GlobalPlannerConfigV2
             raise ValueError("planner v2 limiter edges: YAML root must be map")
         # Вставляем как inline-структуру, чтобы общий парсер работал одинаково.
         data["local_limiter_edges"] = ext_data.get("local_limiter_edges", [])
+    if sign_direction_topology_path is not None:
+        sign_path = Path(sign_direction_topology_path)
+        if not sign_path.is_absolute():
+            sign_path = (p.parent / sign_path).resolve()
+        with sign_path.open(encoding="utf-8") as sf:
+            sign_data = yaml.safe_load(sf) or {}
+        if not isinstance(sign_data, dict):
+            raise ValueError("sign direction topology: YAML root must be map")
+        data.update(sign_data)
     return load_planner_v2_config_dict(data)
 
 
@@ -43,6 +56,9 @@ def load_planner_v2_config_dict(
         intersection_exit_lane_targets=_parse_intersection_exit_lane_targets(
             data.get("intersection_exit_lane_targets", {})
         ),
+        lane_direction_targets=_parse_lane_direction_targets(data.get("sign_direction_topology", {})),
+        intersection_direction_targets=_parse_intersection_direction_targets(data.get("sign_direction_topology", {})),
+        sign_command_mapping=_parse_sign_command_mapping(data.get("sign_command_mapping", {})),
         initial_lane_mode=normalize_lane_mode(str(data.get("initial_lane_mode", "lane1"))),
     )
     limiter_edges_index = _parse_local_limiter_edges(data.get("local_limiter_edges", []))
@@ -92,6 +108,77 @@ def _parse_intersection_exit_lane_targets(raw: Any) -> dict[str, dict[int, tuple
     return out
 
 
+def _parse_lane_direction_targets(raw: Any) -> dict[str, dict[int, dict[str, int]]]:
+    if not isinstance(raw, dict):
+        return {}
+    lane_vertices = raw.get("lane_vertices", {})
+    if not isinstance(lane_vertices, dict):
+        return {}
+    out: dict[str, dict[int, dict[str, int]]] = {}
+    for lane_mode, by_vertex in lane_vertices.items():
+        if not isinstance(by_vertex, dict):
+            continue
+        canonical_lane = normalize_lane_mode(str(lane_mode))
+        out[canonical_lane] = {}
+        for vertex, directions in by_vertex.items():
+            parsed = _parse_direction_mapping(directions)
+            if parsed:
+                out[canonical_lane][int(vertex)] = parsed
+    return out
+
+
+def _parse_intersection_direction_targets(raw: Any) -> dict[int, dict[str, dict[str, int]]]:
+    if not isinstance(raw, dict):
+        return {}
+    intersection_vertices = raw.get("intersection_vertices", {})
+    if not isinstance(intersection_vertices, dict):
+        return {}
+    out: dict[int, dict[str, dict[str, int]]] = {}
+    for vertex, by_phase in intersection_vertices.items():
+        if not isinstance(by_phase, dict):
+            continue
+        parsed_phases: dict[str, dict[str, int]] = {}
+        for phase, directions in by_phase.items():
+            if str(phase) not in ("entry", "exit"):
+                continue
+            parsed = _parse_direction_mapping(directions)
+            if parsed:
+                parsed_phases[str(phase)] = parsed
+        if parsed_phases:
+            out[int(vertex)] = parsed_phases
+    return out
+
+
+def _parse_sign_command_mapping(raw: Any) -> dict[str, dict[str, tuple[str, ...]]]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, tuple[str, ...]]] = {}
+    for command, payload in raw.items():
+        if not isinstance(payload, dict):
+            continue
+        preferred = tuple(str(v).strip() for v in payload.get("preferred", []) if str(v).strip())
+        forbidden = tuple(str(v).strip() for v in payload.get("forbidden", []) if str(v).strip())
+        out[str(command).strip()] = {
+            "preferred": preferred,
+            "forbidden": forbidden,
+        }
+    return out
+
+
+def _parse_direction_mapping(raw: Any) -> dict[str, int]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, int] = {}
+    for name, target in raw.items():
+        if target is None:
+            continue
+        try:
+            out[str(name).strip()] = int(target)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def _parse_local_limiter_edges(raw: Any) -> dict[tuple[int, int], tuple[tuple[int, int], ...]]:
     out: dict[tuple[int, int], tuple[tuple[int, int], ...]] = {}
     if not isinstance(raw, list):
@@ -123,18 +210,6 @@ def _parse_local_goal_rules(
     for item in raw:
         if not isinstance(item, dict):
             continue
-        lane_signs_raw = item.get("lane_goal_sign_by_lane", {})
-        lane_signs: dict[str, int] = {}
-        if isinstance(lane_signs_raw, dict):
-            for lane_mode, sign in lane_signs_raw.items():
-                if int(sign) in (-1, 1):
-                    lane_signs[normalize_lane_mode(str(lane_mode))] = int(sign)
-        prev_signs_raw = item.get("lane_goal_sign_by_previous", {})
-        prev_signs: dict[int, int] = {}
-        if isinstance(prev_signs_raw, dict):
-            for prev, sign in prev_signs_raw.items():
-                if int(sign) in (-1, 1):
-                    prev_signs[int(prev)] = int(sign)
         current_vertex = int(item.get("current_vertex"))
         target_vertex = int(item.get("target_vertex"))
         indexed_edges = limiter_edges_index.get((current_vertex, target_vertex), ())
@@ -147,44 +222,11 @@ def _parse_local_goal_rules(
                 for e in edges:
                     if isinstance(e, (list, tuple)) and len(e) >= 2:
                         limiter_edges.append((int(e[0]), int(e[1])))
-        nav2_goal_raw = item.get("nav2_goal_by_lane", {})
-        nav2_goal_by_lane: dict[str, tuple[float, float, float | None]] = {}
-        if isinstance(nav2_goal_raw, dict):
-            for lane_mode, goal in nav2_goal_raw.items():
-                if not isinstance(goal, (list, tuple)) or len(goal) < 2:
-                    continue
-                mode = normalize_lane_mode(str(lane_mode))
-                gx = float(goal[0])
-                gy = float(goal[1])
-                gyaw = float(goal[2]) if len(goal) >= 3 and goal[2] is not None else None
-                nav2_goal_by_lane[mode] = (gx, gy, gyaw)
-        nav2_waypoints_raw = item.get("nav2_waypoints_by_lane", {})
-        nav2_waypoints_by_lane: dict[str, tuple[tuple[float, float, float | None], ...]] = {}
-        if isinstance(nav2_waypoints_raw, dict):
-            for lane_mode, points in nav2_waypoints_raw.items():
-                if not isinstance(points, list):
-                    continue
-                mode = normalize_lane_mode(str(lane_mode))
-                parsed_points: list[tuple[float, float, float | None]] = []
-                for pnt in points:
-                    if not isinstance(pnt, (list, tuple)) or len(pnt) < 2:
-                        continue
-                    px = float(pnt[0])
-                    py = float(pnt[1])
-                    pyaw = float(pnt[2]) if len(pnt) >= 3 and pnt[2] is not None else None
-                    parsed_points.append((px, py, pyaw))
-                if parsed_points:
-                    nav2_waypoints_by_lane[mode] = tuple(parsed_points)
         out.append(
             LaneGoalRuleV2(
                 current_vertex=current_vertex,
                 target_vertex=target_vertex,
                 limiter_edges=tuple(limiter_edges),
-                lane_goal_sign_by_lane=lane_signs,
-                lane_goal_sign_by_previous=prev_signs,
-                nav2_goal_by_lane=nav2_goal_by_lane,
-                nav2_waypoints_by_lane=nav2_waypoints_by_lane,
-                default_lane_goal_sign=-1 if int(item.get("default_lane_goal_sign", 1)) == -1 else 1,
             )
         )
     return tuple(out)

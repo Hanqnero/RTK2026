@@ -34,9 +34,6 @@ def test_v3_single_edge_has_midpoint_and_endpoint() -> None:
                 current_vertex=1,
                 target_vertex=2,
                 limiter_edges=((1, 2),),
-                lane_goal_sign_by_lane={"lane1": 1, "lane2": -1},
-                lane_goal_sign_by_previous={},
-                default_lane_goal_sign=1,
             ),
         ),
     )
@@ -55,9 +52,6 @@ def test_v3_two_edge_turn_has_four_points() -> None:
                 current_vertex=1,
                 target_vertex=4,
                 limiter_edges=((1, 2), (2, 4)),
-                lane_goal_sign_by_lane={"lane1": 1, "lane2": -1},
-                lane_goal_sign_by_previous={},
-                default_lane_goal_sign=1,
             ),
         ),
     )
@@ -74,9 +68,6 @@ def test_v3_two_edge_collinear_has_midpoints_and_endpoint() -> None:
                 current_vertex=4,
                 target_vertex=2,
                 limiter_edges=((4, 3), (3, 2)),
-                lane_goal_sign_by_lane={"lane1": 1, "lane2": -1},
-                lane_goal_sign_by_previous={},
-                default_lane_goal_sign=1,
             ),
         ),
     )
@@ -95,9 +86,6 @@ def test_v3_offset_is_always_on_right_side_of_oriented_edge() -> None:
                 current_vertex=1,
                 target_vertex=2,
                 limiter_edges=((1, 2),),
-                lane_goal_sign_by_lane={"lane1": -1, "lane2": 1},
-                lane_goal_sign_by_previous={},
-                default_lane_goal_sign=1,
             ),
         ),
     )
@@ -109,7 +97,7 @@ def test_v3_offset_is_always_on_right_side_of_oriented_edge() -> None:
     assert lane2.y < 0.0
 
 
-def test_v3_yaml_sign_does_not_flip_offset_side() -> None:
+def test_v3_lane_mode_does_not_flip_offset_side() -> None:
     planner = LocalPlannerPointsV3(
         _graph(),
         (
@@ -117,9 +105,6 @@ def test_v3_yaml_sign_does_not_flip_offset_side() -> None:
                 current_vertex=1,
                 target_vertex=2,
                 limiter_edges=((1, 2),),
-                lane_goal_sign_by_lane={"lane1": 1, "lane2": -1},
-                lane_goal_sign_by_previous={},
-                default_lane_goal_sign=1,
             ),
         ),
     )

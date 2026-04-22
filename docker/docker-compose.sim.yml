@@ -14,6 +14,8 @@ services:
       bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
       ros2 run ros_gz_bridge parameter_bridge /clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock &
       ros2 run ros_gz_bridge parameter_bridge /scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan &
+      ros2 run ros_gz_bridge parameter_bridge /camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image &
+      ros2 run ros_gz_bridge parameter_bridge /camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo &
       ros2 run ros_gz_bridge parameter_bridge /world/polygon_5x5_cells/model/rtk2026/joint_state@sensor_msgs/msg/JointState[gz.msgs.Model &
       ros2 run ros_gz_bridge parameter_bridge /joint_states@sensor_msgs/msg/JointState[gz.msgs.Model &
       ros2 run ros_gz_bridge parameter_bridge /cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist &
@@ -48,6 +50,8 @@ services:
     image: rtk2026-sim:latest
     command: ["/scripts/start_gazebo_novnc.sh"]
     network_mode: service:gazebo
+    volumes:
+      - ../worlds:/workspace/worlds:ro
     depends_on:
       - gazebo
     restart: unless-stopped
@@ -120,6 +124,21 @@ services:
       - sim_net
     depends_on:
       - odometry
+
+  perception:
+    platform: linux/arm64/v8
+    image: rtk2026-sim:latest
+    command: >
+      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
+      source /workspace/install/setup.bash &&
+      exec ros2 launch rtk2026_cv onnx_sign_detector.launch.py"
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - sim_net
+    depends_on:
+      - robot
+      - gazebo
 
   # ── RViz (карта SLAM) в браузере: http://localhost:6082/vnc.html ───────────
   rviz_novnc:
