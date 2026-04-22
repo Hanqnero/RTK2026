@@ -20,6 +20,9 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages onnxruntime
 
 WORKDIR /workspace
 
+COPY docker/scripts /scripts
+RUN chmod +x /scripts/*.sh
+
 # Кладем только наш код; зависимости ROS уже в образе.
 COPY src /workspace/src
 

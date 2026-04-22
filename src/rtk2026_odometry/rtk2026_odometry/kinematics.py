@@ -107,7 +107,9 @@ class DiffDriveKinematics:
         """
         Преобразовать скорость робота в целевые скорости колёс (тики/сек).
 
-        Используется в base_controller для конвертации cmd_vel → WheelVelocityCommand.
+        Legacy helper для старой схемы cmd_vel → WheelVelocityCommand.
+        В активном robot stack cmd_vel отправляется прямо в Arduino bridge,
+        а Arduino уже сама считает wheel setpoints.
         Возвращает (left_tps, right_tps).
         """
         v_left  = linear - angular * self._wheel_sep / 2.0

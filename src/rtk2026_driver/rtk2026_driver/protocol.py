@@ -2,15 +2,13 @@
 Серийный протокол между Raspberry Pi и Arduino.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Фрейм команды Pi -> Arduino (7 байт):
+Фрейм команды Pi -> Arduino (11 байт):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Байт 0:   0xA5       заголовок, байт 1
   Байт 1:   0x5A       заголовок, байт 2
-  Байт 2:   left_lo    целевая скорость левого колеса, младший байт  (int16 LE)
-  Байт 3:   left_hi    целевая скорость левого колеса, старший байт  (int16 LE)
-  Байт 4:   right_lo   целевая скорость правого колеса, младший байт (int16 LE)
-  Байт 5:   right_hi   целевая скорость правого колеса, старший байт (int16 LE)
-  Байт 6:   checksum   сумма байт 0-5 по модулю 256
+  Байт 2-5: target_linear_mps    float32 LE
+  Байт 6-9: target_angular_rps   float32 LE
+  Байт 10:  checksum   сумма байт 0-9 по модулю 256
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Фрейм телеметрии Arduino -> Pi (11 байт):
@@ -39,7 +37,7 @@ from typing import Optional
 CMD_HEADER = b"\xA5\x5A"  # Pi -> Arduino
 TEL_HEADER = b"\x5A\xA5"  # Arduino -> Pi
 
-CMD_SIZE = 7   # 2 (заголовок) + 2 (left_tps) + 2 (right_tps) + 1 (checksum)
+CMD_SIZE = 11  # 2 (заголовок) + 4 (linear) + 4 (angular) + 1 (checksum)
 TEL_SIZE = 11  # 2 (заголовок) + 4 (left_count) + 4 (right_count) + 1 (checksum)
 
 
@@ -62,14 +60,17 @@ def _checksum(data: bytes) -> int:
     return sum(data) & 0xFF
 
 
-def pack_command(left_tps: int, right_tps: int) -> bytes:
+def pack_command(linear_mps: float, angular_rps: float) -> bytes:
     """
-    Упаковать команду скорости колёс в 7-байтовый фрейм.
+    Упаковать команду скорости робота в 11-байтовый фрейм.
 
-    left_tps, right_tps — целевая скорость в тиках/сек (int16, со знаком).
-    Отрицательное значение — движение назад.
+    linear_mps  — линейная скорость вперёд, м/с.
+    angular_rps — угловая скорость вокруг z, рад/с.
+
+    Arduino сама преобразует эту команду в целевые скорости колёс
+    по своей кинематике и крутит PI по колёсам.
     """
-    payload = CMD_HEADER + struct.pack("<hh", left_tps, right_tps)
+    payload = CMD_HEADER + struct.pack("<ff", float(linear_mps), float(angular_rps))
     return payload + bytes([_checksum(payload)])
 
 

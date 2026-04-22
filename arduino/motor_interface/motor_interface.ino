@@ -1,8 +1,8 @@
 /*
   motor_interface.ino — прошивка дифференциального привода RTK2026-2
 
-  Протокол Pi -> Arduino (7 байт):
-    [0xA5][0x5A][left_tps_lo][left_tps_hi][right_tps_lo][right_tps_hi][checksum]
+  Протокол Pi -> Arduino (11 байт):
+    [0xA5][0x5A][target_linear_mps float32][target_angular_rps float32][checksum]
 
   Протокол Arduino -> Pi (11 байт):
     [0x5A][0xA5][left_cnt b0..b3][right_cnt b0..b3][checksum]
@@ -12,6 +12,8 @@
   Выход PID: PWM [-255, 255]
 */
 
+#include <math.h>
+#include <string.h>
 #include <uPID.h>
 #include "config.h"
 #include "encoder.h"
@@ -28,7 +30,11 @@
 uPID pid_left (D_INPUT | I_SATURATE, CONTROL_PERIOD_MS);
 uPID pid_right(D_INPUT | I_SATURATE, CONTROL_PERIOD_MS);
 
-// целевые скорости бортов (тики/сек), приходят с Pi
+// команда движения робота, приходит с Pi
+float target_linear_mps  = 0.0f;
+float target_angular_rps = 0.0f;
+
+// целевые скорости бортов (тики/сек), вычисляются уже на Arduino
 int16_t target_left_tps  = 0;
 int16_t target_right_tps = 0;
 
@@ -50,6 +56,21 @@ static uint8_t checksum(const uint8_t* data, uint8_t len) {
     uint8_t sum = 0;
     for (uint8_t i = 0; i < len; i++) sum += data[i];
     return sum;
+}
+
+static int16_t clamp_i16_from_float(float value) {
+    if (value > 32767.0f) return 32767;
+    if (value < -32768.0f) return -32768;
+    return (int16_t)lroundf(value);
+}
+
+static void update_target_wheel_tps() {
+    const float half_wheel_sep = WHEEL_SEPARATION_M * 0.5f;
+    const float left_mps  = target_linear_mps - target_angular_rps * half_wheel_sep;
+    const float right_mps = target_linear_mps + target_angular_rps * half_wheel_sep;
+
+    target_left_tps  = clamp_i16_from_float(left_mps * TICKS_PER_METER);
+    target_right_tps = clamp_i16_from_float(right_mps * TICKS_PER_METER);
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -75,9 +96,15 @@ static void read_command() {
         // проверяем контрольную сумму
         if (checksum(frame, CMD_PACKET_SIZE - 1) != frame[CMD_PACKET_SIZE - 1]) continue;
 
-        // распаковываем int16 LE
-        target_left_tps  = (int16_t)(frame[2] | (frame[3] << 8));
-        target_right_tps = (int16_t)(frame[4] | (frame[5] << 8));
+        // распаковываем float32 LE
+        memcpy(&target_linear_mps, frame + 2, sizeof(float));
+        memcpy(&target_angular_rps, frame + 6, sizeof(float));
+
+        if (!isfinite(target_linear_mps) || !isfinite(target_angular_rps)) {
+            continue;
+        }
+
+        update_target_wheel_tps();
         last_cmd_ms = millis();
     }
 }
@@ -152,6 +179,8 @@ void loop() {
 
     // таймаут команды — Pi молчит слишком долго
     if ((uint32_t)(now - last_cmd_ms) > COMMAND_TIMEOUT_MS) {
+        target_linear_mps  = 0.0f;
+        target_angular_rps = 0.0f;
         target_left_tps  = 0;
         target_right_tps = 0;
     }

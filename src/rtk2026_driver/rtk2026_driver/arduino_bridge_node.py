@@ -4,19 +4,21 @@ ROS2 нода: мост между Arduino и ROS2.
 Отвечает за:
   - открытие serial порта и handshake с Arduino (через SerialTransport)
   - периодическое чтение телеметрии и публикацию /encoder_report
-  - подписку на /wheel_velocity_command и отправку команд на Arduino
+  - подписку на /cmd_vel и отправку линейной/угловой скорости на Arduino
   - корректную остановку моторов при завершении ноды
 
-Все параметры берутся из config/arduino_bridge.yaml.
+Локальная кинематика колёс теперь живёт на Arduino:
+Pi отправляет только линейную и угловую скорость робота.
 """
 
 import rclpy
-from rclpy.node import Node
+from geometry_msgs.msg import Twist
 from rclpy.executors import ExternalShutdownException
+from rclpy.node import Node
 
-from rtk2026_interfaces.msg import EncoderReport, WheelVelocityCommand
-from rtk2026_driver.protocol import pack_command, parse_telemetry, InvalidChecksumError
-from rtk2026_driver.transport import SerialTransport, HandshakeTimeoutError
+from rtk2026_driver.protocol import InvalidChecksumError, pack_command, parse_telemetry
+from rtk2026_driver.transport import HandshakeTimeoutError, SerialTransport
+from rtk2026_interfaces.msg import EncoderReport
 
 
 class ArduinoBridgeNode(Node):
@@ -30,24 +32,34 @@ class ArduinoBridgeNode(Node):
         self.declare_parameter("handshake_timeout_sec", 5.0)
         self.declare_parameter("handshake_poll_interval_sec", 0.01)
         self.declare_parameter("encoder_report_topic", "encoder_report")
-        self.declare_parameter("wheel_velocity_command_topic", "wheel_velocity_command")
+        self.declare_parameter("cmd_vel_topic", "cmd_vel")
+        self.declare_parameter("telemetry_poll_period_sec", 0.01)
+        self.declare_parameter("command_send_interval_sec", 0.02)
+        self.declare_parameter("drop_stale_cmd_after_sec", 0.30)
         self.declare_parameter("left_encoder_inverted", False)
         self.declare_parameter("right_encoder_inverted", False)
+
+        # legacy-параметры оставлены declared, чтобы старые yaml не ломали старт
+        self.declare_parameter("wheel_velocity_command_topic", "wheel_velocity_command")
         self.declare_parameter("left_wheel_inverted", False)
         self.declare_parameter("right_wheel_inverted", False)
 
-        port       = self.get_parameter("serial_port").value
-        baudrate   = self.get_parameter("baudrate").value
+        port = self.get_parameter("serial_port").value
+        baudrate = self.get_parameter("baudrate").value
         hs_timeout = self.get_parameter("handshake_timeout_sec").value
-        hs_poll    = self.get_parameter("handshake_poll_interval_sec").value
+        hs_poll = self.get_parameter("handshake_poll_interval_sec").value
+        enc_topic = self.get_parameter("encoder_report_topic").value
+        cmd_topic = self.get_parameter("cmd_vel_topic").value
+        telemetry_poll_period = float(self.get_parameter("telemetry_poll_period_sec").value)
+        command_send_interval = float(self.get_parameter("command_send_interval_sec").value)
+        self._drop_stale_cmd_after_sec = float(
+            self.get_parameter("drop_stale_cmd_after_sec").value
+        )
 
-        # инверсия знака через yaml — не трогаем прошивку Arduino
-        self._left_enc_sign  = -1 if self.get_parameter("left_encoder_inverted").value  else 1
+        # инверсия encoder counts через yaml — финальный runtime override
+        self._left_enc_sign = -1 if self.get_parameter("left_encoder_inverted").value else 1
         self._right_enc_sign = -1 if self.get_parameter("right_encoder_inverted").value else 1
-        self._left_mot_sign  = -1 if self.get_parameter("left_wheel_inverted").value    else 1
-        self._right_mot_sign = -1 if self.get_parameter("right_wheel_inverted").value   else 1
 
-        # --- serial транспорт ---
         self._transport = SerialTransport(
             port=port,
             baudrate=baudrate,
@@ -56,25 +68,23 @@ class ArduinoBridgeNode(Node):
         )
         self._rx_buf = bytearray()
 
-        # --- публикатор /encoder_report ---
-        enc_topic = self.get_parameter("encoder_report_topic").value
+        self._last_linear_mps = 0.0
+        self._last_angular_rps = 0.0
+        self._last_cmd_time_ns: int | None = None
+
         self._encoder_pub = self.create_publisher(EncoderReport, enc_topic, 10)
+        self._cmd_sub = self.create_subscription(Twist, cmd_topic, self._on_cmd_vel, 10)
 
-        # --- подписка на /wheel_velocity_command ---
-        cmd_topic = self.get_parameter("wheel_velocity_command_topic").value
-        self._cmd_sub = self.create_subscription(
-            WheelVelocityCommand,
-            cmd_topic,
-            self._on_wheel_velocity_command,
-            10,
-        )
+        self._read_timer = self.create_timer(telemetry_poll_period, self._read_telemetry)
+        self._send_timer = self.create_timer(command_send_interval, self._send_command)
 
-        # --- таймер чтения телеметрии ---
-        # вызывается часто чтобы не накапливать данные в буфере
-        self._read_timer = self.create_timer(0.01, self._read_telemetry)
-
-        # --- открываем порт и ждём handshake ---
         self._open_transport(port)
+
+        self.get_logger().info(
+            "Arduino bridge started: "
+            f"cmd_vel_topic={cmd_topic}, send_period={command_send_interval:.3f}s, "
+            f"telemetry_poll={telemetry_poll_period:.3f}s"
+        )
 
     def _open_transport(self, port: str) -> None:
         """Открыть serial порт и выполнить handshake с Arduino."""
@@ -86,9 +96,34 @@ class ArduinoBridgeNode(Node):
                 f"right_count={first_frame.right_count})"
             )
         except HandshakeTimeoutError as e:
-            # нода не может работать без Arduino — завершаемся
             self.get_logger().fatal(f"Handshake failed: {e}")
             raise SystemExit(1)
+
+    def _on_cmd_vel(self, msg: Twist) -> None:
+        """Получить последнюю команду движения робота в базовой системе координат."""
+        self._last_linear_mps = float(msg.linear.x)
+        self._last_angular_rps = float(msg.angular.z)
+        self._last_cmd_time_ns = self.get_clock().now().nanoseconds
+
+    def _current_command(self) -> tuple[float, float]:
+        """
+        Вернуть актуальную команду для отправки.
+
+        Если cmd_vel давно не обновлялся, отправляем нули как dead-man.
+        """
+        if self._last_cmd_time_ns is None:
+            return 0.0, 0.0
+
+        age_sec = (self.get_clock().now().nanoseconds - self._last_cmd_time_ns) / 1e9
+        if age_sec > self._drop_stale_cmd_after_sec:
+            return 0.0, 0.0
+
+        return self._last_linear_mps, self._last_angular_rps
+
+    def _send_command(self) -> None:
+        """Периодически отправлять на Arduino последнюю актуальную команду."""
+        linear_mps, angular_rps = self._current_command()
+        self._transport.write(pack_command(linear_mps, angular_rps))
 
     def _read_telemetry(self) -> None:
         """
@@ -103,19 +138,17 @@ class ArduinoBridgeNode(Node):
 
         self._rx_buf.extend(raw)
 
-        # извлекаем все доступные фреймы из буфера за один вызов
         consecutive_errors = 0
         max_consecutive_errors = 10
 
         while True:
             try:
                 frame = parse_telemetry(self._rx_buf)
-                consecutive_errors = 0  # сбрасываем счётчик при успехе
+                consecutive_errors = 0
             except InvalidChecksumError as e:
                 self.get_logger().warn(f"Telemetry checksum error: {e}")
                 consecutive_errors += 1
                 if consecutive_errors >= max_consecutive_errors:
-                    # слишком много битых фреймов подряд — буфер рассинхронизирован
                     self.get_logger().error(
                         f"Too many consecutive checksum errors ({consecutive_errors}), clearing buffer"
                     )
@@ -124,30 +157,18 @@ class ArduinoBridgeNode(Node):
                 continue
 
             if frame is None:
-                # буфер не накопил полный фрейм — ждём следующего вызова
                 break
 
             msg = EncoderReport()
-            msg.header.stamp    = self.get_clock().now().to_msg()
+            msg.header.stamp = self.get_clock().now().to_msg()
             msg.header.frame_id = "base_link"
-            msg.left_count  = self._left_enc_sign  * frame.left_count
+            msg.left_count = self._left_enc_sign * frame.left_count
             msg.right_count = self._right_enc_sign * frame.right_count
             self._encoder_pub.publish(msg)
 
-    def _on_wheel_velocity_command(self, msg: WheelVelocityCommand) -> None:
-        """
-        Подписка: получаем целевые скорости бортов и отправляем на Arduino.
-
-        Инверсия знака мотора применяется здесь через yaml параметры —
-        прошивка Arduino знаков не меняет.
-        """
-        left_tps  = self._left_mot_sign  * int(msg.left_tps)
-        right_tps = self._right_mot_sign * int(msg.right_tps)
-        self._transport.write(pack_command(left_tps, right_tps))
-
     def _stop_motors(self) -> None:
-        """Отправить нулевую команду — остановить оба мотора."""
-        self._transport.write(pack_command(0, 0))
+        """Отправить нулевую команду движения — остановить оба борта."""
+        self._transport.write(pack_command(0.0, 0.0))
 
     def destroy_node(self) -> None:
         """Корректное завершение: останавливаем моторы и закрываем порт."""

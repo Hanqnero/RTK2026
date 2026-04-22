@@ -13,13 +13,14 @@ arduino_bridge:
 
     # --- Топики ---
     encoder_report_topic: "encoder_report"
-    wheel_velocity_command_topic: "wheel_velocity_command"
+    cmd_vel_topic: "cmd_vel"
 
-    # --- Знаки колёс ---
-    # Инвертировать если мотор физически установлен зеркально
-    left_wheel_inverted: false
-    right_wheel_inverted: false
+    # --- Частоты и dead-man ---
+    telemetry_poll_period_sec: 0.01
+    command_send_interval_sec: 0.02
+    drop_stale_cmd_after_sec: 0.30
 
-    # Инвертировать если энкодер считает в обратную сторону
+    # --- Инверсия энкодеров ---
+    # Используется только как runtime override поверх прошивки
     left_encoder_inverted: false
     right_encoder_inverted: false

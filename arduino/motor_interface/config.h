@@ -28,6 +28,13 @@ constexpr uint16_t CONTROL_PERIOD_MS  = 20;   // 50 Hz
 constexpr uint32_t COMMAND_TIMEOUT_MS = 300;
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Кинематика робота
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Держать синхронно с src/rtk2026_odometry/config/odometry.yaml
+constexpr float TICKS_PER_METER    = 1268.0f;
+constexpr float WHEEL_SEPARATION_M = 0.2123f;
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // PID коэффициенты (тюнятся экспериментально)
 // вход PID:  тики/сек (измеренная скорость за период)
 // выход PID: PWM [-255, 255]
@@ -55,5 +62,5 @@ constexpr uint8_t  CMD_HEADER_0    = 0xA5;
 constexpr uint8_t  CMD_HEADER_1    = 0x5A;
 constexpr uint8_t  TEL_HEADER_0    = 0x5A;
 constexpr uint8_t  TEL_HEADER_1    = 0xA5;
-constexpr uint8_t  CMD_PACKET_SIZE = 7;   // header(2) + tps(4) + checksum(1)
+constexpr uint8_t  CMD_PACKET_SIZE = 11;  // header(2) + linear/angular float32(8) + checksum(1)
 constexpr uint8_t  TEL_PACKET_SIZE = 11;  // header(2) + counts(8) + checksum(1)
