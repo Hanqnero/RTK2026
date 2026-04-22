@@ -31,7 +31,7 @@ class SerialTransport:
                                     handshake_timeout_sec=5.0,
                                     handshake_poll_interval_sec=0.01)
         transport.open()   # открывает порт и дожидается готовности Arduino
-        transport.write(pack_command(0, 0))
+        transport.write(pack_command(0.0, 0.0))
         data = transport.read()
         transport.close()
     """

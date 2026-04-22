@@ -16,8 +16,9 @@ websockify --web=/usr/share/novnc/ "${NOVNC_PORT}" localhost:5900 >/tmp/websocki
 sleep 2
 
 CFG="${RVIZ_CONFIG:-/workspace/map_edit.rviz}"
+USE_SIM_TIME="${USE_SIM_TIME:-false}"
 if [[ ! -f "$CFG" ]]; then
   echo "RVIZ_CONFIG не найден: $CFG, запуск без конфига" >&2
-  exec rviz2 --ros-args -p use_sim_time:=true
+  exec rviz2 --ros-args -p use_sim_time:="${USE_SIM_TIME}"
 fi
-exec rviz2 -d "$CFG" --ros-args -p use_sim_time:=true
+exec rviz2 -d "$CFG" --ros-args -p use_sim_time:="${USE_SIM_TIME}"
