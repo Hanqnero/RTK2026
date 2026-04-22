@@ -140,6 +140,28 @@
     <origin xyz="0.1 0 ${base_height + 0.02}" rpy="0 0 0"/>
   </joint>
 
+  <!-- ── фронтальная камера ── -->
+  <link name="camera_link">
+    <inertial>
+      <mass value="0.05"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.035 0.035 0.035"/></geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.035 0.035 0.035"/></geometry>
+    </collision>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="0.12 0 0.06" rpy="0 0 0"/>
+  </joint>
+
   <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
        Gazebo Sim (gz): привод и joint states
        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
@@ -193,9 +215,32 @@
     </sensor>
   </gazebo>
 
+  <gazebo reference="camera_link">
+    <sensor name="camera" type="camera">
+      <always_on>true</always_on>
+      <visualize>false</visualize>
+      <update_rate>10</update_rate>
+      <topic>camera/image_raw</topic>
+      <camera>
+        <horizontal_fov>1.3962634</horizontal_fov>
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.05</near>
+          <far>20.0</far>
+        </clip>
+        <camera_info_topic>camera/camera_info</camera_info_topic>
+      </camera>
+    </sensor>
+  </gazebo>
+
   <gazebo reference="base_link"><material>Gazebo/DarkGrey</material></gazebo>
   <gazebo reference="left_wheel"><material>Gazebo/Black</material></gazebo>
   <gazebo reference="right_wheel"><material>Gazebo/Black</material></gazebo>
+  <gazebo reference="camera_link"><material>Gazebo/Black</material></gazebo>
   <gazebo reference="front_caster_link">
     <material>Gazebo/White</material>
     <mu1>0.001</mu1>

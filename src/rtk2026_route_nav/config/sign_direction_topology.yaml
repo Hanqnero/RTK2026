@@ -1,0 +1,144 @@
+sign_direction_topology:
+  lane_vertices:
+    lane1:
+      # Обычные вершины вне перекрестка.
+      # Формат:
+      # <current_vertex>:
+      #   straight: <target_vertex_or_null>
+      #   right: <target_vertex_or_null>
+      #   left: <target_vertex_or_null>
+      2:
+        straight: null
+        right: null
+        left: null
+      4:
+        straight: 2
+        right: 17
+        left: null
+      6:
+        straight: null
+        right: null
+        left: null
+      8:
+        straight: 6
+        right: 18
+        left: null
+      10:
+        straight: null
+        right: null
+        left: null
+      12:
+        straight: 10
+        right: 19
+        left: null
+      14:
+        straight: null
+        right: null
+        left: null
+      16:
+        straight: 14
+        right: 20
+        left: null
+
+    lane2:
+      2:
+        straight: 4
+        right: null
+        left: 17
+      4:
+        straight: null
+        right: null
+        left: null
+      6:
+        straight: 8
+        right: null
+        left: 18
+      8:
+        straight: null
+        right: null
+        left: null
+      10:
+        straight: 12
+        right: null
+        left: 19
+      12:
+        straight: null
+        right: null
+        left: null
+      14:
+        straight: 16
+        right: null
+        left: 20
+      16:
+        straight: null
+        right: null
+        left: null
+
+  intersection_vertices:
+    # Перекрестные вершины выбираются не по lane1/lane2, а по фазе:
+    # entry: previous_vertex вне множества перекрестка, робот въезжает внутрь
+    # exit: previous_vertex внутри множества перекрестка, робот выезжает наружу
+    17:
+      entry:
+        straight: 19
+        right: 18
+        left: 20
+      exit:
+        straight: null
+        right: 2
+        left: 4
+    18:
+      entry:
+        straight: 20
+        right: 19
+        left: 17
+      exit:
+        straight: null
+        right: 6
+        left: 8
+    19:
+      entry:
+        straight: 17
+        right: 20
+        left: 18
+      exit:
+        straight: null
+        right: 10
+        left: 12
+    20:
+      entry:
+        straight: 18
+        right: 17
+        left: 19
+      exit:
+        straight: null
+        right: 14
+        left: 16
+
+sign_command_mapping:
+  straight_only:
+    preferred: [straight]
+    forbidden: []
+  left_only:
+    preferred: [left]
+    forbidden: [straight, right]
+  right_only:
+    preferred: [right]
+    forbidden: [straight, left]
+  no_left_turn:
+    preferred: []
+    forbidden: [left]
+  no_right_turn:
+    preferred: []
+    forbidden: [right]
+  no_straight:
+    preferred: []
+    forbidden: [straight]
+
+notes:
+  - "lane_vertices используются только для неперекрестных логических вершин."
+  - "intersection_vertices используются только для 17, 18, 19, 20."
+  - "Для перекрестка направление выбирается по phase=entry/exit, а не по lane1/lane2."
+  - "Значение null значит, что такого направления для данной вершины/фазы нет."
+  - "preferred определяет направление для предписывающего знака."
+  - "forbidden определяет, какие направления выкинуть из allowed_targets при запрещающем знаке."

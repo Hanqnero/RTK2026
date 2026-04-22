@@ -1,0 +1,20 @@
+yolo_sign_adapter:
+  ros__parameters:
+    detections_topic: /yolo/detections
+    output_topic: /perception/driving_detection
+    min_confidence: 0.25
+    min_box_area: 0.0
+    publish_empty: true
+    stop_duration_sec: 2.0
+    log_every_n_messages: 30
+    route_class_to_command:
+      - straight=straight_only
+      - left=left_only
+      - right=right_only
+      - no_left=no_left_turn
+      - no_right=no_right_turn
+      - no_straight=no_straight
+    stop_class_to_action:
+      - bus_stop=bus_stop
+    bus_classes:
+      - bus

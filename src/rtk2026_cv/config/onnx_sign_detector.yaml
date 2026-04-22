@@ -1,0 +1,33 @@
+onnx_sign_detector:
+  ros__parameters:
+    image_topic: "/camera/image_raw"
+    output_topic: "/perception/driving_detection"
+    debug_overlay_topic: "/perception/detection_overlay"
+    debug_image_topic: "/perception/detection_overlay/compressed"
+    model_path: "/workspace/src/rtk2026_cv/best.onnx"
+    input_size: 640
+    conf_threshold: 0.20
+    every_n_frames: 1
+    publish_empty: true
+    debug_overlay: true
+    log_every_n_frames: 10
+    stop_duration_sec: 2.0
+    class_id_to_label:
+      - "0=bus_stop"
+      - "1=move_forward"
+      - "2=no_turn_left"
+      - "3=no_turn_right"
+      - "4=obstacle"
+      - "5=parking_spot"
+      - "6=turn_left"
+      - "7=turn_right"
+    class_id_to_route_command:
+      - "1=straight_only"
+      - "2=no_left_turn"
+      - "3=no_right_turn"
+      - "6=left_only"
+      - "7=right_only"
+    class_id_to_stop_action:
+      - "0=bus_stop"
+    bus_class_ids:
+      - "4"

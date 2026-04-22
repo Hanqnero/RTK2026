@@ -1,6 +1,8 @@
 lane_decision_manager:
   ros__parameters:
     planner_v2_config_filepath: "/workspace/runtime_config/lane_planner_v2.yaml"
+    sign_direction_topology_filepath: "/workspace/runtime_config/sign_direction_topology.yaml"
+    driving_detection_topic: "/perception/driving_detection"
     use_sim_time: true
     current_vertex: 5
     previous_vertex: -1

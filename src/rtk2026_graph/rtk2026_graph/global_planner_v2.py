@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 from rtk2026_graph.lane_mode import normalize_lane_mode
+
+
+@dataclass(frozen=True)
+class SignCommandPolicy:
+    preferred: tuple[str, ...] = ()
+    forbidden: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -15,6 +22,9 @@ class GlobalPlannerConfigV2:
     intersection_vertex_ids: frozenset[int]
     lane_switch_edges: frozenset[tuple[int, int]]
     intersection_exit_lane_targets: dict[str, dict[int, tuple[int, ...]]]
+    lane_direction_targets: dict[str, dict[int, dict[str, int]]]
+    intersection_direction_targets: dict[int, dict[str, dict[str, int]]]
+    sign_command_mapping: dict[str, SignCommandPolicy]
     initial_lane_mode: str = "lane1"
 
 
@@ -30,6 +40,7 @@ class GlobalPlanStepV2:
     next_lane_mode: str
     lane_switched: bool
     pick_source: str
+    route_sign_applied: bool
 
 
 class GlobalPlannerV2:
@@ -47,6 +58,11 @@ class GlobalPlannerV2:
             intersection_vertex_ids=frozenset(int(v) for v in config.intersection_vertex_ids),
             lane_switch_edges=frozenset((int(a), int(b)) for a, b in config.lane_switch_edges),
             intersection_exit_lane_targets=self._normalize_exit_lane_targets(config.intersection_exit_lane_targets),
+            lane_direction_targets=self._normalize_lane_direction_targets(config.lane_direction_targets),
+            intersection_direction_targets=self._normalize_intersection_direction_targets(
+                config.intersection_direction_targets
+            ),
+            sign_command_mapping=self._normalize_sign_command_mapping(config.sign_command_mapping),
             initial_lane_mode=normalize_lane_mode(config.initial_lane_mode),
         )
 
@@ -107,6 +123,7 @@ class GlobalPlannerV2:
         active_lane_mode: str,
         previous_vertex: int = -1,
         sign_target_vertex: int = -1,
+        route_sign_command: str | None = None,
         visit_counts: dict[int, int] | None = None,
         block_immediate_backtrack: bool = True,
     ) -> GlobalPlanStepV2:
@@ -119,6 +136,20 @@ class GlobalPlannerV2:
         if not allowed:
             raise ValueError(
                 f"no allowed targets for current={current_vertex}, lane={active_lane_mode}, previous={previous_vertex}"
+            )
+
+        allowed, route_sign_applied = self._apply_route_sign_command(
+            current_vertex=int(current_vertex),
+            previous_vertex=int(previous_vertex),
+            active_lane_mode=active_lane_mode,
+            allowed_targets=allowed,
+            route_sign_command=route_sign_command,
+        )
+        if not allowed:
+            raise ValueError(
+                "no allowed targets after route-sign filtering for "
+                f"current={current_vertex}, previous={previous_vertex}, lane={active_lane_mode}, "
+                f"route_sign_command={route_sign_command}"
             )
 
         chosen: int
@@ -148,7 +179,61 @@ class GlobalPlannerV2:
             next_lane_mode=next_mode,
             lane_switched=switched,
             pick_source=source,
+            route_sign_applied=route_sign_applied,
         )
+
+    def _apply_route_sign_command(
+        self,
+        *,
+        current_vertex: int,
+        previous_vertex: int,
+        active_lane_mode: str,
+        allowed_targets: tuple[int, ...],
+        route_sign_command: str | None,
+    ) -> tuple[tuple[int, ...], bool]:
+        if not route_sign_command:
+            return allowed_targets, False
+        policy = self._config.sign_command_mapping.get(str(route_sign_command).strip())
+        if policy is None:
+            return allowed_targets, False
+        direction_targets = self._direction_targets_for_context(
+            current_vertex=int(current_vertex),
+            previous_vertex=int(previous_vertex),
+            active_lane_mode=active_lane_mode,
+        )
+        if not direction_targets:
+            return allowed_targets, False
+
+        forbidden_targets = {
+            int(direction_targets[name])
+            for name in policy.forbidden
+            if name in direction_targets and int(direction_targets[name]) in allowed_targets
+        }
+        filtered_allowed = tuple(v for v in allowed_targets if int(v) not in forbidden_targets)
+
+        preferred_candidates = tuple(
+            int(direction_targets[name])
+            for name in policy.preferred
+            if name in direction_targets and int(direction_targets[name]) in filtered_allowed
+        )
+        if preferred_candidates:
+            return preferred_candidates, True
+        if filtered_allowed != allowed_targets:
+            return filtered_allowed, True
+        return filtered_allowed, False
+
+    def _direction_targets_for_context(
+        self,
+        *,
+        current_vertex: int,
+        previous_vertex: int,
+        active_lane_mode: str,
+    ) -> dict[str, int]:
+        if int(current_vertex) in self._config.intersection_vertex_ids:
+            phase = "exit" if int(previous_vertex) in self._config.intersection_vertex_ids else "entry"
+            return dict(self._config.intersection_direction_targets.get(int(current_vertex), {}).get(phase, {}))
+        lane_mode = normalize_lane_mode(active_lane_mode)
+        return dict(self._config.lane_direction_targets.get(lane_mode, {}).get(int(current_vertex), {}))
 
     def _normalize_exit_lane_targets(self, raw: dict[str, dict[int, tuple[int, ...]]] | object) -> dict[str, dict[int, tuple[int, ...]]]:
         out: dict[str, dict[int, tuple[int, ...]]] = {}
@@ -167,6 +252,66 @@ class GlobalPlannerV2:
                 else:
                     continue
                 out[canonical_lane][int(vertex)] = parsed
+        return out
+
+    def _normalize_lane_direction_targets(self, raw: object) -> dict[str, dict[int, dict[str, int]]]:
+        out: dict[str, dict[int, dict[str, int]]] = {}
+        if not isinstance(raw, dict):
+            return out
+        for lane_mode, by_vertex in raw.items():
+            if not isinstance(by_vertex, dict):
+                continue
+            canonical_lane = normalize_lane_mode(str(lane_mode))
+            out[canonical_lane] = {}
+            for vertex, directions in by_vertex.items():
+                parsed = self._normalize_direction_mapping(directions)
+                if parsed:
+                    out[canonical_lane][int(vertex)] = parsed
+        return out
+
+    def _normalize_intersection_direction_targets(self, raw: object) -> dict[int, dict[str, dict[str, int]]]:
+        out: dict[int, dict[str, dict[str, int]]] = {}
+        if not isinstance(raw, dict):
+            return out
+        for vertex, by_phase in raw.items():
+            if not isinstance(by_phase, dict):
+                continue
+            parsed_phases: dict[str, dict[str, int]] = {}
+            for phase, directions in by_phase.items():
+                if str(phase) not in ("entry", "exit"):
+                    continue
+                parsed = self._normalize_direction_mapping(directions)
+                if parsed:
+                    parsed_phases[str(phase)] = parsed
+            if parsed_phases:
+                out[int(vertex)] = parsed_phases
+        return out
+
+    def _normalize_sign_command_mapping(self, raw: object) -> dict[str, SignCommandPolicy]:
+        out: dict[str, SignCommandPolicy] = {}
+        if not isinstance(raw, dict):
+            return out
+        for command, payload in raw.items():
+            if not isinstance(payload, dict):
+                continue
+            preferred_raw = payload.get("preferred", [])
+            forbidden_raw = payload.get("forbidden", [])
+            preferred = tuple(str(v).strip() for v in preferred_raw if str(v).strip())
+            forbidden = tuple(str(v).strip() for v in forbidden_raw if str(v).strip())
+            out[str(command).strip()] = SignCommandPolicy(preferred=preferred, forbidden=forbidden)
+        return out
+
+    def _normalize_direction_mapping(self, raw: object) -> dict[str, int]:
+        out: dict[str, int] = {}
+        if not isinstance(raw, dict):
+            return out
+        for name, target in raw.items():
+            if target is None:
+                continue
+            try:
+                out[str(name).strip()] = int(target)
+            except (TypeError, ValueError):
+                continue
         return out
 
     def _next_lane_mode_by_intersection_exit(

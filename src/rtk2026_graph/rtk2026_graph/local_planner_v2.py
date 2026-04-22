@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import math
 
 from rtk2026_graph.lane_goal_geometry import project_goal_on_lane
@@ -17,26 +17,6 @@ class LaneGoalRuleV2:
     current_vertex: int
     target_vertex: int
     limiter_edges: tuple[tuple[int, int], ...]
-    lane_goal_sign_by_lane: dict[str, int]
-    lane_goal_sign_by_previous: dict[int, int]
-    nav2_goal_by_lane: dict[str, tuple[float, float, float | None]] = field(default_factory=dict)
-    nav2_waypoints_by_lane: dict[str, tuple[tuple[float, float, float | None], ...]] = field(default_factory=dict)
-    default_lane_goal_sign: int = 1
-
-    def resolve_sign(self, *, lane_mode: str, previous_vertex: int) -> int:
-        prev_s = self.lane_goal_sign_by_previous.get(int(previous_vertex))
-        if prev_s in (-1, 1):
-            return int(prev_s)
-        normalized_lane = normalize_lane_mode(lane_mode)
-        lane_s = self.lane_goal_sign_by_lane.get(normalized_lane)
-        if lane_s in (-1, 1):
-            return int(lane_s)
-        # Базовое поведение без явного lane_goal_sign_by_lane в конфиге.
-        if normalized_lane == "lane1":
-            return 1
-        if normalized_lane == "lane2":
-            return -1
-        return int(self.default_lane_goal_sign) if int(self.default_lane_goal_sign) in (-1, 1) else 1
 
 
 @dataclass(frozen=True)
@@ -86,8 +66,7 @@ class LocalPlannerV2:
         if node is None:
             raise ValueError(f"target vertex not found in graph: {target_vertex}")
         normalized_lane = normalize_lane_mode(lane_mode)
-        sign = rule.resolve_sign(lane_mode=normalized_lane, previous_vertex=int(previous_vertex))
-        manual_goal = self._manual_nav2_goal_for_lane(rule, normalized_lane, polyline)
+        sign = 1
         if normalized_lane == "lane2":
             reference_polyline = self._offset_polyline_right(polyline, abs(float(lane_right_offset_m)))
         else:
@@ -141,9 +120,6 @@ class LocalPlannerV2:
             current_vertex=int(current_vertex),
             target_vertex=int(target_vertex),
             limiter_edges=((int(current_vertex), int(target_vertex)),),
-            lane_goal_sign_by_lane={"lane1": 1, "lane2": -1},
-            lane_goal_sign_by_previous={},
-            default_lane_goal_sign=1,
         )
 
     def _polyline_for_rule(
@@ -281,36 +257,6 @@ class LocalPlannerV2:
             out.append((float(px + rx * offset_m), float(py + ry * offset_m)))
         return tuple(out)
 
-    def _manual_nav2_goal_for_lane(
-        self,
-        rule: LaneGoalRuleV2,
-        lane_mode: str,
-        polyline: tuple[tuple[float, float], ...],
-    ) -> tuple[float, float, float] | None:
-        goal = rule.nav2_goal_by_lane.get(lane_mode)
-        if goal is None:
-            return None
-        x, y, yaw = goal
-        if yaw is None:
-            yaw = self._polyline_terminal_yaw(polyline)
-        return (float(x), float(y), float(yaw))
-
-    def _manual_nav2_waypoints_for_lane(
-        self,
-        rule: LaneGoalRuleV2,
-        lane_mode: str,
-        polyline: tuple[tuple[float, float], ...],
-    ) -> tuple[tuple[float, float, float], ...]:
-        raw = rule.nav2_waypoints_by_lane.get(lane_mode)
-        if not raw:
-            return ()
-        out: list[tuple[float, float, float]] = []
-        for item in raw:
-            x, y, yaw = item
-            yyaw = self._polyline_terminal_yaw(polyline) if yaw is None else float(yaw)
-            out.append((float(x), float(y), float(yyaw)))
-        return tuple(out)
-
     def _goal_waypoints_for_lane(
         self,
         *,
@@ -319,12 +265,6 @@ class LocalPlannerV2:
         polyline: tuple[tuple[float, float], ...],
         fallback_goal: tuple[float, float, float],
     ) -> tuple[tuple[float, float, float], ...]:
-        manual_waypoints = self._manual_nav2_waypoints_for_lane(rule, lane_mode, polyline)
-        if manual_waypoints:
-            return manual_waypoints
-        manual_goal = self._manual_nav2_goal_for_lane(rule, lane_mode, polyline)
-        if manual_goal is not None:
-            return (manual_goal,)
         return (fallback_goal,)
 
     def _polyline_terminal_yaw(self, polyline: tuple[tuple[float, float], ...]) -> float:

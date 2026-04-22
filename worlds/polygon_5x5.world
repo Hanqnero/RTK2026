@@ -140,6 +140,28 @@
         </visual>
       </link>
     </model>
+    <model name="sign_mounts_sw">
+      <static>true</static>
+      <pose>1.2 1.2 0 0 0 0</pose>
+      <link name="link">
+        <collision name="south_left_col"><pose>-0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="south_right_col"><pose>0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="north_left_col"><pose>-0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="north_right_col"><pose>0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="west_bottom_col"><pose>-0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="west_top_col"><pose>-0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="east_bottom_col"><pose>0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="east_top_col"><pose>0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <visual name="south_left_vis"><pose>-0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="south_right_vis"><pose>0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="north_left_vis"><pose>-0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="north_right_vis"><pose>0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="west_bottom_vis"><pose>-0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="west_top_vis"><pose>-0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="east_bottom_vis"><pose>0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="east_top_vis"><pose>0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+      </link>
+    </model>
     <model name="building_sw">
       <static>true</static>
       <pose>1.2 1.2 0.28 0 0 0</pose>
@@ -171,6 +193,69 @@
         <visual name="vis">
           <geometry><box><size>0.8 0.8 0.08</size></box></geometry>
           <material><ambient>0.35 0.35 0.38 1</ambient><diffuse>0.5 0.5 0.52 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name="sign_mounts_se">
+      <static>true</static>
+      <pose>2.8 1.2 0 0 0 0</pose>
+      <link name="link">
+        <collision name="south_left_col"><pose>-0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="south_right_col"><pose>0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="north_left_col"><pose>-0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="north_right_col"><pose>0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="west_bottom_col"><pose>-0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="west_top_col"><pose>-0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="east_bottom_col"><pose>0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="east_top_col"><pose>0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <visual name="south_left_vis"><pose>-0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="south_right_vis"><pose>0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="north_left_vis"><pose>-0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="north_right_vis"><pose>0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="west_bottom_vis"><pose>-0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="west_top_vis"><pose>-0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="east_bottom_vis"><pose>0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="east_top_vis"><pose>0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+      </link>
+    </model>
+    <model name="traffic_sign_turn_right_4_3">
+      <static>true</static>
+      <pose>2.6 0.81 0.28 0 0 1.570796327</pose>
+      <link name="link">
+        <collision name="panel_col">
+          <pose>0 -0.006 0 0 0 0</pose>
+          <geometry><box><size>0.1 0.002 0.1</size></box></geometry>
+        </collision>
+        <visual name="front_vis">
+          <pose>0 -0.006 0 0 0 0</pose>
+          <geometry><box><size>0.1 0.002 0.1</size></box></geometry>
+          <material>
+            <ambient>1 1 1 1</ambient>
+            <diffuse>1 1 1 1</diffuse>
+            <specular>0.05 0.05 0.05 1</specular>
+            <pbr>
+              <metal>
+                <albedo_map>/workspace/worlds/assets/signs/turn_right_100.png</albedo_map>
+              </metal>
+            </pbr>
+          </material>
+        </visual>
+        <visual name="back_vis">
+          <pose>0 0.006 0 0 0 0</pose>
+          <geometry><box><size>0.1 0.002 0.1</size></box></geometry>
+          <material>
+            <ambient>0.7 0.7 0.72 1</ambient>
+            <diffuse>0.82 0.82 0.84 1</diffuse>
+            <specular>0.02 0.02 0.02 1</specular>
+          </material>
+        </visual>
+        <visual name="pole_cap_vis">
+          <pose>0 0 0 0 0 0</pose>
+          <geometry><box><size>0.022 0.022 0.005</size></box></geometry>
+          <material>
+            <ambient>0.32 0.32 0.34 1</ambient>
+            <diffuse>0.46 0.46 0.5 1</diffuse>
+          </material>
         </visual>
       </link>
     </model>
@@ -208,6 +293,28 @@
         </visual>
       </link>
     </model>
+    <model name="sign_mounts_nw">
+      <static>true</static>
+      <pose>1.2 2.8 0 0 0 0</pose>
+      <link name="link">
+        <collision name="south_left_col"><pose>-0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="south_right_col"><pose>0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="north_left_col"><pose>-0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="north_right_col"><pose>0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="west_bottom_col"><pose>-0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="west_top_col"><pose>-0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="east_bottom_col"><pose>0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="east_top_col"><pose>0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <visual name="south_left_vis"><pose>-0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="south_right_vis"><pose>0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="north_left_vis"><pose>-0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="north_right_vis"><pose>0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="west_bottom_vis"><pose>-0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="west_top_vis"><pose>-0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="east_bottom_vis"><pose>0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="east_top_vis"><pose>0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+      </link>
+    </model>
     <model name="building_nw">
       <static>true</static>
       <pose>1.2 2.8 0.28 0 0 0</pose>
@@ -240,6 +347,28 @@
           <geometry><box><size>0.8 0.8 0.08</size></box></geometry>
           <material><ambient>0.35 0.35 0.38 1</ambient><diffuse>0.5 0.5 0.52 1</diffuse></material>
         </visual>
+      </link>
+    </model>
+    <model name="sign_mounts_ne">
+      <static>true</static>
+      <pose>2.8 2.8 0 0 0 0</pose>
+      <link name="link">
+        <collision name="south_left_col"><pose>-0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="south_right_col"><pose>0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="north_left_col"><pose>-0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="north_right_col"><pose>0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="west_bottom_col"><pose>-0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="west_top_col"><pose>-0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="east_bottom_col"><pose>0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <collision name="east_top_col"><pose>0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry></collision>
+        <visual name="south_left_vis"><pose>-0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="south_right_vis"><pose>0.2 -0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="north_left_vis"><pose>-0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="north_right_vis"><pose>0.2 0.39 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="west_bottom_vis"><pose>-0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="west_top_vis"><pose>-0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="east_bottom_vis"><pose>0.39 -0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
+        <visual name="east_top_vis"><pose>0.39 0.2 0.155 0 0 0</pose><geometry><box><size>0.02 0.02 0.15</size></box></geometry><material><ambient>0.32 0.32 0.34 1</ambient><diffuse>0.46 0.46 0.5 1</diffuse></material></visual>
       </link>
     </model>
     <model name="building_ne">
