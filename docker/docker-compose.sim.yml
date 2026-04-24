@@ -120,6 +120,7 @@ services:
       - GRAPH_FILEPATH=${GRAPH_FILEPATH:-/workspace/runtime_config/graph.geojson}
       - INITIAL_VERTEX_ID=${INITIAL_VERTEX_ID:-5}
       - ROBOT_SPAWN_YAW=${ROBOT_SPAWN_YAW:-3.141592653589793}
+      - LOCALIZATION_USE_SIM_TIME=${LOCALIZATION_USE_SIM_TIME:-true}
     networks:
       - sim_net
     depends_on:
