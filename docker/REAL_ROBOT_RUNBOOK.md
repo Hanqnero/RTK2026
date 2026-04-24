@@ -234,13 +234,24 @@ export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 source /opt/ros/jazzy/setup.bash
 ```
 
-### 6.1. RViz2 for SLAM View
+### 6.1. RViz2 for Real Robot Monitoring
 
-Use:
+Recommended command:
 
 ```bash
-rviz2 -d /path/to/RTK2026/docker/local_rviz/rtk2026_slam.rviz
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+source /opt/ros/jazzy/setup.bash
+ros2 launch rtk2026_bringup remote_robot_rviz.launch.py
 ```
+
+This launch uses:
+
+- `src/rtk2026_bringup/launch/remote_robot_rviz.launch.py`
+- `src/rtk2026_bringup/rviz/rtk2026_real_robot.rviz`
+
+It is intended specifically for the real robot on the LAN.
 
 ### 6.2. RViz2 for Route / Lane Work
 
