@@ -8,18 +8,6 @@ struct __attribute__((packed)) ControlPacket {
 };
 
 struct __attribute__((packed)) TelemetryPacket {
-    float target_linear_mps;
-    float target_angular_rps;
-    float current_linear_mps;
-    float current_angular_rps;
-    float target_left_wheel_mps;
-    float target_right_wheel_mps;
-    float current_left_wheel_mps;
-    float current_right_wheel_mps;
-    int16_t left_pwm;
-    int16_t right_pwm;
-    int32_t left_count;
-    int32_t right_count;
     uint8_t imu_online;
     uint8_t imu_chip_id;
     int16_t imu_acc_x;
@@ -28,4 +16,7 @@ struct __attribute__((packed)) TelemetryPacket {
     int16_t imu_gyro_x;
     int16_t imu_gyro_y;
     int16_t imu_gyro_z;
+    float odom_x_m;
+    float odom_y_m;
+    float odom_heading_rad;
 };

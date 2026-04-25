@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <math.h>
 #include <stdint.h>
 
 #include <GyverMotor2.h>
@@ -13,6 +14,7 @@ namespace {
 
 constexpr float kPi = 3.14159265358979323846F;
 constexpr float kWheelCircumferenceM = 2.0F * kPi * kWheelRadiusM;
+constexpr float kControlPeriodS = static_cast<float>(kControlPeriodMs) / 1000.0f;
 
 GyverMotor2<GM2::DIR_DIR_PWM> left_motor(LEFT_AI1, LEFT_AI2, LEFT_PWMA);
 GyverMotor2<GM2::DIR_DIR_PWM> right_motor(RIGHT_BI1, RIGHT_BI2, RIGHT_PWMB);
@@ -33,6 +35,15 @@ TelemetryPacket telemetry_packet = {};
 
 uint32_t last_control_ms = 0;
 uint32_t last_command_ms = 0;
+
+float odom_x_m = 0.0f;
+float odom_y_m = 0.0f;
+float odom_heading_rad = 0.0f;
+
+float imu_gyro_z_bias_rad_s = 0.0f;
+float imu_gyro_z_bias_accum_rad_s = 0.0f;
+uint16_t imu_gyro_z_bias_samples = 0;
+bool imu_gyro_z_bias_ready = false;
 
 void leftEncoderISR() {
     left_encoder.handleInterrupt();
@@ -60,6 +71,21 @@ float countsToMotorRps(int32_t counts_per_cycle) {
 float motorRpsToWheelLinearMps(float motor_rps) {
     const float wheel_rps = motor_rps / kGearboxRatio;
     return wheel_rps * kWheelCircumferenceM;
+}
+
+float wrapAngleRad(float angle) {
+    while (angle > kPi) {
+        angle -= 2.0f * kPi;
+    }
+    while (angle < -kPi) {
+        angle += 2.0f * kPi;
+    }
+    return angle;
+}
+
+float rawGyroToRadS(int16_t raw_gyro) {
+    const float deg_per_sec = static_cast<float>(raw_gyro) * kImuGyroDpsPerLsb;
+    return deg_per_sec * (kPi / 180.0f);
 }
 
 void configurePid(uPID& pid, float kp, float ki, float kd, float out_min, float out_max) {
@@ -123,6 +149,38 @@ void runControlCycle() {
     const float current_linear_mps = 0.5f * (current_left_wheel_mps + current_right_wheel_mps);
     const float current_angular_rps = (current_right_wheel_mps - current_left_wheel_mps) / kTrackWidthM;
 
+    bool imu_valid = false;
+    float imu_gyro_z_rad_s = 0.0f;
+    float fused_angular_rps = current_angular_rps;
+
+    if (imu.readSample(imu_sample)) {
+        imu_valid = true;
+        imu_gyro_z_rad_s = rawGyroToRadS(imu_sample.gyro_z);
+
+        if (!imu_gyro_z_bias_ready) {
+            imu_gyro_z_bias_accum_rad_s += imu_gyro_z_rad_s;
+            ++imu_gyro_z_bias_samples;
+            if (imu_gyro_z_bias_samples >= kImuGyroBiasSampleCount) {
+                imu_gyro_z_bias_rad_s = imu_gyro_z_bias_accum_rad_s / static_cast<float>(imu_gyro_z_bias_samples);
+                imu_gyro_z_bias_ready = true;
+            }
+        }
+
+        const float imu_gyro_z_corrected_rad_s =
+            imu_gyro_z_rad_s - (imu_gyro_z_bias_ready ? imu_gyro_z_bias_rad_s : 0.0f);
+        const float encoder_weight = clampFloat(kOdomYawRateEncoderWeight, 0.0f, 1.0f);
+        const float imu_weight = 1.0f - encoder_weight;
+        fused_angular_rps = encoder_weight * current_angular_rps + imu_weight * imu_gyro_z_corrected_rad_s;
+    }
+
+    // Midpoint integration improves accuracy versus pure Euler for curved motion.
+    const float delta_heading = fused_angular_rps * kControlPeriodS;
+    const float heading_mid = odom_heading_rad + 0.5f * delta_heading;
+    const float delta_s = current_linear_mps * kControlPeriodS;
+    odom_x_m += delta_s * cosf(heading_mid);
+    odom_y_m += delta_s * sinf(heading_mid);
+    odom_heading_rad = wrapAngleRad(odom_heading_rad + delta_heading);
+
     linear_pid.setpoint = command_packet.target_linear_mps;
     angular_pid.setpoint = command_packet.target_angular_rps;
 
@@ -150,20 +208,7 @@ void runControlCycle() {
     left_motor.runSpeed(left_pwm);
     right_motor.runSpeed(right_pwm);
 
-    telemetry_packet.target_linear_mps = command_packet.target_linear_mps;
-    telemetry_packet.target_angular_rps = command_packet.target_angular_rps;
-    telemetry_packet.current_linear_mps = current_linear_mps;
-    telemetry_packet.current_angular_rps = current_angular_rps;
-    telemetry_packet.target_left_wheel_mps = target_left_wheel_mps;
-    telemetry_packet.target_right_wheel_mps = target_right_wheel_mps;
-    telemetry_packet.current_left_wheel_mps = current_left_wheel_mps;
-    telemetry_packet.current_right_wheel_mps = current_right_wheel_mps;
-    telemetry_packet.left_pwm = left_pwm;
-    telemetry_packet.right_pwm = right_pwm;
-    telemetry_packet.left_count = static_cast<int32_t>(left_encoder.readCount());
-    telemetry_packet.right_count = static_cast<int32_t>(right_encoder.readCount());
-
-    if (imu.readSample(imu_sample)) {
+    if (imu_valid) {
         telemetry_packet.imu_acc_x = imu_sample.acc_x;
         telemetry_packet.imu_acc_y = imu_sample.acc_y;
         telemetry_packet.imu_acc_z = imu_sample.acc_z;
@@ -181,6 +226,9 @@ void runControlCycle() {
 
     telemetry_packet.imu_online = imu.isOnline() ? 1U : 0U;
     telemetry_packet.imu_chip_id = imu.chipId();
+    telemetry_packet.odom_x_m = odom_x_m;
+    telemetry_packet.odom_y_m = odom_y_m;
+    telemetry_packet.odom_heading_rad = odom_heading_rad;
 
     (void)linear_error;
     (void)angular_error;
