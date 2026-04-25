@@ -2,11 +2,18 @@
 
 #include <stdint.h>
 
+// TB6612FNG pin mapping.
+// Motor A (left): AI1, AI2, PWMA
+// Motor B (right): BI1, BI2, PWMB
+// BI1 and BI2 are direction selects and must not be HIGH at the same time.
 // Update these pins to match the actual Arduino Mega wiring.
-#define LEFT_LPWM 6
-#define LEFT_RPWM 7
-#define RIGHT_LPWM 4
-#define RIGHT_RPWM 5
+#define LEFT_AI1 10
+#define LEFT_AI2 11
+#define LEFT_PWMA 6
+
+#define RIGHT_BI1 8
+#define RIGHT_BI2 9
+#define RIGHT_PWMB 5
 
 #define LEFT_ENC_CLK 2
 #define LEFT_ENC_DT 3

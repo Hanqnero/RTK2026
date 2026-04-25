@@ -13,8 +13,8 @@ namespace {
 constexpr float kPi = 3.14159265358979323846F;
 constexpr float kWheelCircumferenceM = 2.0F * kPi * kWheelRadiusM;
 
-GyverMotor2<GM2::PWM_PWM_SPEED> left_motor(LEFT_LPWM, LEFT_RPWM);
-GyverMotor2<GM2::PWM_PWM_SPEED> right_motor(RIGHT_LPWM, RIGHT_RPWM);
+GyverMotor2<GM2::DIR_DIR_PWM> left_motor(LEFT_AI1, LEFT_AI2, LEFT_PWMA);
+GyverMotor2<GM2::DIR_DIR_PWM> right_motor(RIGHT_BI1, RIGHT_BI2, RIGHT_PWMB);
 
 EncoderCounter left_encoder(LEFT_ENC_CLK, LEFT_ENC_DT, kLeftEncoderReverse, INPUT_PULLUP);
 EncoderCounter right_encoder(RIGHT_ENC_CLK, RIGHT_ENC_DT, kRightEncoderReverse, INPUT_PULLUP);
