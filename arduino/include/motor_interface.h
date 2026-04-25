@@ -25,6 +25,9 @@ constexpr bool kRightMotorReverse = false;
 constexpr bool kLeftEncoderReverse = false;
 constexpr bool kRightEncoderReverse = true;
 
+constexpr uint8_t kImuSpiCsPin = 53;
+constexpr uint32_t kImuSpiClockHz = 1000000UL;
+
 constexpr uint32_t kSerialBaudRate = 115200;
 constexpr uint16_t kControlPeriodMs = 100;
 constexpr uint16_t kCommandTimeoutMs = 500;

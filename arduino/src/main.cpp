@@ -4,6 +4,7 @@
 #include <GyverMotor2.h>
 #include <uPID.h>
 
+#include "bmi270_spi.h"
 #include "control_protocol.h"
 #include "encoder.h"
 #include "motor_interface.h"
@@ -24,8 +25,11 @@ uPID angular_pid(I_SATURATE, kControlPeriodMs);
 uPID left_motor_pid(I_SATURATE | D_INPUT, kControlPeriodMs);
 uPID right_motor_pid(I_SATURATE | D_INPUT, kControlPeriodMs);
 
+Bmi270Spi imu;
+Bmi270Spi::Sample imu_sample = {0, 0, 0, 0, 0, 0};
+
 ControlPacket command_packet = {0.0F, 0.0F};
-TelemetryPacket telemetry_packet = {0};
+TelemetryPacket telemetry_packet = {};
 
 uint32_t last_control_ms = 0;
 uint32_t last_command_ms = 0;
@@ -84,6 +88,8 @@ void configureHardware() {
     attachInterrupt(digitalPinToInterrupt(LEFT_ENC_DT), leftEncoderISR, CHANGE);
     attachInterrupt(digitalPinToInterrupt(RIGHT_ENC_CLK), rightEncoderISR, CHANGE);
     attachInterrupt(digitalPinToInterrupt(RIGHT_ENC_DT), rightEncoderISR, CHANGE);
+
+    imu.begin(kImuSpiCsPin, kImuSpiClockHz);
 }
 
 void readLatestCommand() {
@@ -156,6 +162,25 @@ void runControlCycle() {
     telemetry_packet.right_pwm = right_pwm;
     telemetry_packet.left_count = static_cast<int32_t>(left_encoder.readCount());
     telemetry_packet.right_count = static_cast<int32_t>(right_encoder.readCount());
+
+    if (imu.readSample(imu_sample)) {
+        telemetry_packet.imu_acc_x = imu_sample.acc_x;
+        telemetry_packet.imu_acc_y = imu_sample.acc_y;
+        telemetry_packet.imu_acc_z = imu_sample.acc_z;
+        telemetry_packet.imu_gyro_x = imu_sample.gyro_x;
+        telemetry_packet.imu_gyro_y = imu_sample.gyro_y;
+        telemetry_packet.imu_gyro_z = imu_sample.gyro_z;
+    } else {
+        telemetry_packet.imu_acc_x = 0;
+        telemetry_packet.imu_acc_y = 0;
+        telemetry_packet.imu_acc_z = 0;
+        telemetry_packet.imu_gyro_x = 0;
+        telemetry_packet.imu_gyro_y = 0;
+        telemetry_packet.imu_gyro_z = 0;
+    }
+
+    telemetry_packet.imu_online = imu.isOnline() ? 1U : 0U;
+    telemetry_packet.imu_chip_id = imu.chipId();
 
     (void)linear_error;
     (void)angular_error;

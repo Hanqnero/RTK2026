@@ -13,6 +13,7 @@ set(ARDUINO_BOARD_DEFINES
 set(ARDUINO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ArduinoCore-avr-1.8.7)
 set(ARDUINO_CORE_DIR ${ARDUINO_DIR}/cores/arduino)
 set(ARDUINO_VARIANT_DIR ${ARDUINO_DIR}/variants/mega)
+set(ARDUINO_SPI_DIR ${ARDUINO_DIR}/libraries/SPI/src)
 set(VENDOR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor)
 set(HEX_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.hex)
 
@@ -48,10 +49,15 @@ file(GLOB ARDUINO_CORE_SOURCES CONFIGURE_DEPENDS
     ${ARDUINO_VARIANT_DIR}/*.c
 )
 
-add_library(arduino_core STATIC ${ARDUINO_CORE_SOURCES})
+set(ARDUINO_SPI_SOURCES
+    ${ARDUINO_SPI_DIR}/SPI.cpp
+)
+
+add_library(arduino_core STATIC ${ARDUINO_CORE_SOURCES} ${ARDUINO_SPI_SOURCES})
 target_include_directories(arduino_core PUBLIC
     ${ARDUINO_CORE_DIR}
     ${ARDUINO_VARIANT_DIR}
+    ${ARDUINO_SPI_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${VENDOR_DIR}
     ${VENDOR_DIR}/GyverMotor2
@@ -80,10 +86,12 @@ set_target_properties(arduino_core PROPERTIES
 
 add_executable(${PROJECT_NAME}.elf
     src/main.cpp
+    src/bmi270_spi.cpp
     src/encoder.cpp
 )
 target_include_directories(${PROJECT_NAME}.elf PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${ARDUINO_SPI_DIR}
     ${VENDOR_DIR}
     ${VENDOR_DIR}/GyverMotor2
     ${VENDOR_DIR}/uPID
