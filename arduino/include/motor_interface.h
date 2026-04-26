@@ -20,6 +20,11 @@
 #define RIGHT_ENC_CLK 18
 #define RIGHT_ENC_DT 19
 
+#define SONAR_VCC_PIN 37
+#define SONAR_TRIG_PIN 39
+#define SONAR_ECHO_PIN 41
+#define SONAR_GND_PIN 43
+
 constexpr bool kLeftMotorReverse = false;
 constexpr bool kRightMotorReverse = false;
 constexpr bool kLeftEncoderReverse = false;
@@ -66,3 +71,7 @@ constexpr float kMotorKd = 0.0f;
 
 constexpr float kMaxPwmDuty = 0.90f;
 constexpr float kMaxPwmCommand = 255.0f * kMaxPwmDuty;
+
+constexpr float kSonarStopThresholdCm = 20.0f;
+constexpr uint32_t kSonarEchoTimeoutUs = 25000UL;
+constexpr uint16_t kSonarSamplePeriodMs = 60;

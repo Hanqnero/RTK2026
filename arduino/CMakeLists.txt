@@ -90,12 +90,14 @@ if(ROBOT_DIRECT_MOTOR_TEST)
     add_executable(${PROJECT_NAME}.elf
         src/main_direct_motor_test.cpp
         src/encoder.cpp
+        src/sonar.cpp
     )
 else()
     add_executable(${PROJECT_NAME}.elf
         src/main.cpp
         src/bmi270_spi.cpp
         src/encoder.cpp
+        src/sonar.cpp
     )
 endif()
 target_include_directories(${PROJECT_NAME}.elf PRIVATE

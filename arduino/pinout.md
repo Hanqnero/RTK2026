@@ -23,6 +23,10 @@ This document defines the pin mapping used by the current robot firmware on Ardu
 | Left Encoder | LEFT_ENC_DT | D3 | Input + External Interrupt | Quadrature channel B |
 | Right Encoder | RIGHT_ENC_CLK | D18 | Input + External Interrupt | Quadrature channel A |
 | Right Encoder | RIGHT_ENC_DT | D19 | Input + External Interrupt | Quadrature channel B |
+| Sonar | SONAR_VCC_PIN | D37 | Output | Sensor VCC driven HIGH |
+| Sonar | SONAR_TRIG_PIN | D39 | Output | Trigger pulse |
+| Sonar | SONAR_ECHO_PIN | D41 | Input | Echo pulse |
+| Sonar | SONAR_GND_PIN | D43 | Output | Sensor GND driven LOW |
 <!-- | BMI270 IMU (SPI) | IMU_CS | D53 | Output | Chip select (SPI SS pin) |
 | BMI270 IMU (SPI) | IMU_MOSI | D51 | Output | SPI MOSI (hardware SPI) |
 | BMI270 IMU (SPI) | IMU_MISO | D50 | Input | SPI MISO (hardware SPI) |
@@ -43,6 +47,12 @@ This document defines the pin mapping used by the current robot firmware on Ardu
 - All encoder inputs are configured as INPUT_PULLUP in firmware.
 - Current external interrupt mapping on Mega supports these pins:
   - D2, D3, D18, D19
+
+### Sonar
+
+- Sonar stop threshold: 20 cm.
+- When a valid sonar reading is below the threshold, firmware commands both motors to zero.
+- D37 powers sensor VCC HIGH and D43 provides sensor GND LOW.
 
 ### BMI270 SPI
 
@@ -77,7 +87,7 @@ Notes:
 
 ## Reserved/Used Pins Summary
 
-- Used digital pins: D0, D1, D2, D3, D8, D9, D13, D18, D19, D22, D24, D26, D28, D50, D51, D52, D53
+- Used digital pins: D0, D1, D2, D3, D8, D9, D13, D18, D19, D22, D24, D26, D28, D37, D39, D41, D43, D50, D51, D52, D53
 - Unused digital pins: all others (available for future expansion)
 - Analog pins A0-A15: currently unused
 

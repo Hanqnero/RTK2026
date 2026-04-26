@@ -8,6 +8,7 @@
 #include "control_protocol.h"
 #include "encoder.h"
 #include "motor_interface.h"
+#include "sonar.h"
 
 namespace {
 
@@ -97,6 +98,7 @@ void configureHardware() {
 
     pinMode(LED_BUILTIN, OUTPUT);
     digitalWrite(LED_BUILTIN, LOW);
+    configureSonar();
 
     left_encoder.begin();
     right_encoder.begin();
@@ -146,6 +148,26 @@ void runControlCycle() {
     odom_x_m += delta_s * cosf(heading_mid);
     odom_y_m += delta_s * sinf(heading_mid);
     odom_heading_rad = wrapAngleRad(odom_heading_rad + delta_heading);
+
+    if (sonarObstacleDetected()) {
+        command_packet.target_linear_mps = 0.0f;
+        command_packet.target_angular_rps = 0.0f;
+        left_motor.runSpeed(0);
+        right_motor.runSpeed(0);
+
+        telemetry_packet.odom_x_m = odom_x_m;
+        telemetry_packet.odom_y_m = odom_y_m;
+        telemetry_packet.odom_heading_rad = odom_heading_rad;
+        telemetry_packet.raw_left_encoder_delta = debug_raw_encoder ? left_delta : 0;
+        telemetry_packet.raw_right_encoder_delta = debug_raw_encoder ? right_delta : 0;
+        telemetry_packet.left_pwm = 0;
+        telemetry_packet.right_pwm = 0;
+
+        if (Serial.availableForWrite() >= static_cast<int>(sizeof(TelemetryPacket))) {
+            Serial.write(reinterpret_cast<const uint8_t*>(&telemetry_packet), sizeof(TelemetryPacket));
+        }
+        return;
+    }
 
     linear_pid.setpoint = command_packet.target_linear_mps;
     angular_pid.setpoint = command_packet.target_angular_rps;
