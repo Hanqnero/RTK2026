@@ -67,7 +67,7 @@ Because the stream is unframed fixed-size binary:
 2. Interpret fields using little-endian types at the offsets above.
 3. If byte alignment is lost, resynchronize by scanning for plausible records, for example:
    - `imu_online` in {0,1}
-   - `imu_chip_id` often 0x24 when online
+  - `imu_chip_id` should be 0x24 when online
    - `odom_heading_rad` typically in [-3.2, 3.2]
 
 ## Versioning Recommendation

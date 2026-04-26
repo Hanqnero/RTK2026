@@ -23,6 +23,9 @@ constexpr uint8_t kCmdSoftReset = 0xB6;
 bool Bmi270Spi::begin(uint8_t cs_pin, uint32_t spi_clock_hz) {
     _cs_pin = cs_pin;
     _spi_clock_hz = spi_clock_hz;
+    _spi_mode = SPI_MODE0;
+    _chip_id = 0;
+    _online = false;
 
     pinMode(_cs_pin, OUTPUT);
     digitalWrite(_cs_pin, HIGH);
@@ -30,12 +33,14 @@ bool Bmi270Spi::begin(uint8_t cs_pin, uint32_t spi_clock_hz) {
     SPI.begin();
     delay(10);
 
-    writeReg(kRegCmd, kCmdSoftReset);
-    delay(10);
+    if (!probeChipId()) {
+        return false;
+    }
 
-    _chip_id = readReg(kRegChipId);
-    if (_chip_id != kChipIdBmi270) {
-        _online = false;
+    writeReg(kRegCmd, kCmdSoftReset);
+    delay(12);
+
+    if (!probeChipId()) {
         return false;
     }
 
@@ -90,8 +95,44 @@ uint8_t Bmi270Spi::chipId() const {
     return _chip_id;
 }
 
+bool Bmi270Spi::probeChipId() {
+    static const uint8_t kModes[] = {SPI_MODE0, SPI_MODE3};
+
+    // Probe at requested clock first, then conservative fallbacks.
+    uint32_t clocks[3] = {_spi_clock_hz, 500000UL, 100000UL};
+    if (_spi_clock_hz <= 500000UL) {
+        clocks[1] = 250000UL;
+    }
+    if (_spi_clock_hz <= 100000UL) {
+        clocks[2] = _spi_clock_hz;
+    }
+
+    for (uint8_t mode : kModes) {
+        _spi_mode = mode;
+        for (uint8_t ci = 0; ci < 3; ++ci) {
+            _spi_clock_hz = clocks[ci];
+
+            // First read after interface switch can be stale on some modules.
+            uint8_t dummy = 0;
+            (void)readRegs(kRegChipId, &dummy, 1);
+            delay(1);
+
+            for (uint8_t attempt = 0; attempt < 3; ++attempt) {
+                _chip_id = readReg(kRegChipId);
+                if (_chip_id == kChipIdBmi270) {
+                    return true;
+                }
+                delay(1);
+            }
+        }
+    }
+
+    _online = false;
+    return false;
+}
+
 bool Bmi270Spi::writeReg(uint8_t reg, uint8_t value) {
-    SPI.beginTransaction(SPISettings(_spi_clock_hz, MSBFIRST, SPI_MODE0));
+    SPI.beginTransaction(SPISettings(_spi_clock_hz, MSBFIRST, _spi_mode));
     digitalWrite(_cs_pin, LOW);
     SPI.transfer(reg & 0x7F);
     SPI.transfer(value);
@@ -111,7 +152,7 @@ bool Bmi270Spi::readRegs(uint8_t start_reg, uint8_t* buffer, uint8_t length) {
         return false;
     }
 
-    SPI.beginTransaction(SPISettings(_spi_clock_hz, MSBFIRST, SPI_MODE0));
+    SPI.beginTransaction(SPISettings(_spi_clock_hz, MSBFIRST, _spi_mode));
     digitalWrite(_cs_pin, LOW);
     SPI.transfer(start_reg | 0x80);
     SPI.transfer(0x00);

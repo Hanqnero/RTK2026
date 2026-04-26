@@ -21,12 +21,14 @@ public:
     uint8_t chipId() const;
 
 private:
+    bool probeChipId();
     bool writeReg(uint8_t reg, uint8_t value);
     uint8_t readReg(uint8_t reg);
     bool readRegs(uint8_t start_reg, uint8_t* buffer, uint8_t length);
 
     uint8_t _cs_pin = 0;
     uint32_t _spi_clock_hz = 1000000UL;
+    uint8_t _spi_mode = 0;
     uint8_t _chip_id = 0;
     bool _online = false;
 };

@@ -29,7 +29,7 @@ except ImportError as exc:  # pragma: no cover
 # float odom_x_m, odom_y_m, odom_heading_rad
 PACKET_STRUCT = struct.Struct("<BBhhhhhhfff")
 PACKET_SIZE = PACKET_STRUCT.size
-EXPECTED_CHIP_ID = 0x24
+EXPECTED_CHIP_IDS = {0x24}
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,7 +66,7 @@ def format_packet(fields: tuple[int, ... | float]) -> str:
 
     heading_deg = odom_heading_rad * 180.0 / math.pi
     chip_str = f"0x{imu_chip_id:02X}"
-    status = "OK" if imu_online and imu_chip_id == EXPECTED_CHIP_ID else "WARN"
+    status = "OK" if imu_online and imu_chip_id in EXPECTED_CHIP_IDS else "WARN"
 
     return (
         f"[{status}] "
