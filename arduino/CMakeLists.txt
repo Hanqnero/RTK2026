@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.23)
 
 project(robot_control_interface LANGUAGES C CXX ASM)
 
+option(ROBOT_DIRECT_MOTOR_TEST "Build the direct motor test firmware instead of the PID controller" OFF)
+
 set(MCU atmega2560)
 set(F_CPU 16000000UL)
 set(ARDUINO_BOARD_DEFINES
@@ -84,11 +86,18 @@ set_target_properties(arduino_core PROPERTIES
     ARCHIVE_OUTPUT_NAME arduino_core
 )
 
-add_executable(${PROJECT_NAME}.elf
-    src/main.cpp
-    src/bmi270_spi.cpp
-    src/encoder.cpp
-)
+if(ROBOT_DIRECT_MOTOR_TEST)
+    add_executable(${PROJECT_NAME}.elf
+        src/main_direct_motor_test.cpp
+        src/encoder.cpp
+    )
+else()
+    add_executable(${PROJECT_NAME}.elf
+        src/main.cpp
+        src/bmi270_spi.cpp
+        src/encoder.cpp
+    )
+endif()
 target_include_directories(${PROJECT_NAME}.elf PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${ARDUINO_SPI_DIR}
@@ -99,6 +108,9 @@ target_include_directories(${PROJECT_NAME}.elf PRIVATE
     ${VENDOR_DIR}/GyverIO/src
 )
 target_compile_definitions(${PROJECT_NAME}.elf PRIVATE ${ARDUINO_BOARD_DEFINES})
+if(ROBOT_DIRECT_MOTOR_TEST)
+    target_compile_definitions(${PROJECT_NAME}.elf PRIVATE ROBOT_DIRECT_MOTOR_TEST=1)
+endif()
 target_compile_options(${PROJECT_NAME}.elf PRIVATE
     -mmcu=${MCU}
     -DF_CPU=${F_CPU}

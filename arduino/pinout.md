@@ -12,16 +12,17 @@ This document defines the pin mapping used by the current robot firmware on Ardu
 
 | Subsystem | Signal | Arduino Pin | Direction | Notes |
 |---|---|---:|---|---|
-| Motor Driver (TB6612FNG) | LEFT_AI1 | D8 | Output | Left motor direction pin 1 |
-| Motor Driver (TB6612FNG) | LEFT_AI2 | D9 | Output | Left motor direction pin 2 |
-| Motor Driver (TB6612FNG) | LEFT_PWMA | D12 | Output (PWM) | Left motor PWM |
-| Motor Driver (TB6612FNG) | RIGHT_BI1 | D10 | Output | Right motor direction pin 1 |
-| Motor Driver (TB6612FNG) | RIGHT_BI2 | D11 | Output | Right motor direction pin 2 |
-| Motor Driver (TB6612FNG) | RIGHT_PWMB | D13 | Output (PWM) | Right motor PWM |
+| Motor Driver (TB6612FNG) | LEFT_AI1 | D22 | Output | Left motor direction pin 1 |
+| Motor Driver (TB6612FNG) | LEFT_AI2 | D24 | Output | Left motor direction pin 2 |
+| Motor Driver (TB6612FNG) | LEFT_PWMA | D10 | Output (PWM) | Left motor PWM |
+| Motor Driver (TB6612FNG) | RIGHT_BI1 | D26 | Output | Right motor direction pin 1 |
+| Motor Driver (TB6612FNG) | RIGHT_BI2 | D28 | Output | Right motor direction pin 2 |
+| Motor Driver (TB6612FNG) | RIGHT_PWMB | D9 | Output (PWM) | Right motor PWM |
+| Status LED | LED_BUILTIN | D13 | Output | Blinks once per control loop cycle |
 | Left Encoder | LEFT_ENC_CLK | D2 | Input + External Interrupt | Quadrature channel A |
 | Left Encoder | LEFT_ENC_DT | D3 | Input + External Interrupt | Quadrature channel B |
-| Right Encoder | RIGHT_ENC_CLK | D4 | Input + External Interrupt | Quadrature channel A |
-| Right Encoder | RIGHT_ENC_DT | D5 | Input + External Interrupt | Quadrature channel B |
+| Right Encoder | RIGHT_ENC_CLK | D18 | Input + External Interrupt | Quadrature channel A |
+| Right Encoder | RIGHT_ENC_DT | D19 | Input + External Interrupt | Quadrature channel B |
 <!-- | BMI270 IMU (SPI) | IMU_CS | D53 | Output | Chip select (SPI SS pin) |
 | BMI270 IMU (SPI) | IMU_MOSI | D51 | Output | SPI MOSI (hardware SPI) |
 | BMI270 IMU (SPI) | IMU_MISO | D50 | Input | SPI MISO (hardware SPI) |
@@ -76,7 +77,7 @@ Notes:
 
 ## Reserved/Used Pins Summary
 
-- Used digital pins: D0, D1, D2, D3, D5, D6, D8, D9, D10, D11, D18, D19, D50, D51, D52, D53
+- Used digital pins: D0, D1, D2, D3, D8, D9, D13, D18, D19, D22, D24, D26, D28, D50, D51, D52, D53
 - Unused digital pins: all others (available for future expansion)
 - Analog pins A0-A15: currently unused
 

@@ -7,18 +7,18 @@
 // Motor B (right): BI1, BI2, PWMB
 // BI1 and BI2 are direction selects and must not be HIGH at the same time.
 // Update these pins to match the actual Arduino Mega wiring.
-#define LEFT_AI1 8
-#define LEFT_AI2 9
-#define LEFT_PWMA 12
+#define LEFT_AI1 22
+#define LEFT_AI2 24
+#define LEFT_PWMA 10
 
-#define RIGHT_BI1 10
-#define RIGHT_BI2 11
-#define RIGHT_PWMB 13
+#define RIGHT_BI1 26
+#define RIGHT_BI2 28
+#define RIGHT_PWMB 9
 
 #define LEFT_ENC_CLK 2
 #define LEFT_ENC_DT 3
-#define RIGHT_ENC_CLK 4
-#define RIGHT_ENC_DT 5
+#define RIGHT_ENC_CLK 18
+#define RIGHT_ENC_DT 19
 
 constexpr bool kLeftMotorReverse = false;
 constexpr bool kRightMotorReverse = false;
@@ -63,3 +63,6 @@ constexpr float kAngularKd = 0.0f;
 constexpr float kMotorKp = 220.0f;
 constexpr float kMotorKi = 40.0f;
 constexpr float kMotorKd = 0.0f;
+
+constexpr float kMaxPwmDuty = 0.90f;
+constexpr float kMaxPwmCommand = 255.0f * kMaxPwmDuty;
