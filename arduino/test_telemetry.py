@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Simple telemetry reader for the Arduino firmware.
 
-Reads fixed-size binary packets from serial and prints decoded IMU + odometry.
+Reads fixed-size binary packets from serial and prints decoded odometry.
 Packet layout matches TelemetryPacket in include/control_protocol.h.
 """
 
@@ -22,14 +22,9 @@ except ImportError as exc:  # pragma: no cover
 
 
 # Little-endian packed layout:
-# uint8 imu_online
-# uint8 imu_chip_id
-# int16 imu_acc_x, imu_acc_y, imu_acc_z
-# int16 imu_gyro_x, imu_gyro_y, imu_gyro_z
 # float odom_x_m, odom_y_m, odom_heading_rad
-PACKET_STRUCT = struct.Struct("<BBhhhhhhfff")
+PACKET_STRUCT = struct.Struct("<fff")
 PACKET_SIZE = PACKET_STRUCT.size
-EXPECTED_CHIP_IDS = {0x24}
 
 
 def parse_args() -> argparse.Namespace:
@@ -49,32 +44,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def format_packet(fields: tuple[int, ... | float]) -> str:
-    (
-        imu_online,
-        imu_chip_id,
-        imu_acc_x,
-        imu_acc_y,
-        imu_acc_z,
-        imu_gyro_x,
-        imu_gyro_y,
-        imu_gyro_z,
-        odom_x_m,
-        odom_y_m,
-        odom_heading_rad,
-    ) = fields
+def format_packet(fields: tuple[float, float, float]) -> str:
+    odom_x_m, odom_y_m, odom_heading_rad = fields
 
     heading_deg = odom_heading_rad * 180.0 / math.pi
-    chip_str = f"0x{imu_chip_id:02X}"
-    status = "OK" if imu_online and imu_chip_id in EXPECTED_CHIP_IDS else "WARN"
 
-    return (
-        f"[{status}] "
-        f"IMU online={imu_online} chip={chip_str} "
-        f"acc=({imu_acc_x:6d},{imu_acc_y:6d},{imu_acc_z:6d}) "
-        f"gyro=({imu_gyro_x:6d},{imu_gyro_y:6d},{imu_gyro_z:6d}) "
-        f"odom=(x={odom_x_m: .3f} m, y={odom_y_m: .3f} m, yaw={odom_heading_rad: .3f} rad / {heading_deg: .1f} deg)"
-    )
+    return f"odom=(x={odom_x_m: .3f} m, y={odom_y_m: .3f} m, yaw={odom_heading_rad: .3f} rad / {heading_deg: .1f} deg)"
 
 
 def main() -> int:

@@ -5,7 +5,6 @@
 #include <GyverMotor2.h>
 #include <uPID.h>
 
-#include "bmi270_spi.h"
 #include "control_protocol.h"
 #include "encoder.h"
 #include "motor_interface.h"
@@ -27,9 +26,6 @@ uPID angular_pid(I_SATURATE, kControlPeriodMs);
 uPID left_motor_pid(I_SATURATE | D_INPUT, kControlPeriodMs);
 uPID right_motor_pid(I_SATURATE | D_INPUT, kControlPeriodMs);
 
-Bmi270Spi imu;
-Bmi270Spi::Sample imu_sample = {0, 0, 0, 0, 0, 0};
-
 ControlPacket command_packet = {0.0F, 0.0F};
 TelemetryPacket telemetry_packet = {};
 
@@ -39,11 +35,6 @@ uint32_t last_command_ms = 0;
 float odom_x_m = 0.0f;
 float odom_y_m = 0.0f;
 float odom_heading_rad = 0.0f;
-
-float imu_gyro_z_bias_rad_s = 0.0f;
-float imu_gyro_z_bias_accum_rad_s = 0.0f;
-uint16_t imu_gyro_z_bias_samples = 0;
-bool imu_gyro_z_bias_ready = false;
 
 void leftEncoderISR() {
     left_encoder.handleInterrupt();
@@ -83,11 +74,6 @@ float wrapAngleRad(float angle) {
     return angle;
 }
 
-float rawGyroToRadS(int16_t raw_gyro) {
-    const float deg_per_sec = static_cast<float>(raw_gyro) * kImuGyroDpsPerLsb;
-    return deg_per_sec * (kPi / 180.0f);
-}
-
 void configurePid(uPID& pid, float kp, float ki, float kd, float out_min, float out_max) {
     pid.setKp(kp);
     pid.setKi(ki);
@@ -114,8 +100,6 @@ void configureHardware() {
     attachInterrupt(digitalPinToInterrupt(LEFT_ENC_DT), leftEncoderISR, CHANGE);
     attachInterrupt(digitalPinToInterrupt(RIGHT_ENC_CLK), rightEncoderISR, CHANGE);
     attachInterrupt(digitalPinToInterrupt(RIGHT_ENC_DT), rightEncoderISR, CHANGE);
-
-    imu.begin(kImuSpiCsPin, kImuSpiClockHz);
 }
 
 void readLatestCommand() {
@@ -149,32 +133,8 @@ void runControlCycle() {
     const float current_linear_mps = 0.5f * (current_left_wheel_mps + current_right_wheel_mps);
     const float current_angular_rps = (current_right_wheel_mps - current_left_wheel_mps) / kTrackWidthM;
 
-    bool imu_valid = false;
-    float imu_gyro_z_rad_s = 0.0f;
-    float fused_angular_rps = current_angular_rps;
-
-    if (imu.readSample(imu_sample)) {
-        imu_valid = true;
-        imu_gyro_z_rad_s = rawGyroToRadS(imu_sample.gyro_z);
-
-        if (!imu_gyro_z_bias_ready) {
-            imu_gyro_z_bias_accum_rad_s += imu_gyro_z_rad_s;
-            ++imu_gyro_z_bias_samples;
-            if (imu_gyro_z_bias_samples >= kImuGyroBiasSampleCount) {
-                imu_gyro_z_bias_rad_s = imu_gyro_z_bias_accum_rad_s / static_cast<float>(imu_gyro_z_bias_samples);
-                imu_gyro_z_bias_ready = true;
-            }
-        }
-
-        const float imu_gyro_z_corrected_rad_s =
-            imu_gyro_z_rad_s - (imu_gyro_z_bias_ready ? imu_gyro_z_bias_rad_s : 0.0f);
-        const float encoder_weight = clampFloat(kOdomYawRateEncoderWeight, 0.0f, 1.0f);
-        const float imu_weight = 1.0f - encoder_weight;
-        fused_angular_rps = encoder_weight * current_angular_rps + imu_weight * imu_gyro_z_corrected_rad_s;
-    }
-
     // Midpoint integration improves accuracy versus pure Euler for curved motion.
-    const float delta_heading = fused_angular_rps * kControlPeriodS;
+    const float delta_heading = current_angular_rps * kControlPeriodS;
     const float heading_mid = odom_heading_rad + 0.5f * delta_heading;
     const float delta_s = current_linear_mps * kControlPeriodS;
     odom_x_m += delta_s * cosf(heading_mid);
@@ -208,24 +168,6 @@ void runControlCycle() {
     left_motor.runSpeed(left_pwm);
     right_motor.runSpeed(right_pwm);
 
-    if (imu_valid) {
-        telemetry_packet.imu_acc_x = imu_sample.acc_x;
-        telemetry_packet.imu_acc_y = imu_sample.acc_y;
-        telemetry_packet.imu_acc_z = imu_sample.acc_z;
-        telemetry_packet.imu_gyro_x = imu_sample.gyro_x;
-        telemetry_packet.imu_gyro_y = imu_sample.gyro_y;
-        telemetry_packet.imu_gyro_z = imu_sample.gyro_z;
-    } else {
-        telemetry_packet.imu_acc_x = 0;
-        telemetry_packet.imu_acc_y = 0;
-        telemetry_packet.imu_acc_z = 0;
-        telemetry_packet.imu_gyro_x = 0;
-        telemetry_packet.imu_gyro_y = 0;
-        telemetry_packet.imu_gyro_z = 0;
-    }
-
-    telemetry_packet.imu_online = imu.isOnline() ? 1U : 0U;
-    telemetry_packet.imu_chip_id = imu.chipId();
     telemetry_packet.odom_x_m = odom_x_m;
     telemetry_packet.odom_y_m = odom_y_m;
     telemetry_packet.odom_heading_rad = odom_heading_rad;
