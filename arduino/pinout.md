@@ -12,20 +12,20 @@ This document defines the pin mapping used by the current robot firmware on Ardu
 
 | Subsystem | Signal | Arduino Pin | Direction | Notes |
 |---|---|---:|---|---|
-| Motor Driver (TB6612FNG) | LEFT_AI1 | D10 | Output | Left motor direction pin 1 |
-| Motor Driver (TB6612FNG) | LEFT_AI2 | D11 | Output | Left motor direction pin 2 |
-| Motor Driver (TB6612FNG) | LEFT_PWMA | D6 | Output (PWM) | Left motor PWM |
-| Motor Driver (TB6612FNG) | RIGHT_BI1 | D8 | Output | Right motor direction pin 1 |
-| Motor Driver (TB6612FNG) | RIGHT_BI2 | D9 | Output | Right motor direction pin 2 |
-| Motor Driver (TB6612FNG) | RIGHT_PWMB | D5 | Output (PWM) | Right motor PWM |
+| Motor Driver (TB6612FNG) | LEFT_AI1 | D8 | Output | Left motor direction pin 1 |
+| Motor Driver (TB6612FNG) | LEFT_AI2 | D9 | Output | Left motor direction pin 2 |
+| Motor Driver (TB6612FNG) | LEFT_PWMA | D12 | Output (PWM) | Left motor PWM |
+| Motor Driver (TB6612FNG) | RIGHT_BI1 | D10 | Output | Right motor direction pin 1 |
+| Motor Driver (TB6612FNG) | RIGHT_BI2 | D11 | Output | Right motor direction pin 2 |
+| Motor Driver (TB6612FNG) | RIGHT_PWMB | D13 | Output (PWM) | Right motor PWM |
 | Left Encoder | LEFT_ENC_CLK | D2 | Input + External Interrupt | Quadrature channel A |
 | Left Encoder | LEFT_ENC_DT | D3 | Input + External Interrupt | Quadrature channel B |
-| Right Encoder | RIGHT_ENC_CLK | D18 | Input + External Interrupt | Quadrature channel A |
-| Right Encoder | RIGHT_ENC_DT | D19 | Input + External Interrupt | Quadrature channel B |
-| BMI270 IMU (SPI) | IMU_CS | D53 | Output | Chip select (SPI SS pin) |
+| Right Encoder | RIGHT_ENC_CLK | D4 | Input + External Interrupt | Quadrature channel A |
+| Right Encoder | RIGHT_ENC_DT | D5 | Input + External Interrupt | Quadrature channel B |
+<!-- | BMI270 IMU (SPI) | IMU_CS | D53 | Output | Chip select (SPI SS pin) |
 | BMI270 IMU (SPI) | IMU_MOSI | D51 | Output | SPI MOSI (hardware SPI) |
 | BMI270 IMU (SPI) | IMU_MISO | D50 | Input | SPI MISO (hardware SPI) |
-| BMI270 IMU (SPI) | IMU_SCK | D52 | Output | SPI clock (hardware SPI) |
+| BMI270 IMU (SPI) | IMU_SCK | D52 | Output | SPI clock (hardware SPI) | -->
 | Host Serial Telemetry/Control | UART0_RX | D0 | Input | USB serial bridge to host TX |
 | Host Serial Telemetry/Control | UART0_TX | D1 | Output | USB serial bridge to host RX |
 
