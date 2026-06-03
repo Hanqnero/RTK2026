@@ -27,10 +27,8 @@ This document defines the pin mapping used by the current robot firmware on Ardu
 | Sonar | SONAR_TRIG_PIN | D39 | Output | Trigger pulse |
 | Sonar | SONAR_ECHO_PIN | D41 | Input | Echo pulse |
 | Sonar | SONAR_GND_PIN | D43 | Output | Sensor GND driven LOW |
-<!-- | BMI270 IMU (SPI) | IMU_CS | D53 | Output | Chip select (SPI SS pin) |
-| BMI270 IMU (SPI) | IMU_MOSI | D51 | Output | SPI MOSI (hardware SPI) |
-| BMI270 IMU (SPI) | IMU_MISO | D50 | Input | SPI MISO (hardware SPI) |
-| BMI270 IMU (SPI) | IMU_SCK | D52 | Output | SPI clock (hardware SPI) | -->
+| BMI270 IMU (I2C) | IMU_SDA | D20 / SDA | Bidirectional | I2C data |
+| BMI270 IMU (I2C) | IMU_SCL | D21 / SCL | Output | I2C clock |
 | Host Serial Telemetry/Control | UART0_RX | D0 | Input | USB serial bridge to host TX |
 | Host Serial Telemetry/Control | UART0_TX | D1 | Output | USB serial bridge to host RX |
 
@@ -54,30 +52,30 @@ This document defines the pin mapping used by the current robot firmware on Ardu
 - When a valid sonar reading is below the threshold, firmware commands both motors to zero.
 - D37 powers sensor VCC HIGH and D43 provides sensor GND LOW.
 
-### BMI270 SPI
+### BMI270 I2C
 
-- SPI bus uses Arduino Mega hardware SPI pins:
-  - MISO D50, MOSI D51, SCK D52, SS D53
-- IMU CS is assigned to D53.
-- SPI clock configured in firmware: 1 MHz.
-- Keep D53 configured as output to preserve Mega master SPI mode.
+- I2C bus uses Arduino Mega hardware I2C pins:
+  - SDA D20, SCL D21
+- I2C clock configured in BMI270 test firmware: 400 kHz.
+- BMI270 address with `SDO` tied to GND: `0x68`.
 
 IMU board header mapping (module shown in image, silk labels left->right: `VCC`, `GND`, `SCL`, `SDA`, `SDO`, `CS`, `INT1`, `INT2`):
 
 | IMU board pin | Firmware signal name | Arduino Mega pin | Required |
 |---|---|---:|---|
-| VCC | IMU power | 3V3 or 5V (module-dependent) | Yes |
+| VCC | IMU power | 3.3V | Yes |
 | GND | GND | GND | Yes |
-| SCL | IMU_SCK | D52 | Yes |
-| SDA | IMU_MOSI | D51 | Yes |
-| SDO | IMU_MISO | D50 | Yes |
-| CS | IMU_CS | D53 | Yes |
+| SCL | IMU_SCL | D21 / SCL | Yes |
+| SDA | IMU_SDA | D20 / SDA | Yes |
+| SDO | Address select | GND | Yes |
+| CS | I2C mode select | 3.3V | Yes |
 | INT1 | IMU_INT1 | Not used by current firmware | No |
 | INT2 | IMU_INT2 | Not used by current firmware | No |
 
 Notes:
-- On this module, `SCL`/`SDA` are shared-function labels; in SPI mode they map to clock and controller->sensor data respectively.
-- `SDO` is sensor->controller data (MISO).
+- The tested module works as BMI270 over I2C at address `0x68`.
+- `CS` must be held HIGH for I2C mode.
+- `SDO` selects the I2C address; tie it to GND for `0x68`.
 - If interrupts are needed later, connect `INT1` and/or `INT2` to free external-interrupt-capable Mega pins and extend firmware.
 
 ### Serial Link
@@ -87,7 +85,7 @@ Notes:
 
 ## Reserved/Used Pins Summary
 
-- Used digital pins: D0, D1, D2, D3, D8, D9, D13, D18, D19, D22, D24, D26, D28, D37, D39, D41, D43, D50, D51, D52, D53
+- Used digital pins: D0, D1, D2, D3, D8, D9, D13, D18, D19, D20, D21, D22, D24, D26, D28, D37, D39, D41, D43
 - Unused digital pins: all others (available for future expansion)
 - Analog pins A0-A15: currently unused
 
@@ -95,7 +93,7 @@ Notes:
 
 - Use a common ground between Arduino, motor driver, encoders, and IMU.
 - Power motors from a suitable motor supply through TB6612FNG VM.
-- Power logic (TB6612 VCC and BMI270 VDD/VDDIO) according to sensor/driver voltage requirements.
+- Power TB6612 logic according to driver voltage requirements; power the BMI270 module from 3.3V.
 - Do not power motors directly from Arduino 5V rail.
 
 ## Change Control
