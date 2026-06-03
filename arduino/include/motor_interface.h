@@ -2,21 +2,39 @@
 
 #include <stdint.h>
 
+// TB6612FNG pin mapping.
+// Motor A (left): AI1, AI2, PWMA
+// Motor B (right): BI1, BI2, PWMB
+// BI1 and BI2 are direction selects and must not be HIGH at the same time.
 // Update these pins to match the actual Arduino Mega wiring.
-#define LEFT_LPWM 6
-#define LEFT_RPWM 7
-#define RIGHT_LPWM 4
-#define RIGHT_RPWM 5
+#define LEFT_AI1 22
+#define LEFT_AI2 24
+#define LEFT_PWMA 10
+
+#define RIGHT_BI1 26
+#define RIGHT_BI2 28
+#define RIGHT_PWMB 9
 
 #define LEFT_ENC_CLK 2
 #define LEFT_ENC_DT 3
 #define RIGHT_ENC_CLK 18
 #define RIGHT_ENC_DT 19
 
+#define SONAR_VCC_PIN 37
+#define SONAR_TRIG_PIN 39
+#define SONAR_ECHO_PIN 41
+#define SONAR_GND_PIN 43
+
 constexpr bool kLeftMotorReverse = false;
 constexpr bool kRightMotorReverse = false;
 constexpr bool kLeftEncoderReverse = false;
 constexpr bool kRightEncoderReverse = true;
+
+constexpr uint8_t kImuSpiCsPin = 53;
+constexpr uint32_t kImuSpiClockHz = 1000000UL;
+constexpr float kImuGyroDpsPerLsb = 500.0f / 32768.0f;
+constexpr float kOdomYawRateEncoderWeight = 0.7f;
+constexpr uint16_t kImuGyroBiasSampleCount = 50;
 
 constexpr uint32_t kSerialBaudRate = 115200;
 constexpr uint16_t kControlPeriodMs = 100;
@@ -50,3 +68,10 @@ constexpr float kAngularKd = 0.0f;
 constexpr float kMotorKp = 220.0f;
 constexpr float kMotorKi = 40.0f;
 constexpr float kMotorKd = 0.0f;
+
+constexpr float kMaxPwmDuty = 0.90f;
+constexpr float kMaxPwmCommand = 255.0f * kMaxPwmDuty;
+
+constexpr float kSonarStopThresholdCm = 20.0f;
+constexpr uint32_t kSonarEchoTimeoutUs = 25000UL;
+constexpr uint16_t kSonarSamplePeriodMs = 60;

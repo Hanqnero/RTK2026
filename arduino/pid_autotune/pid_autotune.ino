@@ -15,15 +15,19 @@
 */
 
 #include <sTune.h>
+#include <GyverMotor2.h>
 
 // ── что калибруем ───────────────────────────────
 #define TUNE_LEFT true   // true = левый, false = правый
 
-// ── пины ────────────────────────────────────────
-#define LEFT_RPWM   11
-#define LEFT_LPWM   10
-#define RIGHT_RPWM   8
-#define RIGHT_LPWM   9
+// ── пины TB6612 ─────────────────────────────────
+#define LEFT_AI1   10
+#define LEFT_AI2   11
+#define LEFT_PWMA   6
+
+#define RIGHT_BI1   8
+#define RIGHT_BI2   9
+#define RIGHT_PWMB  5
 
 // Физически провода перекрещены: левый мотор → пины 18/19, правый → 2/3
 #define LEFT_ENC_A  18
@@ -51,10 +55,12 @@ int32_t prev_count = 0;
 uint32_t prev_time = 0;
 
 // активные пины для выбранного мотора
-uint8_t active_rpwm = 0;
-uint8_t active_lpwm = 0;
 uint8_t active_enc_a = 0;
 uint8_t active_enc_b = 0;
+
+GyverMotor2<GM2::DIR_DIR_PWM> left_motor(LEFT_AI1, LEFT_AI2, LEFT_PWMA);
+GyverMotor2<GM2::DIR_DIR_PWM> right_motor(RIGHT_BI1, RIGHT_BI2, RIGHT_PWMB);
+GyverMotor2<GM2::DIR_DIR_PWM>* active_motor = &left_motor;
 
 // ── sTune ───────────────────────────────────────
 sTune tuner(&measured_tps, &pwm_output,
@@ -81,42 +87,26 @@ void enc_isr() {
 // ── управление мотором ──────────────────────────
 void set_pwm(float pwm) {
     int p = constrain((int)pwm, -255, 255);
-
-    if (p >= 0) {
-        analogWrite(active_rpwm, p);
-        analogWrite(active_lpwm, 0);
-    } else {
-        analogWrite(active_rpwm, 0);
-        analogWrite(active_lpwm, -p);
-    }
+    active_motor->runSpeed(p);
 }
 
 void stop_all() {
-    analogWrite(LEFT_RPWM,  0);
-    analogWrite(LEFT_LPWM,  0);
-    analogWrite(RIGHT_RPWM, 0);
-    analogWrite(RIGHT_LPWM, 0);
+    left_motor.runSpeed(0);
+    right_motor.runSpeed(0);
 }
 
 // ── setup ───────────────────────────────────────
 void setup() {
     Serial.begin(115200);
-
-    pinMode(LEFT_RPWM,  OUTPUT);
-    pinMode(LEFT_LPWM,  OUTPUT);
-    pinMode(RIGHT_RPWM, OUTPUT);
-    pinMode(RIGHT_LPWM, OUTPUT);
     stop_all();
 
     if (TUNE_LEFT) {
-        active_rpwm  = LEFT_RPWM;
-        active_lpwm  = LEFT_LPWM;
+        active_motor = &left_motor;
         active_enc_a = LEFT_ENC_A;
         active_enc_b = LEFT_ENC_B;
         Serial.println("Tuning LEFT motor");
     } else {
-        active_rpwm  = RIGHT_RPWM;
-        active_lpwm  = RIGHT_LPWM;
+        active_motor = &right_motor;
         active_enc_a = RIGHT_ENC_A;
         active_enc_b = RIGHT_ENC_B;
         Serial.println("Tuning RIGHT motor");

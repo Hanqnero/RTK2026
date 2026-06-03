@@ -5,19 +5,15 @@
 struct __attribute__((packed)) ControlPacket {
     float target_linear_mps;
     float target_angular_rps;
+    uint8_t debug_raw_encoder;
 };
 
 struct __attribute__((packed)) TelemetryPacket {
-    float target_linear_mps;
-    float target_angular_rps;
-    float current_linear_mps;
-    float current_angular_rps;
-    float target_left_wheel_mps;
-    float target_right_wheel_mps;
-    float current_left_wheel_mps;
-    float current_right_wheel_mps;
+    float odom_x_m;
+    float odom_y_m;
+    float odom_heading_rad;
+    int32_t raw_left_encoder_delta;
+    int32_t raw_right_encoder_delta;
     int16_t left_pwm;
     int16_t right_pwm;
-    int32_t left_count;
-    int32_t right_count;
 };

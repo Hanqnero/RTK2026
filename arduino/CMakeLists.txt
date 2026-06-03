@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.23)
 
 project(robot_control_interface LANGUAGES C CXX ASM)
 
+option(ROBOT_DIRECT_MOTOR_TEST "Build the direct motor test firmware instead of the PID controller" OFF)
+option(ROBOT_BMI270_TEST "Build the BMI270 I2C test firmware instead of the PID controller" OFF)
+
 set(MCU atmega2560)
 set(F_CPU 16000000UL)
 set(ARDUINO_BOARD_DEFINES
@@ -48,10 +51,26 @@ file(GLOB ARDUINO_CORE_SOURCES CONFIGURE_DEPENDS
     ${ARDUINO_VARIANT_DIR}/*.c
 )
 
-add_library(arduino_core STATIC ${ARDUINO_CORE_SOURCES})
+set(ARDUINO_LIBRARY_SOURCES)
+set(ARDUINO_LIBRARY_INCLUDE_DIRS)
+
+if(ROBOT_BMI270_TEST)
+    set(ARDUINO_WIRE_DIR ${ARDUINO_DIR}/libraries/Wire/src)
+    list(APPEND ARDUINO_LIBRARY_SOURCES
+        ${ARDUINO_WIRE_DIR}/Wire.cpp
+        ${ARDUINO_WIRE_DIR}/utility/twi.c
+    )
+    list(APPEND ARDUINO_LIBRARY_INCLUDE_DIRS
+        ${ARDUINO_WIRE_DIR}
+        ${ARDUINO_WIRE_DIR}/utility
+    )
+endif()
+
+add_library(arduino_core STATIC ${ARDUINO_CORE_SOURCES} ${ARDUINO_LIBRARY_SOURCES})
 target_include_directories(arduino_core PUBLIC
     ${ARDUINO_CORE_DIR}
     ${ARDUINO_VARIANT_DIR}
+    ${ARDUINO_LIBRARY_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${VENDOR_DIR}
     ${VENDOR_DIR}/GyverMotor2
@@ -78,12 +97,31 @@ set_target_properties(arduino_core PROPERTIES
     ARCHIVE_OUTPUT_NAME arduino_core
 )
 
-add_executable(${PROJECT_NAME}.elf
-    src/main.cpp
-    src/encoder.cpp
-)
+if(ROBOT_DIRECT_MOTOR_TEST AND ROBOT_BMI270_TEST)
+    message(FATAL_ERROR "Select only one test firmware option.")
+endif()
+
+if(ROBOT_DIRECT_MOTOR_TEST)
+    add_executable(${PROJECT_NAME}.elf
+        src/test/main_direct_motor_test.cpp
+        src/encoder.cpp
+        src/sonar.cpp
+    )
+elseif(ROBOT_BMI270_TEST)
+    add_executable(${PROJECT_NAME}.elf
+        src/test/main_bmi270_test.cpp
+        src/bmi270_i2c.cpp
+    )
+else()
+    add_executable(${PROJECT_NAME}.elf
+        src/main.cpp
+        src/encoder.cpp
+        src/sonar.cpp
+    )
+endif()
 target_include_directories(${PROJECT_NAME}.elf PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${ARDUINO_LIBRARY_INCLUDE_DIRS}
     ${VENDOR_DIR}
     ${VENDOR_DIR}/GyverMotor2
     ${VENDOR_DIR}/uPID
@@ -91,6 +129,12 @@ target_include_directories(${PROJECT_NAME}.elf PRIVATE
     ${VENDOR_DIR}/GyverIO/src
 )
 target_compile_definitions(${PROJECT_NAME}.elf PRIVATE ${ARDUINO_BOARD_DEFINES})
+if(ROBOT_DIRECT_MOTOR_TEST)
+    target_compile_definitions(${PROJECT_NAME}.elf PRIVATE ROBOT_DIRECT_MOTOR_TEST=1)
+endif()
+if(ROBOT_BMI270_TEST)
+    target_compile_definitions(${PROJECT_NAME}.elf PRIVATE ROBOT_BMI270_TEST=1)
+endif()
 target_compile_options(${PROJECT_NAME}.elf PRIVATE
     -mmcu=${MCU}
     -DF_CPU=${F_CPU}
