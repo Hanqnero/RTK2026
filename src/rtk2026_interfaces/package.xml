@@ -3,18 +3,14 @@
 <package format="3">
   <name>rtk2026_interfaces</name>
   <version>0.1.0</version>
-  <description>Custom ROS2 message definitions for RTK2026 robot</description>
-  <maintainer email="kamilisxakof@gmail.com">RTK2026</maintainer>
+  <description>Custom msg/srv for RTK2026</description>
+  <maintainer email="maintainer@example.com">RTK2026 Team</maintainer>
   <license>Apache-2.0</license>
-
   <buildtool_depend>ament_cmake</buildtool_depend>
-
   <depend>std_msgs</depend>
-
   <build_depend>rosidl_default_generators</build_depend>
   <exec_depend>rosidl_default_runtime</exec_depend>
   <member_of_group>rosidl_interface_packages</member_of_group>
-
   <export>
     <build_type>ament_cmake</build_type>
   </export>
