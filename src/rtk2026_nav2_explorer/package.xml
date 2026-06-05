@@ -4,7 +4,7 @@
   <version>0.1.0</version>
   <description>Frontier-based autonomous exploration (Nav2 + SLAM) for RTK2026.</description>
 
-  <maintainer email=""></maintainer>
+  <maintainer email="maintainer@example.com">RTK2026 Team</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

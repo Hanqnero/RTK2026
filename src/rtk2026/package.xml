@@ -4,7 +4,7 @@
   <name>rtk2026</name>
   <version>0.1.0</version>
   <description>Robot meta-package</description>
-  <maintainer email=""></maintainer>
+  <maintainer email="maintainer@example.com">RTK2026 Team</maintainer>
   <license>Apache-2.0</license>
   <exec_depend>rtk2026_description</exec_depend>
   <exec_depend>rtk2026_bringup</exec_depend>

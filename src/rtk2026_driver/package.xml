@@ -4,7 +4,7 @@
   <name>rtk2026_driver</name>
   <version>0.1.0</version>
   <description>Arduino serial bridge: encoder report publisher, motor command subscriber</description>
-  <maintainer email=""></maintainer>
+  <maintainer email="maintainer@example.com">RTK2026 Team</maintainer>
   <license>Apache-2.0</license>
   <depend>rclpy</depend>
   <depend>rtk2026_interfaces</depend>

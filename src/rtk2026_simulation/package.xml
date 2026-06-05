@@ -4,7 +4,7 @@
   <name>rtk2026_simulation</name>
   <version>0.1.0</version>
   <description>Simulation launch files for RTK2026 (diff_robot on track)</description>
-  <maintainer email=""></maintainer>
+  <maintainer email="maintainer@example.com">RTK2026 Team</maintainer>
   <license>Apache-2.0</license>
   <depend>launch</depend>
   <depend>launch_ros</depend>
