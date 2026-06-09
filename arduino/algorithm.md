@@ -15,6 +15,6 @@ uPID for PID controllers
 
 read their source code to learn how to use them
 
-motors are PWM-PWM controlled. Gearbox ratio is 10:0 and the maximum rpm is 960
+motors are PWM-PWM controlled. Gearbox ratio is 10:1 and the maximum rpm is 960
 
 One control cycle takes 100ms
