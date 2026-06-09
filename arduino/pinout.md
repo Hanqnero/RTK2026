@@ -12,39 +12,37 @@ This document defines the pin mapping used by the current robot firmware on Ardu
 
 | Subsystem | Signal | Arduino Pin | Direction | Notes |
 |---|---|---:|---|---|
-| Motor Driver (TB6612FNG) | LEFT_AI1 | D22 | Output | Left motor direction pin 1 |
-| Motor Driver (TB6612FNG) | LEFT_AI2 | D24 | Output | Left motor direction pin 2 |
-| Motor Driver (TB6612FNG) | LEFT_PWMA | D10 | Output (PWM) | Left motor PWM |
-| Motor Driver (TB6612FNG) | RIGHT_BI1 | D26 | Output | Right motor direction pin 1 |
-| Motor Driver (TB6612FNG) | RIGHT_BI2 | D28 | Output | Right motor direction pin 2 |
-| Motor Driver (TB6612FNG) | RIGHT_PWMB | D9 | Output (PWM) | Right motor PWM |
+| Motor Driver (dual PWM) | LEFT_PWM_A | D7 | Output (PWM) | Left motor PWM input A |
+| Motor Driver (dual PWM) | LEFT_PWM_B | D6 | Output (PWM) | Left motor PWM input B |
+| Motor Driver (dual PWM) | RIGHT_PWM_A | D5 | Output (PWM) | Right motor PWM input A |
+| Motor Driver (dual PWM) | RIGHT_PWM_B | D4 | Output (PWM) | Right motor PWM input B |
 | Status LED | LED_BUILTIN | D13 | Output | Blinks once per control loop cycle |
-| Left Encoder | LEFT_ENC_CLK | D2 | Input + External Interrupt | Quadrature channel A |
-| Left Encoder | LEFT_ENC_DT | D3 | Input + External Interrupt | Quadrature channel B |
-| Right Encoder | RIGHT_ENC_CLK | D18 | Input + External Interrupt | Quadrature channel A |
-| Right Encoder | RIGHT_ENC_DT | D19 | Input + External Interrupt | Quadrature channel B |
+| Left Encoder | LEFT_ENC_CLK | D18 | Input + External Interrupt | Quadrature channel A |
+| Left Encoder | LEFT_ENC_DT | D19 | Input + External Interrupt | Quadrature channel B |
+| Right Encoder | RIGHT_ENC_CLK | D20 | Input + External Interrupt | Quadrature channel A |
+| Right Encoder | RIGHT_ENC_DT | D21 | Input + External Interrupt | Quadrature channel B |
 | Sonar | SONAR_VCC_PIN | D37 | Output | Sensor VCC driven HIGH |
 | Sonar | SONAR_TRIG_PIN | D39 | Output | Trigger pulse |
 | Sonar | SONAR_ECHO_PIN | D41 | Input | Echo pulse |
 | Sonar | SONAR_GND_PIN | D43 | Output | Sensor GND driven LOW |
-| BMI270 IMU (I2C) | IMU_SDA | D20 / SDA | Bidirectional | I2C data |
-| BMI270 IMU (I2C) | IMU_SCL | D21 / SCL | Output | I2C clock |
 | Host Serial Telemetry/Control | UART0_RX | D0 | Input | USB serial bridge to host TX |
 | Host Serial Telemetry/Control | UART0_TX | D1 | Output | USB serial bridge to host RX |
 
 ## Interface Requirements
 
-### TB6612FNG
+### Motor Driver
 
-- BI1 and BI2 for a motor must not be driven HIGH at the same time.
-- Left motor uses AI1/AI2/PWMA.
-- Right motor uses BI1/BI2/PWMB.
+- Firmware uses GyverMotor2 `GM2::PWM_PWM_SPEED`.
+- Each motor uses two PWM-capable outputs. For positive commands, one PWM input receives duty while the opposite input is held at zero; negative commands swap the active input.
+- Left motor uses LEFT_PWM_A/LEFT_PWM_B.
+- Right motor uses RIGHT_PWM_A/RIGHT_PWM_B.
+- Previous DIR_DIR_PWM motor pins D22, D24, D26, D28, D9, and D10 are no longer used by the motor driver.
 
 ### Encoders
 
 - All encoder inputs are configured as INPUT_PULLUP in firmware.
 - Current external interrupt mapping on Mega supports these pins:
-  - D2, D3, D18, D19
+  - D18, D19, D20, D21
 
 ### Sonar
 
@@ -54,6 +52,7 @@ This document defines the pin mapping used by the current robot firmware on Ardu
 
 ### BMI270 I2C
 
+- The main motor-control firmware now reserves D20/D21 for the right encoder, so BMI270 I2C wiring on D20/D21 applies only to the standalone BMI270 test firmware or to alternate wiring/builds.
 - I2C bus uses Arduino Mega hardware I2C pins:
   - SDA D20, SCL D21
 - I2C clock configured in BMI270 test firmware: 400 kHz.
@@ -85,7 +84,7 @@ Notes:
 
 ## Reserved/Used Pins Summary
 
-- Used digital pins: D0, D1, D2, D3, D8, D9, D13, D18, D19, D20, D21, D22, D24, D26, D28, D37, D39, D41, D43
+- Used digital pins: D0, D1, D4, D5, D6, D7, D13, D18, D19, D20, D21, D37, D39, D41, D43
 - Unused digital pins: all others (available for future expansion)
 - Analog pins A0-A15: currently unused
 
