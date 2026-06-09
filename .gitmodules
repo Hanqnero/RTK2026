@@ -1,0 +1,9 @@
+[submodule "src/turtlebot3_autorace"]
+	path = src/turtlebot3_autorace
+	url = https://github.com/ROBOTIS-GIT/turtlebot3_autorace.git
+[submodule "vendor/Autonomous-Driving-Turtlebot3"]
+	path = vendor/Autonomous-Driving-Turtlebot3
+	url = https://github.com/muttequrashi/Autonomous-Driving-Turtlebot3.git
+[submodule "arduino/vendor/MeArm-Arduino"]
+	path = arduino/vendor/MeArm-Arduino
+	url = https://github.com/MeArm/MeArm-Arduino
