@@ -51,17 +51,6 @@ constexpr float kMaxMotorRpm = 960.0f;
 constexpr float kMaxLinearCommandMps = 1.5f;
 constexpr float kMaxAngularCommandRadS = 6.0f;
 
-constexpr float kMaxLinearCorrectionMps = 1.0f;
-constexpr float kMaxAngularCorrectionRadS = 4.0f;
-
-constexpr float kLinearKp = 0.6f;
-constexpr float kLinearKi = 0.2f;
-constexpr float kLinearKd = 0.0f;
-
-constexpr float kAngularKp = 0.8f;
-constexpr float kAngularKi = 0.15f;
-constexpr float kAngularKd = 0.0f;
-
 constexpr float kMotorKp = 220.0f;
 constexpr float kMotorKi = 40.0f;
 constexpr float kMotorKd = 0.0f;
