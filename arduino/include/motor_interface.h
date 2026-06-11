@@ -6,16 +6,16 @@
 // Motor A (left): PWM A, PWM B
 // Motor B (right): PWM A, PWM B
 // Update these pins to match the actual Arduino Mega wiring.
+
 #define LEFT_PWM_A 7
 #define LEFT_PWM_B 6
-
 #define RIGHT_PWM_A 5
 #define RIGHT_PWM_B 4
 
-#define LEFT_ENC_CLK 18
-#define LEFT_ENC_DT 19
-#define RIGHT_ENC_CLK 20
-#define RIGHT_ENC_DT 21
+#define LEFT_ENC_CLK 20
+#define LEFT_ENC_DT 2
+#define RIGHT_ENC_CLK 21
+#define RIGHT_ENC_DT 3
 
 #define SONAR_VCC_PIN 37
 #define SONAR_TRIG_PIN 39
@@ -24,8 +24,8 @@
 
 constexpr bool kLeftMotorReverse = false;
 constexpr bool kRightMotorReverse = false;
-constexpr bool kLeftEncoderReverse = false;
-constexpr bool kRightEncoderReverse = true;
+constexpr bool kLeftEncoderReverse = true;
+constexpr bool kRightEncoderReverse = false;
 
 constexpr uint8_t kImuSpiCsPin = 53;
 constexpr uint32_t kImuSpiClockHz = 1000000UL;
@@ -37,16 +37,16 @@ constexpr uint32_t kSerialBaudRate = 115200;
 constexpr uint16_t kControlPeriodMs = 100;
 constexpr uint16_t kCommandTimeoutMs = 500;
 
-constexpr float kWheelRadiusM = 0.06f;
-constexpr float kTrackWidthM = 0.30f;
+constexpr float kWheelRadiusM = 0.024f;
+constexpr float kTrackWidthM = 0.040f;
 
 // Effective encoder counts per motor revolution after quadrature decoding.
-constexpr float kEncoderCountsPerMotorRev = 1024.0f;
+constexpr float kEncoderCountsPerMotorRev = 207.0f;
 
 // The requested spec gearbox ratio is 10:1
 // Set to 1.0 if the encoder is mounted on the wheel/output shaft instead.
-constexpr float kGearboxRatio = 10.0f;
-constexpr float kMaxMotorRpm = 960.0f;
+constexpr float kGearboxRatio = 18.1f;
+constexpr float kMaxMotorRpm = 333.0f;
 
 constexpr float kMaxLinearCommandMps = 1.5f;
 constexpr float kMaxAngularCommandRadS = 6.0f;
