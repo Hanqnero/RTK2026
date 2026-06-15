@@ -57,7 +57,7 @@ cmake --build build --target flash
 Configure with custom upload port:
 
 ```bash
-cmake --preset macos-system -DUPLOAD_PORT=/dev/cu.usbmodem14101
+cmake --preset macos-system -DUPLOAD_PORT=/dev/cu.usbserial-110
 ```
 
 ## Notes

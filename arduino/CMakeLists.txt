@@ -4,6 +4,7 @@ project(robot_control_interface LANGUAGES C CXX ASM)
 
 option(ROBOT_DIRECT_MOTOR_TEST "Build the direct motor test firmware instead of the PID controller" OFF)
 option(ROBOT_BMI270_TEST "Build the BMI270 I2C test firmware instead of the PID controller" OFF)
+option(ROBOT_MEARM_PCA9685_TEST "Build the MeArm PCA9685 I2C test firmware instead of the PID controller" OFF)
 
 set(MCU atmega2560)
 set(F_CPU 16000000UL)
@@ -54,7 +55,7 @@ file(GLOB ARDUINO_CORE_SOURCES CONFIGURE_DEPENDS
 set(ARDUINO_LIBRARY_SOURCES)
 set(ARDUINO_LIBRARY_INCLUDE_DIRS)
 
-if(ROBOT_BMI270_TEST)
+if(ROBOT_BMI270_TEST OR ROBOT_MEARM_PCA9685_TEST)
     set(ARDUINO_WIRE_DIR ${ARDUINO_DIR}/libraries/Wire/src)
     list(APPEND ARDUINO_LIBRARY_SOURCES
         ${ARDUINO_WIRE_DIR}/Wire.cpp
@@ -77,6 +78,7 @@ target_include_directories(arduino_core PUBLIC
     ${VENDOR_DIR}/uPID
     ${VENDOR_DIR}/uEncoder/src
     ${VENDOR_DIR}/GyverIO/src
+    ${VENDOR_DIR}/MeArm-Arduino
 )
 target_compile_definitions(arduino_core PUBLIC ${ARDUINO_BOARD_DEFINES})
 target_compile_options(arduino_core PUBLIC
@@ -97,7 +99,9 @@ set_target_properties(arduino_core PROPERTIES
     ARCHIVE_OUTPUT_NAME arduino_core
 )
 
-if(ROBOT_DIRECT_MOTOR_TEST AND ROBOT_BMI270_TEST)
+if((ROBOT_DIRECT_MOTOR_TEST AND ROBOT_BMI270_TEST) OR
+   (ROBOT_DIRECT_MOTOR_TEST AND ROBOT_MEARM_PCA9685_TEST) OR
+   (ROBOT_BMI270_TEST AND ROBOT_MEARM_PCA9685_TEST))
     message(FATAL_ERROR "Select only one test firmware option.")
 endif()
 
@@ -111,6 +115,13 @@ elseif(ROBOT_BMI270_TEST)
     add_executable(${PROJECT_NAME}.elf
         src/test/main_bmi270_test.cpp
         src/bmi270_i2c.cpp
+    )
+elseif(ROBOT_MEARM_PCA9685_TEST)
+    add_executable(${PROJECT_NAME}.elf
+        src/test/main_mearm_pca9685_test.cpp
+        src/pca9685_servo_output.cpp
+        vendor/MeArm-Arduino/MeArm.cpp
+        vendor/MeArm-Arduino/ik.cpp
     )
 else()
     add_executable(${PROJECT_NAME}.elf
@@ -127,6 +138,7 @@ target_include_directories(${PROJECT_NAME}.elf PRIVATE
     ${VENDOR_DIR}/uPID
     ${VENDOR_DIR}/uEncoder/src
     ${VENDOR_DIR}/GyverIO/src
+    ${VENDOR_DIR}/MeArm-Arduino
 )
 target_compile_definitions(${PROJECT_NAME}.elf PRIVATE ${ARDUINO_BOARD_DEFINES})
 if(ROBOT_DIRECT_MOTOR_TEST)
@@ -134,6 +146,9 @@ if(ROBOT_DIRECT_MOTOR_TEST)
 endif()
 if(ROBOT_BMI270_TEST)
     target_compile_definitions(${PROJECT_NAME}.elf PRIVATE ROBOT_BMI270_TEST=1)
+endif()
+if(ROBOT_MEARM_PCA9685_TEST)
+    target_compile_definitions(${PROJECT_NAME}.elf PRIVATE ROBOT_MEARM_PCA9685_TEST=1)
 endif()
 target_compile_options(${PROJECT_NAME}.elf PRIVATE
     -mmcu=${MCU}

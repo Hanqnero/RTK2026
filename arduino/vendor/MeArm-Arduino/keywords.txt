@@ -1,0 +1,28 @@
+#######################################
+# Syntax Coloring Map For MeArm library
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+MeArm	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+end	KEYWORD2
+openClaw	KEYWORD2
+closeClaw	KEYWORD2
+moveTo	KEYWORD2
+snapTo	KEYWORD2
+moveToXYZ	KEYWORD2
+snapToXYZ	KEYWORD2
+isReachable	KEYWORD2
+getX	KEYWORD2
+getY	KEYWORD2
+getZ	KEYWORD2
+getR	KEYWORD2
+getTheta	KEYWORD2
