@@ -39,4 +39,6 @@ COPY docker/scripts /scripts
 RUN chmod +x /scripts/*.sh
 
 COPY src /workspace/src
-RUN . /opt/ros/jazzy/setup.sh && colcon build --symlink-install
+RUN . /opt/ros/jazzy/setup.sh && \
+    export CMAKE_BUILD_PARALLEL_LEVEL=1 MAKEFLAGS=-j1 && \
+    colcon build --symlink-install
