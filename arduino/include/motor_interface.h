@@ -22,8 +22,8 @@
 #define SONAR_ECHO_PIN 41
 #define SONAR_GND_PIN 43
 
-constexpr bool kLeftMotorReverse = false;
-constexpr bool kRightMotorReverse = false;
+constexpr bool kLeftMotorReverse = true;
+constexpr bool kRightMotorReverse = true;
 constexpr bool kLeftEncoderReverse = true;
 constexpr bool kRightEncoderReverse = false;
 
@@ -41,7 +41,7 @@ constexpr float kWheelRadiusM = 0.024f;
 constexpr float kTrackWidthM = 0.040f;
 
 // Effective encoder counts per motor revolution after quadrature decoding.
-constexpr float kEncoderCountsPerMotorRev = 207.0f;
+constexpr float kEncoderCountsPerMotorRev = 1400.0f;
 
 // The requested spec gearbox ratio is 10:1
 // Set to 1.0 if the encoder is mounted on the wheel/output shaft instead.

@@ -16,8 +16,6 @@ public:
     int64_t readCount() const;
 
 private:
-    static int8_t directionFromState(uEncoderVirt::State state);
-
     uEncoder _encoder;
     const bool _reverse;
     volatile int32_t _delta;
