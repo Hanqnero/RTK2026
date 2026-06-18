@@ -13,12 +13,11 @@ void EncoderCounter::begin() {
 
 void EncoderCounter::handleInterrupt() {
     _encoder.tickISR();
-    const uEncoderVirt::State state = _encoder.getState();
-    const int8_t dir = directionFromState(state);
-    if (!dir) {
+    if (!_encoder.turn()) {
         return;
     }
 
+    const int8_t dir = _encoder.dir();
     _delta += dir;
     _count += dir;
 }
@@ -34,22 +33,4 @@ int32_t EncoderCounter::readAndResetDelta() {
 int64_t EncoderCounter::readCount() const {
     // Use volatile read to safely access shared counter
     return _count;
-}
-
-int8_t EncoderCounter::directionFromState(uEncoderVirt::State state) {
-    switch (state) {
-        case uEncoderVirt::State::Right:
-        case uEncoderVirt::State::RightFast:
-        case uEncoderVirt::State::RightHold:
-        case uEncoderVirt::State::RightHoldFast:
-            return 1;
-        case uEncoderVirt::State::Left:
-        case uEncoderVirt::State::LeftFast:
-        case uEncoderVirt::State::LeftHold:
-        case uEncoderVirt::State::LeftHoldFast:
-            return -1;
-        case uEncoderVirt::State::Idle:
-        default:
-            return 0;
-    }
 }
