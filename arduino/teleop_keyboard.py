@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Keyboard teleoperation for the Arduino control interface.
+"""Keyboard teleoperation for the Arduino control interface in src/main.cpp.
 
 Arrow keys publish velocity commands as packed little-endian values:
     ControlPacket: <ffB = (target_linear_mps, target_angular_rps, debug_raw_encoder)
+
+The firmware also emits TelemetryPacket records continuously; this script drains
+them so the host serial input buffer does not fill while teleoperating.
 
 Usage example:
   python3 teleop_keyboard.py --port /dev/cu.usbserial-10
@@ -28,6 +31,7 @@ except ImportError as exc:  # pragma: no cover
 
 
 CONTROL_PACKET = struct.Struct("<ffB")
+TELEMETRY_PACKET = struct.Struct("<fffiihh")
 
 
 @dataclass
@@ -43,6 +47,12 @@ class LogSink:
     writer: csv.writer
 
 
+@dataclass
+class SerialStats:
+    rx_bytes: int = 0
+    last_key_code: int = -1
+
+
 def open_log_sink(path: Path) -> LogSink:
     log_file = path.open("w", newline="")
     writer = csv.writer(log_file)
@@ -55,6 +65,7 @@ def open_log_sink(path: Path) -> LogSink:
             "angular_rps",
             "debug_raw_encoder",
             "packet_hex",
+            "rx_bytes",
         ]
     )
     return LogSink(file=log_file, writer=writer)
@@ -96,8 +107,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--deadman",
         type=float,
-        default=0.25,
-        help="Seconds until command auto-resets to zero without key repeat (default: 0.25)",
+        default=0.45,
+        help="Seconds until command auto-resets to zero without key repeat; 0 latches until SPACE (default: 0.45)",
+    )
+    parser.add_argument(
+        "--startup-delay",
+        type=float,
+        default=1.0,
+        help="Seconds to wait after opening serial before sending commands (default: 1.0)",
     )
     parser.add_argument(
         "--debug-raw-encoder",
@@ -116,12 +133,28 @@ def encode_command(cmd: Command) -> bytes:
     return CONTROL_PACKET.pack(cmd.linear_mps, cmd.angular_rps, cmd.debug_raw_encoder)
 
 
+def drain_telemetry(ser: serial.Serial) -> int:
+    waiting = ser.in_waiting
+    if waiting:
+        ser.read(waiting)
+    return waiting
+
+
+def write_command(ser: serial.Serial, cmd: Command, stats: SerialStats) -> bytes:
+    packet = encode_command(cmd)
+    ser.write(packet)
+    ser.flush()
+    stats.rx_bytes += drain_telemetry(ser)
+    return packet
+
+
 def log_command(
     sink: LogSink | None,
     event: str,
     key_code: int,
     cmd: Command,
     packet: bytes,
+    stats: SerialStats,
 ) -> None:
     if sink is None:
         return
@@ -135,6 +168,7 @@ def log_command(
             f"{cmd.angular_rps:.6f}",
             str(cmd.debug_raw_encoder),
             packet.hex(),
+            str(stats.rx_bytes),
         ]
     )
     sink.file.flush()
@@ -228,7 +262,11 @@ def command_from_key(
 
 
 def draw_ui(
-    stdscr: curses.window, cmd: Command, args: argparse.Namespace, connected: bool
+    stdscr: curses.window,
+    cmd: Command,
+    args: argparse.Namespace,
+    connected: bool,
+    stats: SerialStats,
 ) -> None:
     stdscr.erase()
     stdscr.addstr(0, 0, "Teleop")
@@ -251,6 +289,8 @@ def draw_ui(
     stdscr.addstr(
         9, 0, f"Debug raw encoder: {'on' if cmd.debug_raw_encoder else 'off'}"
     )
+    stdscr.addstr(10, 0, f"UART RX bytes drained: {stats.rx_bytes}")
+    stdscr.addstr(11, 0, f"Last key code: {stats.last_key_code}")
     stdscr.refresh()
 
 
@@ -259,6 +299,7 @@ def teleop_loop(
     ser: serial.Serial,
     args: argparse.Namespace,
     log_sink: LogSink | None,
+    stats: SerialStats,
 ) -> int:
     curses.curs_set(0)
     stdscr.nodelay(True)
@@ -279,24 +320,24 @@ def teleop_loop(
         if key != -1:
             cmd, should_quit = command_from_key(key, args.linear, args.angular, cmd)
             last_key_time = now
+            stats.last_key_code = key
+            packet = encode_command(cmd)
+            log_command(log_sink, "key", key, cmd, packet, stats)
             if should_quit:
                 cmd = Command(debug_raw_encoder=cmd.debug_raw_encoder)
-                packet = encode_command(cmd)
-                ser.write(packet)
-                ser.flush()
-                log_command(log_sink, "quit", key, cmd, packet)
+                packet = write_command(ser, cmd, stats)
+                log_command(log_sink, "quit", key, cmd, packet, stats)
                 return 0
 
         if deadman > 0.0 and (now - last_key_time) > deadman:
             cmd = Command(debug_raw_encoder=cmd.debug_raw_encoder)
 
         if now >= next_publish:
-            packet = encode_command(cmd)
-            ser.write(packet)
+            packet = write_command(ser, cmd, stats)
             next_publish = now + publish_period
-            log_command(log_sink, "tx", -1, cmd, packet)
+            log_command(log_sink, "tx", -1, cmd, packet, stats)
 
-        draw_ui(stdscr, cmd, args, connected=True)
+        draw_ui(stdscr, cmd, args, connected=True, stats=stats)
         time.sleep(0.005)
 
 
@@ -304,31 +345,32 @@ def main() -> int:
     args = parse_args()
 
     try:
-        ser = serial.Serial(args.port, args.baud, timeout=0)
+        ser = serial.Serial(args.port, args.baud, timeout=0, write_timeout=0.2)
     except serial.SerialException as exc:
         print(f"Failed to open serial port {args.port}: {exc}", file=sys.stderr)
         return 1
 
     log_sink = open_log_sink(args.log) if args.log else None
+    stats = SerialStats()
+
+    time.sleep(max(args.startup_delay, 0.0))
+    ser.reset_input_buffer()
+    ser.reset_output_buffer()
 
     # Reset command stream to stop on startup.
     startup_cmd = Command(debug_raw_encoder=1 if args.debug_raw_encoder else 0)
-    startup_packet = encode_command(startup_cmd)
-    ser.write(startup_packet)
-    ser.flush()
-    log_command(log_sink, "startup", -1, startup_cmd, startup_packet)
+    startup_packet = write_command(ser, startup_cmd, stats)
+    log_command(log_sink, "startup", -1, startup_cmd, startup_packet, stats)
 
     try:
-        return curses.wrapper(lambda stdscr: teleop_loop(stdscr, ser, args, log_sink))
+        return curses.wrapper(lambda stdscr: teleop_loop(stdscr, ser, args, log_sink, stats))
     except KeyboardInterrupt:
         return 0
     finally:
         try:
             stop_cmd = Command(debug_raw_encoder=startup_cmd.debug_raw_encoder)
-            stop_packet = encode_command(stop_cmd)
-            ser.write(stop_packet)
-            ser.flush()
-            log_command(log_sink, "shutdown", -1, stop_cmd, stop_packet)
+            stop_packet = write_command(ser, stop_cmd, stats)
+            log_command(log_sink, "shutdown", -1, stop_cmd, stop_packet, stats)
         except Exception:
             pass
         ser.close()
