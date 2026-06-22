@@ -43,7 +43,6 @@ constexpr float kTrackWidthM = 0.040f;
 // Effective encoder counts per motor revolution after quadrature decoding.
 constexpr float kEncoderCountsPerMotorRev = 1400.0f;
 
-// The requested spec gearbox ratio is 10:1
 // Set to 1.0 if the encoder is mounted on the wheel/output shaft instead.
 constexpr float kGearboxRatio = 18.1f;
 constexpr float kMaxMotorRpm = 333.0f;
