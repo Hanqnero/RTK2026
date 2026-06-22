@@ -35,6 +35,14 @@
             }
         },
         {
+            "name": "linux-system",
+            "displayName": "AVR Debug (Linux/System)",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/avr-system.cmake"
+            }
+        },
+        {
             "name": "default",
             "displayName": "Default AVR Debug",
             "inherits": "windows-bundled"
@@ -59,6 +67,10 @@
         {
             "name": "macos-system",
             "configurePreset": "macos-system"
+        },
+        {
+            "name": "linux-system",
+            "configurePreset": "linux-system"
         },
         {
             "name": "default",
