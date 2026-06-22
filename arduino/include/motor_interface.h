@@ -41,7 +41,7 @@ constexpr float kWheelRadiusM = 0.024f;
 constexpr float kTrackWidthM = 0.040f;
 
 // Effective encoder counts per motor revolution after quadrature decoding.
-constexpr float kEncoderCountsPerMotorRev = 1400.0f;
+constexpr float kEncoderCountsPerMotorRev = 1300.0f;
 
 // Set to 1.0 if the encoder is mounted on the wheel/output shaft instead.
 constexpr float kGearboxRatio = 18.1f;
