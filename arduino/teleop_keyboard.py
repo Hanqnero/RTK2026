@@ -74,10 +74,10 @@ class RealtimePlot:
     update_period_s: float
     last_update_s: float = 0.0
     elapsed_s: list[float] = field(default_factory=list)
-    target_left_mps: list[float] = field(default_factory=list)
-    target_right_mps: list[float] = field(default_factory=list)
-    current_left_mps: list[float] = field(default_factory=list)
-    current_right_mps: list[float] = field(default_factory=list)
+    target_linear_mps: list[float] = field(default_factory=list)
+    current_linear_mps: list[float] = field(default_factory=list)
+    target_angular_rps: list[float] = field(default_factory=list)
+    current_angular_rps: list[float] = field(default_factory=list)
 
 
 def open_log_sink(path: Path) -> LogSink:
@@ -174,7 +174,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--plot",
         action="store_true",
-        help="Open a realtime matplotlib window for target/current wheel speed",
+        help="Open a realtime matplotlib window for target/current linear and angular speed",
     )
     parser.add_argument(
         "--plot-window",
@@ -219,15 +219,15 @@ def open_realtime_plot(window_s: float, update_rate_hz: float) -> RealtimePlot:
     plt.ion()
     fig, axes = plt.subplots(2, 1, sharex=True, figsize=(10, 7))
     if fig.canvas.manager is not None:
-        fig.canvas.manager.set_window_title("Teleop PID wheel speeds")
+        fig.canvas.manager.set_window_title("Teleop PID speeds")
 
-    left_target_line, = axes[0].plot([], [], label="left target", color="tab:blue", linestyle="--")
-    left_current_line, = axes[0].plot([], [], label="left current", color="tab:blue")
-    right_target_line, = axes[1].plot([], [], label="right target", color="tab:orange", linestyle="--")
-    right_current_line, = axes[1].plot([], [], label="right current", color="tab:orange")
+    linear_target_line, = axes[0].plot([], [], label="linear target", color="tab:blue", linestyle="--")
+    linear_current_line, = axes[0].plot([], [], label="linear current", color="tab:blue")
+    angular_target_line, = axes[1].plot([], [], label="angular target", color="tab:orange", linestyle="--")
+    angular_current_line, = axes[1].plot([], [], label="angular current", color="tab:orange")
 
-    axes[0].set_ylabel("left m/s")
-    axes[1].set_ylabel("right m/s")
+    axes[0].set_ylabel("linear m/s")
+    axes[1].set_ylabel("angular rad/s")
     axes[1].set_xlabel("elapsed seconds")
     for ax in axes:
         ax.grid(True, alpha=0.3)
@@ -239,7 +239,7 @@ def open_realtime_plot(window_s: float, update_rate_hz: float) -> RealtimePlot:
     return RealtimePlot(
         plt=plt,
         axes=(axes[0], axes[1]),
-        lines=(left_target_line, left_current_line, right_target_line, right_current_line),
+        lines=(linear_target_line, linear_current_line, angular_target_line, angular_current_line),
         start_monotonic=time.monotonic(),
         window_s=max(window_s, 1.0),
         update_period_s=1.0 / max(update_rate_hz, 1.0),
@@ -256,37 +256,38 @@ def update_realtime_plot(
 
     now = time.monotonic()
     elapsed_s = now - plot.start_monotonic
-    target_left_mps, target_right_mps = wheel_targets(cmd)
     current_left_mps = encoder_delta_to_wheel_mps(telemetry[3])
     current_right_mps = encoder_delta_to_wheel_mps(telemetry[4])
+    current_linear_mps = 0.5 * (current_left_mps + current_right_mps)
+    current_angular_rps = (current_right_mps - current_left_mps) / TRACK_WIDTH_M
 
     plot.elapsed_s.append(elapsed_s)
-    plot.target_left_mps.append(target_left_mps)
-    plot.target_right_mps.append(target_right_mps)
-    plot.current_left_mps.append(current_left_mps)
-    plot.current_right_mps.append(current_right_mps)
+    plot.target_linear_mps.append(cmd.linear_mps)
+    plot.current_linear_mps.append(current_linear_mps)
+    plot.target_angular_rps.append(cmd.angular_rps)
+    plot.current_angular_rps.append(current_angular_rps)
 
     cutoff_s = elapsed_s - plot.window_s
     while plot.elapsed_s and plot.elapsed_s[0] < cutoff_s:
         plot.elapsed_s.pop(0)
-        plot.target_left_mps.pop(0)
-        plot.target_right_mps.pop(0)
-        plot.current_left_mps.pop(0)
-        plot.current_right_mps.pop(0)
+        plot.target_linear_mps.pop(0)
+        plot.current_linear_mps.pop(0)
+        plot.target_angular_rps.pop(0)
+        plot.current_angular_rps.pop(0)
 
     if now - plot.last_update_s < plot.update_period_s:
         return
 
     (
-        left_target_line,
-        left_current_line,
-        right_target_line,
-        right_current_line,
+        linear_target_line,
+        linear_current_line,
+        angular_target_line,
+        angular_current_line,
     ) = plot.lines
-    left_target_line.set_data(plot.elapsed_s, plot.target_left_mps)
-    left_current_line.set_data(plot.elapsed_s, plot.current_left_mps)
-    right_target_line.set_data(plot.elapsed_s, plot.target_right_mps)
-    right_current_line.set_data(plot.elapsed_s, plot.current_right_mps)
+    linear_target_line.set_data(plot.elapsed_s, plot.target_linear_mps)
+    linear_current_line.set_data(plot.elapsed_s, plot.current_linear_mps)
+    angular_target_line.set_data(plot.elapsed_s, plot.target_angular_rps)
+    angular_current_line.set_data(plot.elapsed_s, plot.current_angular_rps)
 
     x_min = max(0.0, elapsed_s - plot.window_s)
     x_max = max(plot.window_s, elapsed_s)
