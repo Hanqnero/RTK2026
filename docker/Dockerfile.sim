@@ -1,4 +1,4 @@
-FROM arm64v8/ros:jazzy
+FROM ros:jazzy
 
 RUN apt-get update -o Acquire::Retries=5 && apt-get install -y --no-install-recommends --fix-missing \
     ros-jazzy-turtlebot3 \
@@ -19,6 +19,7 @@ RUN apt-get update -o Acquire::Retries=5 && apt-get install -y --no-install-reco
     ros-jazzy-teleop-twist-keyboard \
     python3-opencv \
     python3-pip \
+    python3-serial \
     python3-colcon-common-extensions \
     xvfb \
     x11vnc \

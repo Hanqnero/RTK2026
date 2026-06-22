@@ -19,6 +19,10 @@ services:
       ros2 run ros_gz_bridge parameter_bridge /world/polygon_5x5_cells/model/rtk2026/joint_state@sensor_msgs/msg/JointState[gz.msgs.Model &
       ros2 run ros_gz_bridge parameter_bridge /joint_states@sensor_msgs/msg/JointState[gz.msgs.Model &
       ros2 run ros_gz_bridge parameter_bridge /cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist &
+      ros2 run ros_gz_bridge parameter_bridge /model/rtk2026/joint/joint_0/0/cmd_pos@std_msgs/msg/Float64]gz.msgs.Double &
+      ros2 run ros_gz_bridge parameter_bridge /model/rtk2026/joint/joint_1/0/cmd_pos@std_msgs/msg/Float64]gz.msgs.Double &
+      ros2 run ros_gz_bridge parameter_bridge /model/rtk2026/joint/joint_2/0/cmd_pos@std_msgs/msg/Float64]gz.msgs.Double &
+      ros2 run ros_gz_bridge parameter_bridge /model/rtk2026/joint/joint_3/0/cmd_pos@std_msgs/msg/Float64]gz.msgs.Double &
       ros2 launch ros_gz_sim gz_sim.launch.py gz_args:='-r -s -v 4 $${GAZEBO_WORLD_FILE}' &
       GZ_PID=$$! &&
       sleep 8 &&
@@ -87,6 +91,24 @@ services:
       - gazebo
 
   # ── наша одометрия: /joint_states -> /encoder_report -> /odom ───────────
+  mearm_driver:
+    platform: linux/arm64/v8
+    image: rtk2026-sim:latest
+    command: >
+      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
+      source /workspace/install/setup.bash &&
+      exec ros2 run mearm_driver mearm_servo_controller
+      --ros-args -p dry_run:=true
+      -p publish_joint_states:=false
+      -p servo_config_file:=/workspace/install/mearm_driver/share/mearm_driver/config/servo_config.yaml"
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - sim_net
+    depends_on:
+      - gazebo
+      - robot
+
   odometry:
     platform: linux/arm64/v8
     image: rtk2026-sim:latest
