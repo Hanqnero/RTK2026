@@ -300,6 +300,13 @@ def update_realtime_plot(
     plot.last_update_s = now
 
 
+def close_realtime_plot(plot: RealtimePlot | None) -> None:
+    if plot is None:
+        return
+
+    plot.plt.close("all")
+
+
 def log_row(
     sink: LogSink | None,
     event: str,
@@ -415,6 +422,19 @@ def log_command(
     stats: SerialStats,
 ) -> None:
     log_row(sink, event, key_code, cmd, packet, stats)
+
+
+def send_stop_command(
+    ser: serial.Serial,
+    debug_raw_encoder: int,
+    stats: SerialStats,
+    log_sink: LogSink | None,
+    plot: RealtimePlot | None,
+    event: str,
+) -> None:
+    stop_cmd = Command(debug_raw_encoder=debug_raw_encoder)
+    packet = write_command(ser, stop_cmd, stats, log_sink, plot)
+    log_command(log_sink, event, -1, stop_cmd, packet, stats)
 
 
 def command_from_key(
@@ -610,20 +630,34 @@ def main() -> int:
     startup_packet = write_command(ser, startup_cmd, stats, log_sink, plot)
     log_command(log_sink, "startup", -1, startup_cmd, startup_packet, stats)
 
+    exit_code = 0
+    shutdown_event = "shutdown"
     try:
-        return curses.wrapper(lambda stdscr: teleop_loop(stdscr, ser, args, log_sink, stats, plot))
+        exit_code = curses.wrapper(lambda stdscr: teleop_loop(stdscr, ser, args, log_sink, stats, plot))
     except KeyboardInterrupt:
-        return 0
+        shutdown_event = "keyboard_interrupt"
+        exit_code = 130
     finally:
         try:
-            stop_cmd = Command(debug_raw_encoder=startup_cmd.debug_raw_encoder)
-            stop_packet = write_command(ser, stop_cmd, stats, log_sink, plot)
-            log_command(log_sink, "shutdown", -1, stop_cmd, stop_packet, stats)
-        except Exception:
-            pass
-        ser.close()
-        if log_sink is not None:
-            log_sink.file.close()
+            send_stop_command(
+                ser,
+                startup_cmd.debug_raw_encoder,
+                stats,
+                log_sink,
+                plot,
+                shutdown_event,
+            )
+        except Exception as exc:
+            print(f"Failed to send stop command during shutdown: {exc}", file=sys.stderr)
+        finally:
+            try:
+                ser.close()
+            finally:
+                close_realtime_plot(plot)
+                if log_sink is not None:
+                    log_sink.file.close()
+
+    return exit_code
 
 
 if __name__ == "__main__":
