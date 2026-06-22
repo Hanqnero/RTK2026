@@ -75,6 +75,9 @@ void setup() {
     Serial.setTimeout(100);
 
     configureHardware();
+
+    left_motor.runSpeed(100);
+    right_motor.runSpeed(100);
 }
 
 void printLong(unsigned long l) {
