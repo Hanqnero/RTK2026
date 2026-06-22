@@ -16,11 +16,13 @@ from __future__ import annotations
 import argparse
 import curses
 import csv
+import math
 import struct
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 try:
     import serial
@@ -32,6 +34,13 @@ except ImportError as exc:  # pragma: no cover
 
 CONTROL_PACKET = struct.Struct("<ffB")
 TELEMETRY_PACKET = struct.Struct("<fffiihh")
+
+CONTROL_PERIOD_MS = 100
+WHEEL_RADIUS_M = 0.024
+TRACK_WIDTH_M = 0.040
+ENCODER_COUNTS_PER_MOTOR_REV = 1400.0
+GEARBOX_RATIO = 18.1
+WHEEL_CIRCUMFERENCE_M = 2.0 * math.pi * WHEEL_RADIUS_M
 
 
 @dataclass
@@ -45,12 +54,30 @@ class Command:
 class LogSink:
     file: object
     writer: csv.writer
+    start_monotonic: float
 
 
 @dataclass
 class SerialStats:
     rx_bytes: int = 0
     last_key_code: int = -1
+    telemetry_buffer: bytearray = field(default_factory=bytearray)
+
+
+@dataclass
+class RealtimePlot:
+    plt: Any
+    axes: tuple[Any, Any]
+    lines: tuple[Any, Any, Any, Any]
+    start_monotonic: float
+    window_s: float
+    update_period_s: float
+    last_update_s: float = 0.0
+    elapsed_s: list[float] = field(default_factory=list)
+    target_left_mps: list[float] = field(default_factory=list)
+    target_right_mps: list[float] = field(default_factory=list)
+    current_left_mps: list[float] = field(default_factory=list)
+    current_right_mps: list[float] = field(default_factory=list)
 
 
 def open_log_sink(path: Path) -> LogSink:
@@ -59,16 +86,28 @@ def open_log_sink(path: Path) -> LogSink:
     writer.writerow(
         [
             "timestamp_s",
+            "elapsed_s",
             "event",
             "key_code",
-            "linear_mps",
-            "angular_rps",
+            "command_linear_mps",
+            "command_angular_rps",
             "debug_raw_encoder",
+            "target_left_wheel_mps",
+            "target_right_wheel_mps",
+            "current_left_wheel_mps",
+            "current_right_wheel_mps",
+            "odom_x_m",
+            "odom_y_m",
+            "odom_heading_rad",
+            "raw_left_encoder_delta",
+            "raw_right_encoder_delta",
+            "left_pwm",
+            "right_pwm",
             "packet_hex",
             "rx_bytes",
         ]
     )
-    return LogSink(file=log_file, writer=writer)
+    return LogSink(file=log_file, writer=writer, start_monotonic=time.monotonic())
 
 
 def parse_args() -> argparse.Namespace:
@@ -124,7 +163,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--log",
         type=Path,
-        help="Optional CSV log file for transmitted control packets",
+        default=Path(f"teleop_pid_{time.strftime('%Y%m%d_%H%M%S')}.csv"),
+        help="CSV log path for commands and telemetry (default: teleop_pid_TIMESTAMP.csv)",
+    )
+    parser.add_argument(
+        "--no-log",
+        action="store_true",
+        help="Disable CSV logging",
+    )
+    parser.add_argument(
+        "--plot",
+        action="store_true",
+        help="Open a realtime matplotlib window for target/current wheel speed",
+    )
+    parser.add_argument(
+        "--plot-window",
+        type=float,
+        default=20.0,
+        help="Realtime plot history window in seconds (default: 20)",
+    )
+    parser.add_argument(
+        "--plot-rate",
+        type=float,
+        default=10.0,
+        help="Realtime plot refresh rate in Hz (default: 10)",
     )
     return parser.parse_args()
 
@@ -133,18 +195,213 @@ def encode_command(cmd: Command) -> bytes:
     return CONTROL_PACKET.pack(cmd.linear_mps, cmd.angular_rps, cmd.debug_raw_encoder)
 
 
-def drain_telemetry(ser: serial.Serial) -> int:
+def wheel_targets(cmd: Command) -> tuple[float, float]:
+    left_mps = cmd.linear_mps - cmd.angular_rps * (TRACK_WIDTH_M * 0.5)
+    right_mps = cmd.linear_mps + cmd.angular_rps * (TRACK_WIDTH_M * 0.5)
+    return left_mps, right_mps
+
+
+def encoder_delta_to_wheel_mps(delta: int) -> float:
+    counts_per_second = delta * (1000.0 / CONTROL_PERIOD_MS)
+    motor_rps = counts_per_second / ENCODER_COUNTS_PER_MOTOR_REV
+    wheel_rps = motor_rps / GEARBOX_RATIO
+    return wheel_rps * WHEEL_CIRCUMFERENCE_M
+
+
+def open_realtime_plot(window_s: float, update_rate_hz: float) -> RealtimePlot:
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:  # pragma: no cover
+        raise SystemExit(
+            "matplotlib is required for --plot. Install with: pip install -r requirement.txt"
+        ) from exc
+
+    plt.ion()
+    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(10, 7))
+    if fig.canvas.manager is not None:
+        fig.canvas.manager.set_window_title("Teleop PID wheel speeds")
+
+    left_target_line, = axes[0].plot([], [], label="left target", color="tab:blue", linestyle="--")
+    left_current_line, = axes[0].plot([], [], label="left current", color="tab:blue")
+    right_target_line, = axes[1].plot([], [], label="right target", color="tab:orange", linestyle="--")
+    right_current_line, = axes[1].plot([], [], label="right current", color="tab:orange")
+
+    axes[0].set_ylabel("left m/s")
+    axes[1].set_ylabel("right m/s")
+    axes[1].set_xlabel("elapsed seconds")
+    for ax in axes:
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper right")
+
+    fig.tight_layout()
+    fig.show()
+
+    return RealtimePlot(
+        plt=plt,
+        axes=(axes[0], axes[1]),
+        lines=(left_target_line, left_current_line, right_target_line, right_current_line),
+        start_monotonic=time.monotonic(),
+        window_s=max(window_s, 1.0),
+        update_period_s=1.0 / max(update_rate_hz, 1.0),
+    )
+
+
+def update_realtime_plot(
+    plot: RealtimePlot | None,
+    cmd: Command,
+    telemetry: tuple[float, float, float, int, int, int, int],
+) -> None:
+    if plot is None:
+        return
+
+    now = time.monotonic()
+    elapsed_s = now - plot.start_monotonic
+    target_left_mps, target_right_mps = wheel_targets(cmd)
+    current_left_mps = encoder_delta_to_wheel_mps(telemetry[3])
+    current_right_mps = encoder_delta_to_wheel_mps(telemetry[4])
+
+    plot.elapsed_s.append(elapsed_s)
+    plot.target_left_mps.append(target_left_mps)
+    plot.target_right_mps.append(target_right_mps)
+    plot.current_left_mps.append(current_left_mps)
+    plot.current_right_mps.append(current_right_mps)
+
+    cutoff_s = elapsed_s - plot.window_s
+    while plot.elapsed_s and plot.elapsed_s[0] < cutoff_s:
+        plot.elapsed_s.pop(0)
+        plot.target_left_mps.pop(0)
+        plot.target_right_mps.pop(0)
+        plot.current_left_mps.pop(0)
+        plot.current_right_mps.pop(0)
+
+    if now - plot.last_update_s < plot.update_period_s:
+        return
+
+    (
+        left_target_line,
+        left_current_line,
+        right_target_line,
+        right_current_line,
+    ) = plot.lines
+    left_target_line.set_data(plot.elapsed_s, plot.target_left_mps)
+    left_current_line.set_data(plot.elapsed_s, plot.current_left_mps)
+    right_target_line.set_data(plot.elapsed_s, plot.target_right_mps)
+    right_current_line.set_data(plot.elapsed_s, plot.current_right_mps)
+
+    x_min = max(0.0, elapsed_s - plot.window_s)
+    x_max = max(plot.window_s, elapsed_s)
+    for ax in plot.axes:
+        ax.set_xlim(x_min, x_max)
+        ax.relim()
+        ax.autoscale_view(scalex=False, scaley=True)
+
+    plot.plt.pause(0.001)
+    plot.last_update_s = now
+
+
+def log_row(
+    sink: LogSink | None,
+    event: str,
+    key_code: int,
+    cmd: Command,
+    packet: bytes = b"",
+    stats: SerialStats | None = None,
+    telemetry: tuple[float, float, float, int, int, int, int] | None = None,
+) -> None:
+    if sink is None:
+        return
+
+    target_left_mps, target_right_mps = wheel_targets(cmd)
+    elapsed_s = time.monotonic() - sink.start_monotonic
+
+    current_left_mps = ""
+    current_right_mps = ""
+    odom_x_m = ""
+    odom_y_m = ""
+    odom_heading_rad = ""
+    raw_left_encoder_delta = ""
+    raw_right_encoder_delta = ""
+    left_pwm = ""
+    right_pwm = ""
+
+    if telemetry is not None:
+        (
+            odom_x_m,
+            odom_y_m,
+            odom_heading_rad,
+            raw_left_encoder_delta,
+            raw_right_encoder_delta,
+            left_pwm,
+            right_pwm,
+        ) = telemetry
+        current_left_mps = encoder_delta_to_wheel_mps(raw_left_encoder_delta)
+        current_right_mps = encoder_delta_to_wheel_mps(raw_right_encoder_delta)
+
+    sink.writer.writerow(
+        [
+            f"{time.time():.6f}",
+            f"{elapsed_s:.6f}",
+            event,
+            str(key_code),
+            f"{cmd.linear_mps:.6f}",
+            f"{cmd.angular_rps:.6f}",
+            str(cmd.debug_raw_encoder),
+            f"{target_left_mps:.6f}",
+            f"{target_right_mps:.6f}",
+            "" if current_left_mps == "" else f"{current_left_mps:.6f}",
+            "" if current_right_mps == "" else f"{current_right_mps:.6f}",
+            "" if odom_x_m == "" else f"{odom_x_m:.6f}",
+            "" if odom_y_m == "" else f"{odom_y_m:.6f}",
+            "" if odom_heading_rad == "" else f"{odom_heading_rad:.6f}",
+            str(raw_left_encoder_delta),
+            str(raw_right_encoder_delta),
+            str(left_pwm),
+            str(right_pwm),
+            packet.hex(),
+            "" if stats is None else str(stats.rx_bytes),
+        ]
+    )
+    sink.file.flush()
+
+
+def drain_telemetry(
+    ser: serial.Serial,
+    sink: LogSink | None,
+    cmd: Command,
+    stats: SerialStats,
+    plot: RealtimePlot | None,
+) -> int:
     waiting = ser.in_waiting
     if waiting:
-        ser.read(waiting)
+        chunk = ser.read(waiting)
+        stats.telemetry_buffer.extend(chunk)
+        while len(stats.telemetry_buffer) >= TELEMETRY_PACKET.size:
+            raw = bytes(stats.telemetry_buffer[: TELEMETRY_PACKET.size])
+            del stats.telemetry_buffer[: TELEMETRY_PACKET.size]
+            telemetry = TELEMETRY_PACKET.unpack(raw)
+            log_row(
+                sink=sink,
+                event="rx",
+                key_code=-1,
+                cmd=cmd,
+                stats=stats,
+                telemetry=telemetry,
+            )
+            update_realtime_plot(plot, cmd, telemetry)
     return waiting
 
 
-def write_command(ser: serial.Serial, cmd: Command, stats: SerialStats) -> bytes:
+def write_command(
+    ser: serial.Serial,
+    cmd: Command,
+    stats: SerialStats,
+    log_sink: LogSink | None,
+    plot: RealtimePlot | None,
+) -> bytes:
     packet = encode_command(cmd)
     ser.write(packet)
     ser.flush()
-    stats.rx_bytes += drain_telemetry(ser)
+    stats.rx_bytes += drain_telemetry(ser, log_sink, cmd, stats, plot)
     return packet
 
 
@@ -156,22 +413,7 @@ def log_command(
     packet: bytes,
     stats: SerialStats,
 ) -> None:
-    if sink is None:
-        return
-
-    sink.writer.writerow(
-        [
-            f"{time.time():.6f}",
-            event,
-            str(key_code),
-            f"{cmd.linear_mps:.6f}",
-            f"{cmd.angular_rps:.6f}",
-            str(cmd.debug_raw_encoder),
-            packet.hex(),
-            str(stats.rx_bytes),
-        ]
-    )
-    sink.file.flush()
+    log_row(sink, event, key_code, cmd, packet, stats)
 
 
 def command_from_key(
@@ -300,6 +542,7 @@ def teleop_loop(
     args: argparse.Namespace,
     log_sink: LogSink | None,
     stats: SerialStats,
+    plot: RealtimePlot | None,
 ) -> int:
     curses.curs_set(0)
     stdscr.nodelay(True)
@@ -325,7 +568,7 @@ def teleop_loop(
             log_command(log_sink, "key", key, cmd, packet, stats)
             if should_quit:
                 cmd = Command(debug_raw_encoder=cmd.debug_raw_encoder)
-                packet = write_command(ser, cmd, stats)
+                packet = write_command(ser, cmd, stats, log_sink, plot)
                 log_command(log_sink, "quit", key, cmd, packet, stats)
                 return 0
 
@@ -333,7 +576,7 @@ def teleop_loop(
             cmd = Command(debug_raw_encoder=cmd.debug_raw_encoder)
 
         if now >= next_publish:
-            packet = write_command(ser, cmd, stats)
+            packet = write_command(ser, cmd, stats, log_sink, plot)
             next_publish = now + publish_period
             log_command(log_sink, "tx", -1, cmd, packet, stats)
 
@@ -350,7 +593,10 @@ def main() -> int:
         print(f"Failed to open serial port {args.port}: {exc}", file=sys.stderr)
         return 1
 
-    log_sink = open_log_sink(args.log) if args.log else None
+    log_sink = None if args.no_log else open_log_sink(args.log)
+    plot = open_realtime_plot(args.plot_window, args.plot_rate) if args.plot else None
+    if log_sink is not None or plot is not None:
+        args.debug_raw_encoder = True
     stats = SerialStats()
 
     time.sleep(max(args.startup_delay, 0.0))
@@ -358,18 +604,19 @@ def main() -> int:
     ser.reset_output_buffer()
 
     # Reset command stream to stop on startup.
-    startup_cmd = Command(debug_raw_encoder=1 if args.debug_raw_encoder else 0)
-    startup_packet = write_command(ser, startup_cmd, stats)
+    debug_raw_encoder = 1 if args.debug_raw_encoder else 0
+    startup_cmd = Command(debug_raw_encoder=debug_raw_encoder)
+    startup_packet = write_command(ser, startup_cmd, stats, log_sink, plot)
     log_command(log_sink, "startup", -1, startup_cmd, startup_packet, stats)
 
     try:
-        return curses.wrapper(lambda stdscr: teleop_loop(stdscr, ser, args, log_sink, stats))
+        return curses.wrapper(lambda stdscr: teleop_loop(stdscr, ser, args, log_sink, stats, plot))
     except KeyboardInterrupt:
         return 0
     finally:
         try:
             stop_cmd = Command(debug_raw_encoder=startup_cmd.debug_raw_encoder)
-            stop_packet = write_command(ser, stop_cmd, stats)
+            stop_packet = write_command(ser, stop_cmd, stats, log_sink, plot)
             log_command(log_sink, "shutdown", -1, stop_cmd, stop_packet, stats)
         except Exception:
             pass
