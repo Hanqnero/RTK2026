@@ -59,15 +59,21 @@ float countsToMotorRps(int32_t counts_per_cycle) {
     return counts_per_second / kEncoderCountsPerMotorRev;
 }
 
+float motorRpsToRpm(float motor_rps) {
+    return motor_rps * 60.0f;
+}
+
 float motorRpsToWheelLinearMps(float motor_rps) {
     const float wheel_rps = motor_rps;
     return wheel_rps * kWheelCircumferenceM;
 }
 
-float motorMpsToPwm(float motor_mps) {
-    const float motor_rps = motor_mps / kWheelCircumferenceM;
-    return kMaxMotorRpm / 60 / motor_rps * 255.0f;
+float linearMpsToWheelRpm(float linear_mps) {
+    return (linear_mps / kWheelCircumferenceM) * 60.0f;
+}
 
+float angularRadSToWheelDeltaRpm(float angular_rad_s) {
+    return (angular_rad_s * kTrackWidthM / kWheelCircumferenceM) * 60.0f;
 }
 
 float wrapAngleRad(float angle) {
@@ -135,12 +141,16 @@ void runControlCycle() {
 
     const float left_motor_rps = countsToMotorRps(left_delta);
     const float right_motor_rps = countsToMotorRps(right_delta);
+    const float current_left_wheel_rpm = motorRpsToRpm(left_motor_rps);
+    const float current_right_wheel_rpm = motorRpsToRpm(right_motor_rps);
 
     const float current_left_wheel_mps = motorRpsToWheelLinearMps(left_motor_rps);
     const float current_right_wheel_mps = motorRpsToWheelLinearMps(right_motor_rps);
 
     const float current_linear_mps = 0.5f * (current_left_wheel_mps + current_right_wheel_mps);
-    const float current_angular_rps = ( - current_right_wheel_mps + current_left_wheel_mps) / kTrackWidthM; // angular velocity is reversed for some reason
+    const float current_angular_rps = (current_right_wheel_mps - current_left_wheel_mps) / kTrackWidthM;
+    const float current_linear_rpm = 0.5f * (current_left_wheel_rpm + current_right_wheel_rpm);
+    const float current_angular_rpm = current_right_wheel_rpm - current_left_wheel_rpm;
 
     // Midpoint integration improves accuracy versus pure Euler for curved motion.
     const float delta_heading = current_angular_rps * kControlPeriodS;
@@ -170,14 +180,11 @@ void runControlCycle() {
         return;
     }
 
-    linear_pid.setpoint = command_packet.target_linear_mps;
-    angular_pid.setpoint = command_packet.target_angular_rps;
+    linear_pid.setpoint = linearMpsToWheelRpm(command_packet.target_linear_mps);
+    angular_pid.setpoint = angularRadSToWheelDeltaRpm(command_packet.target_angular_rps);
 
-    const float linear_control_mps = linear_pid.compute(current_linear_mps);
-    const float angular_control_mps = angular_pid.compute(current_angular_rps);
-
-    const float linear_pwm = motorMpsToPwm(linear_control_mps);
-    const float angular_pwm = motorMpsToPwm(angular_control_mps);
+    const float linear_pwm = linear_pid.compute(current_linear_rpm);
+    const float angular_pwm = angular_pid.compute(current_angular_rpm);
 
     const int16_t left_pwm =
         static_cast<int16_t>(clampFloat(linear_pwm - angular_pwm, -kMaxPwmCommand, kMaxPwmCommand));
