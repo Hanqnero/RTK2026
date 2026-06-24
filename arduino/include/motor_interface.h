@@ -22,6 +22,8 @@
 #define SONAR_ECHO_PIN 41
 #define SONAR_GND_PIN 43
 
+constexpr float kPi = 3.14159265358979323846F;
+
 constexpr bool kLeftMotorReverse = true;
 constexpr bool kRightMotorReverse = true;
 constexpr bool kLeftEncoderReverse = true;

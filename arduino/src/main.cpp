@@ -12,7 +12,6 @@
 
 namespace {
 
-constexpr float kPi = 3.14159265358979323846F;
 constexpr float kWheelCircumferenceM = 2.0F * kPi * kWheelRadiusM;
 constexpr float kControlPeriodS = static_cast<float>(kControlPeriodMs) / 1000.0f;
 
