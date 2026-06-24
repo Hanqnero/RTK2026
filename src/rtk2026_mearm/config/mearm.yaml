@@ -1,0 +1,9 @@
+mearm_node:
+  ros__parameters:
+    dry_run: true
+    block: 0
+    address: 64
+    target_topic: "/mearm/target"
+    gripper_status_topic: "/mearm/gripper_status"
+    queue_depth: 10
+    vendor_path: ""
