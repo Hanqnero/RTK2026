@@ -38,8 +38,7 @@ TELEMETRY_PACKET = struct.Struct("<fffiihh")
 CONTROL_PERIOD_MS = 100
 WHEEL_RADIUS_M = 0.024
 TRACK_WIDTH_M = 0.040
-ENCODER_COUNTS_PER_MOTOR_REV = 1400.0
-GEARBOX_RATIO = 18.1
+ENCODER_COUNTS_PER_MOTOR_REV = 1300.0
 WHEEL_CIRCUMFERENCE_M = 2.0 * math.pi * WHEEL_RADIUS_M
 
 
@@ -204,7 +203,7 @@ def wheel_targets(cmd: Command) -> tuple[float, float]:
 def encoder_delta_to_wheel_mps(delta: int) -> float:
     counts_per_second = delta * (1000.0 / CONTROL_PERIOD_MS)
     motor_rps = counts_per_second / ENCODER_COUNTS_PER_MOTOR_REV
-    wheel_rps = motor_rps / GEARBOX_RATIO
+    wheel_rps = motor_rps 
     return wheel_rps * WHEEL_CIRCUMFERENCE_M
 
 
