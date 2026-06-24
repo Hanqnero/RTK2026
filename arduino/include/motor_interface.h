@@ -54,7 +54,7 @@ constexpr float kLMotorKp = 500.0f;
 constexpr float kLMotorKi = 0.0f;
 constexpr float kLMotorKd = 0.0f;
 
-constexpr float kAMotorKp = 500.0f;
+constexpr float kAMotorKp = 125.0f;
 constexpr float kAMotorKi = 0.0f;
 constexpr float kAMotorKd = 0.0f;
 

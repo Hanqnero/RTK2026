@@ -168,18 +168,13 @@ void runControlCycle() {
     linear_pid.setpoint = command_packet.target_linear_mps;
     angular_pid.setpoint = command_packet.target_angular_rps;
 
-    const float control_linear_mps = linear_pid.compute(current_linear_mps);
-    const float control_angular_rps = angular_pid.compute(current_angular_rps);
-
-    const float target_left_wheel_mps =
-        control_linear_mps - control_angular_rps * (kTrackWidthM * 0.5f);
-    const float target_right_wheel_mps =
-        control_linear_mps + control_angular_rps * (kTrackWidthM * 0.5f);
+    const float linear_pwm = linear_pid.compute(current_linear_mps);
+    const float angular_pwm = angular_pid.compute(current_angular_rps);
 
     const int16_t left_pwm =
-        static_cast<int16_t>(clampFloat(target_left_wheel_mps, -kMaxPwmCommand, kMaxPwmCommand));
+        static_cast<int16_t>(clampFloat(linear_pwm - angular_pwm, -kMaxPwmCommand, kMaxPwmCommand));
     const int16_t right_pwm =
-        static_cast<int16_t>(clampFloat(target_right_wheel_mps, -kMaxPwmCommand, kMaxPwmCommand));
+        static_cast<int16_t>(clampFloat(linear_pwm + angular_pwm, -kMaxPwmCommand, kMaxPwmCommand));
     const int16_t left_pwm_limited =
         static_cast<int16_t>(clampFloat(static_cast<float>(left_pwm), -kMaxPwmCommand, kMaxPwmCommand));
     const int16_t right_pwm_limited =
