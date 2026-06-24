@@ -45,7 +45,7 @@ constexpr float kEncoderCountsPerMotorRev = 1300.0f;
 
 // Set to 1.0 if the encoder is mounted on the wheel/output shaft instead.
 constexpr float kGearboxRatio = 18.1f;
-constexpr float kMaxMotorRpm = 333.0f;
+constexpr float kMaxMotorRpm = 960.0f;
 
 constexpr float kMaxLinearCommandMps = 1.5f;
 constexpr float kMaxAngularCommandRadS = 6.0f;

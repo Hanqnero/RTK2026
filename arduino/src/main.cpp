@@ -22,8 +22,8 @@ GyverMotor2<GM2::PWM_PWM_SPEED> right_motor(RIGHT_PWM_A, RIGHT_PWM_B);
 EncoderCounter left_encoder(LEFT_ENC_CLK, LEFT_ENC_DT, kLeftEncoderReverse, INPUT_PULLUP);
 EncoderCounter right_encoder(RIGHT_ENC_CLK, RIGHT_ENC_DT, kRightEncoderReverse, INPUT_PULLUP);
 
-uPID linear_pid(I_SATURATE | I_RESET | D_ERROR, kControlPeriodMs);
-uPID angular_pid(I_SATURATE | I_RESET | D_ERROR, kControlPeriodMs);
+uPID linear_pid( D_ERROR, kControlPeriodMs);
+uPID angular_pid( D_ERROR, kControlPeriodMs);
 
 ControlPacket command_packet = {0.0F, 0.0F, 0U};
 TelemetryPacket telemetry_packet = {};
@@ -135,7 +135,7 @@ void runControlCycle() {
     const float current_right_wheel_mps = motorRpsToWheelLinearMps(right_motor_rps);
 
     const float current_linear_mps = 0.5f * (current_left_wheel_mps + current_right_wheel_mps);
-    const float current_angular_rps = (current_right_wheel_mps - current_left_wheel_mps) / kTrackWidthM;
+    const float current_angular_rps = ( - current_right_wheel_mps + current_left_wheel_mps) / kTrackWidthM; // angular velocity is reversed for some reason
 
     // Midpoint integration improves accuracy versus pure Euler for curved motion.
     const float delta_heading = current_angular_rps * kControlPeriodS;
