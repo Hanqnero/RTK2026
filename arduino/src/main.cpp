@@ -22,8 +22,8 @@ GyverMotor2<GM2::PWM_PWM_SPEED> right_motor(RIGHT_PWM_A, RIGHT_PWM_B);
 EncoderCounter left_encoder(LEFT_ENC_CLK, LEFT_ENC_DT, kLeftEncoderReverse, INPUT_PULLUP);
 EncoderCounter right_encoder(RIGHT_ENC_CLK, RIGHT_ENC_DT, kRightEncoderReverse, INPUT_PULLUP);
 
-uPID left_motor_pid(I_SATURATE | D_INPUT, kControlPeriodMs);
-uPID right_motor_pid(I_SATURATE | D_INPUT, kControlPeriodMs);
+uPID linear_pid(I_SATURATE | I_RESET | D_ERROR, kControlPeriodMs);
+uPID angular_pid(I_SATURATE | I_RESET | D_ERROR, kControlPeriodMs);
 
 ControlPacket command_packet = {0.0F, 0.0F, 0U};
 TelemetryPacket telemetry_packet = {};
@@ -84,8 +84,8 @@ void configurePid(uPID& pid, float kp, float ki, float kd, float out_min, float 
 }
 
 void configurePids() {
-    configurePid(left_motor_pid, kMotorKp, kMotorKi, kMotorKd, -kMaxPwmCommand, kMaxPwmCommand);
-    configurePid(right_motor_pid, kMotorKp, kMotorKi, kMotorKd, -kMaxPwmCommand, kMaxPwmCommand);
+    configurePid(linear_pid, kLMotorKp, kLMotorKi, kLMotorKd, -kMaxPwmCommand, kMaxPwmCommand);
+    configurePid(angular_pid, kAMotorKp, kAMotorKi, kAMotorKd, -kMaxPwmCommand, kMaxPwmCommand);
 }
 
 void configureHardware() {
@@ -165,18 +165,21 @@ void runControlCycle() {
         return;
     }
 
-    const float target_left_wheel_mps =
-        command_packet.target_linear_mps - command_packet.target_angular_rps * (kTrackWidthM * 0.5f);
-    const float target_right_wheel_mps =
-        command_packet.target_linear_mps + command_packet.target_angular_rps * (kTrackWidthM * 0.5f);
+    linear_pid.setpoint = command_packet.target_linear_mps;
+    angular_pid.setpoint = command_packet.target_angular_rps;
 
-    left_motor_pid.setpoint = target_left_wheel_mps;
-    right_motor_pid.setpoint = target_right_wheel_mps;
+    const float control_linear_mps = linear_pid.compute(current_linear_mps);
+    const float control_angular_rps = angular_pid.compute(current_angular_rps);
+
+    const float target_left_wheel_mps =
+        control_linear_mps - control_angular_rps * (kTrackWidthM * 0.5f);
+    const float target_right_wheel_mps =
+        control_linear_mps + control_angular_rps * (kTrackWidthM * 0.5f);
 
     const int16_t left_pwm =
-        static_cast<int16_t>(clampFloat(left_motor_pid.compute(current_left_wheel_mps), -kMaxPwmCommand, kMaxPwmCommand));
+        static_cast<int16_t>(clampFloat(target_left_wheel_mps, -kMaxPwmCommand, kMaxPwmCommand));
     const int16_t right_pwm =
-        static_cast<int16_t>(clampFloat(right_motor_pid.compute(current_right_wheel_mps), -kMaxPwmCommand, kMaxPwmCommand));
+        static_cast<int16_t>(clampFloat(target_right_wheel_mps, -kMaxPwmCommand, kMaxPwmCommand));
     const int16_t left_pwm_limited =
         static_cast<int16_t>(clampFloat(static_cast<float>(left_pwm), -kMaxPwmCommand, kMaxPwmCommand));
     const int16_t right_pwm_limited =

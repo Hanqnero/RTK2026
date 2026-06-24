@@ -50,9 +50,13 @@ constexpr float kMaxMotorRpm = 333.0f;
 constexpr float kMaxLinearCommandMps = 1.5f;
 constexpr float kMaxAngularCommandRadS = 6.0f;
 
-constexpr float kMotorKp = 220.0f;
-constexpr float kMotorKi = 40.0f;
-constexpr float kMotorKd = 0.0f;
+constexpr float kLMotorKp = 500.0f;
+constexpr float kLMotorKi = 0.0f;
+constexpr float kLMotorKd = 0.0f;
+
+constexpr float kAMotorKp = 500.0f;
+constexpr float kAMotorKi = 0.0f;
+constexpr float kAMotorKd = 0.0f;
 
 constexpr float kMaxPwmDuty = 0.90f;
 constexpr float kMaxPwmCommand = 255.0f * kMaxPwmDuty;
