@@ -61,8 +61,14 @@ float countsToMotorRps(int32_t counts_per_cycle) {
 }
 
 float motorRpsToWheelLinearMps(float motor_rps) {
-    const float wheel_rps = motor_rps / kGearboxRatio;
+    const float wheel_rps = motor_rps;
     return wheel_rps * kWheelCircumferenceM;
+}
+
+float motorMpsToPwm(float motor_mps) {
+    const float motor_rps = motor_mps / kWheelCircumferenceM;
+    return kMaxMotorRpm / 60 / motor_rps * 255.0f;
+
 }
 
 float wrapAngleRad(float angle) {
@@ -168,8 +174,11 @@ void runControlCycle() {
     linear_pid.setpoint = command_packet.target_linear_mps;
     angular_pid.setpoint = command_packet.target_angular_rps;
 
-    const float linear_pwm = linear_pid.compute(current_linear_mps);
-    const float angular_pwm = angular_pid.compute(current_angular_rps);
+    const float linear_control_mps = linear_pid.compute(current_linear_mps);
+    const float angular_control_mps = angular_pid.compute(current_angular_rps);
+
+    const float linear_pwm = motorMpsToPwm(linear_control_mps);
+    const float angular_pwm = motorMpsToPwm(angular_control_mps);
 
     const int16_t left_pwm =
         static_cast<int16_t>(clampFloat(linear_pwm - angular_pwm, -kMaxPwmCommand, kMaxPwmCommand));
