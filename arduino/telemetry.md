@@ -19,13 +19,13 @@ This document defines the binary telemetry packet emitted by the Arduino firmwar
 
 ## Packet Size
 
-Total size: 24 bytes
+Total size: 32 bytes
 
 Calculation:
-- `float` x3 = 12 bytes
+- `float` x5 = 20 bytes
 - `int32_t` x2 = 8 bytes
 - `int16_t` x2 = 4 bytes
-- Total = 24 bytes
+- Total = 32 bytes
 
 ## Binary Layout
 
@@ -38,23 +38,27 @@ Calculation:
 | 16     | 4    | int32_t | raw_right_encoder_delta | Raw right encoder delta for the last control cycle |
 | 20     | 2    | int16_t | left_pwm | Left motor PWM command for the last control cycle |
 | 22     | 2    | int16_t | right_pwm | Right motor PWM command for the last control cycle |
+| 24     | 4    | float   | current_linear_mps | Current body linear speed in meters per second |
+| 28     | 4    | float   | current_angular_rps | Current body angular speed in radians per second |
 
 ## Semantics
 
 - Odometry is computed onboard from wheel encoder data only.
 - When `ControlPacket.debug_raw_encoder` is nonzero, raw encoder deltas are copied into telemetry.
 - PWM commands are reported as the final clamped values written to the motor driver.
+- Current speeds are computed onboard from encoder deltas using the same no-gearbox-ratio wheel model as odometry.
 - Heading uses radians and is wrapped to the interval [-pi, pi].
 
 ## Host Parsing Guidance
 
 Because the stream is unframed fixed-size binary:
 
-1. Read exactly 24 bytes per packet.
+1. Read exactly 32 bytes per packet.
 2. Interpret fields using little-endian types at the offsets above.
 3. If byte alignment is lost, resynchronize by scanning for plausible records, for example:
   - `odom_x_m` and `odom_y_m` should be finite values within expected workspace bounds
   - `odom_heading_rad` typically in [-3.2, 3.2]
+  - `current_linear_mps` and `current_angular_rps` should be finite and within the expected command range
   - raw encoder deltas are usually small integers relative to the control period
 
 ## Versioning Recommendation

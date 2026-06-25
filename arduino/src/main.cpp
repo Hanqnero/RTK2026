@@ -173,6 +173,8 @@ void runControlCycle() {
         telemetry_packet.raw_right_encoder_delta = debug_raw_encoder ? right_delta : 0;
         telemetry_packet.left_pwm = 0;
         telemetry_packet.right_pwm = 0;
+        telemetry_packet.current_linear_mps = current_linear_mps;
+        telemetry_packet.current_angular_rps = current_angular_rps;
 
         if (Serial.availableForWrite() >= static_cast<int>(sizeof(TelemetryPacket))) {
             Serial.write(reinterpret_cast<const uint8_t*>(&telemetry_packet), sizeof(TelemetryPacket));
@@ -208,6 +210,8 @@ void runControlCycle() {
     telemetry_packet.raw_right_encoder_delta = debug_raw_encoder ? right_delta : 0;
     telemetry_packet.left_pwm = left_pwm_limited;
     telemetry_packet.right_pwm = right_pwm_limited;
+    telemetry_packet.current_linear_mps = current_linear_mps;
+    telemetry_packet.current_angular_rps = current_angular_rps;
 
     if (Serial.availableForWrite() >= static_cast<int>(sizeof(TelemetryPacket))) {
         Serial.write(reinterpret_cast<const uint8_t*>(&telemetry_packet), sizeof(TelemetryPacket));

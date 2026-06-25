@@ -9,7 +9,7 @@ import sys
 import time
 
 CONTROL_PACKET = struct.Struct("<ffB")
-TELEMETRY_PACKET = struct.Struct("<fffiihh")
+TELEMETRY_PACKET = struct.Struct("<fffiihhff")
 TRACK_WIDTH_M = 0.040
 
 
@@ -53,8 +53,8 @@ def write_wheels(ser: serial.Serial, left_mps: float, right_mps: float) -> None:
 
 def read_packets_until(
     ser: serial.Serial, deadline: float
-) -> list[tuple[float, float, float, int, int, int, int]]:
-    packets: list[tuple[float, float, float, int, int, int, int]] = []
+) -> list[tuple[float, float, float, int, int, int, int, float, float]]:
+    packets: list[tuple[float, float, float, int, int, int, int, float, float]] = []
     while time.monotonic() < deadline:
         raw = ser.read(TELEMETRY_PACKET.size)
         if len(raw) == TELEMETRY_PACKET.size:

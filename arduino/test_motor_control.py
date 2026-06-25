@@ -31,7 +31,7 @@ except ImportError as exc:  # pragma: no cover
 
 
 CONTROL_PACKET = struct.Struct("<ffB")
-TELEMETRY_PACKET = struct.Struct("<fffiihh")
+TELEMETRY_PACKET = struct.Struct("<fffiihhff")
 
 
 @dataclass(frozen=True)
@@ -109,6 +109,8 @@ def main() -> int:
         "raw_right_encoder_delta",
         "left_pwm",
         "right_pwm",
+        "current_linear_mps",
+        "current_angular_rps",
         "packet_hex",
     ]
 
@@ -141,6 +143,8 @@ def main() -> int:
             raw_right_encoder_delta="",
             left_pwm="",
             right_pwm="",
+            current_linear_mps="",
+            current_angular_rps="",
             packet_hex=packet.hex(),
         )
         log_file.flush()
@@ -168,6 +172,8 @@ def main() -> int:
                     raw_right_encoder_delta,
                     left_pwm,
                     right_pwm,
+                    current_linear_mps,
+                    current_angular_rps,
                 ) = TELEMETRY_PACKET.unpack(raw)
                 write_log_row(
                     writer,
@@ -184,6 +190,8 @@ def main() -> int:
                     raw_right_encoder_delta=str(raw_right_encoder_delta),
                     left_pwm=str(left_pwm),
                     right_pwm=str(right_pwm),
+                    current_linear_mps=f"{current_linear_mps:.6f}",
+                    current_angular_rps=f"{current_angular_rps:.6f}",
                     packet_hex=raw.hex(),
                 )
             log_file.flush()

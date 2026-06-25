@@ -2,7 +2,7 @@
 """Log Arduino telemetry for debugging.
 
 The firmware currently emits a packed little-endian TelemetryPacket:
-    <fffiihh = (odom_x_m, odom_y_m, odom_heading_rad, raw_left_encoder_delta, raw_right_encoder_delta, left_pwm, right_pwm)
+    <fffiihhff = (odom_x_m, odom_y_m, odom_heading_rad, raw_left_encoder_delta, raw_right_encoder_delta, left_pwm, right_pwm, current_linear_mps, current_angular_rps)
 
 Examples:
   python3 log_telemetry.py --port /dev/cu.usbserial-10
@@ -29,7 +29,7 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 
-PACKET_STRUCT = struct.Struct("<fffiihh")
+PACKET_STRUCT = struct.Struct("<fffiihhff")
 PACKET_SIZE = PACKET_STRUCT.size
 
 
@@ -43,6 +43,8 @@ class TelemetrySample:
     raw_right_encoder_delta: int
     left_pwm: int
     right_pwm: int
+    current_linear_mps: float
+    current_angular_rps: float
 
     @property
     def odom_heading_deg(self) -> float:
@@ -75,6 +77,7 @@ def format_sample(sample: TelemetrySample) -> str:
         f"t={sample.timestamp_s:10.3f}s "
         f"odom=(x={sample.odom_x_m: .3f} m, y={sample.odom_y_m: .3f} m, "
         f"yaw={sample.odom_heading_rad: .3f} rad / {sample.odom_heading_deg: .1f} deg) "
+        f"speed=(linear={sample.current_linear_mps:+.3f} m/s, angular={sample.current_angular_rps:+.3f} rad/s) "
         f"enc=(L={sample.raw_left_encoder_delta:+d}, R={sample.raw_right_encoder_delta:+d}) "
         f"pwm=(L={sample.left_pwm:+d}, R={sample.right_pwm:+d})"
     )
@@ -92,6 +95,8 @@ def write_csv_row(writer: csv.writer, sample: TelemetrySample) -> None:
             f"{sample.raw_right_encoder_delta:d}",
             f"{sample.left_pwm:d}",
             f"{sample.right_pwm:d}",
+            f"{sample.current_linear_mps:.6f}",
+            f"{sample.current_angular_rps:.6f}",
         ]
     )
 
@@ -122,6 +127,8 @@ def main() -> int:
                 "raw_right_encoder_delta",
                 "left_pwm",
                 "right_pwm",
+                "current_linear_mps",
+                "current_angular_rps",
             ]
         )
 
@@ -153,6 +160,8 @@ def main() -> int:
                 raw_right_encoder_delta,
                 left_pwm,
                 right_pwm,
+                current_linear_mps,
+                current_angular_rps,
             ) = PACKET_STRUCT.unpack(raw)
             sample = TelemetrySample(
                 timestamp_s=time.time(),
@@ -163,6 +172,8 @@ def main() -> int:
                 raw_right_encoder_delta=raw_right_encoder_delta,
                 left_pwm=left_pwm,
                 right_pwm=right_pwm,
+                current_linear_mps=current_linear_mps,
+                current_angular_rps=current_angular_rps,
             )
 
             if csv_writer is not None:
@@ -177,7 +188,8 @@ def main() -> int:
                         f"{sample.timestamp_s:.6f},{sample.odom_x_m:.6f},{sample.odom_y_m:.6f},"
                         f"{sample.odom_heading_rad:.6f},{sample.odom_heading_deg:.6f},"
                         f"{sample.raw_left_encoder_delta:d},{sample.raw_right_encoder_delta:d},"
-                        f"{sample.left_pwm:d},{sample.right_pwm:d}"
+                        f"{sample.left_pwm:d},{sample.right_pwm:d},"
+                        f"{sample.current_linear_mps:.6f},{sample.current_angular_rps:.6f}"
                     )
                 else:
                     print(format_sample(sample))

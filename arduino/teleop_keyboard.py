@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import curses
 import csv
-import math
 import struct
 import sys
 import time
@@ -33,13 +32,9 @@ except ImportError as exc:  # pragma: no cover
 
 
 CONTROL_PACKET = struct.Struct("<ffB")
-TELEMETRY_PACKET = struct.Struct("<fffiihh")
+TELEMETRY_PACKET = struct.Struct("<fffiihhff")
 
-CONTROL_PERIOD_MS = 100
-WHEEL_RADIUS_M = 0.024
 TRACK_WIDTH_M = 0.040
-ENCODER_COUNTS_PER_MOTOR_REV = 1300.0
-WHEEL_CIRCUMFERENCE_M = 2.0 * math.pi * WHEEL_RADIUS_M
 
 
 @dataclass
@@ -60,6 +55,8 @@ class LogSink:
 class SerialStats:
     rx_bytes: int = 0
     last_key_code: int = -1
+    current_linear_mps: float = 0.0
+    current_angular_rps: float = 0.0
     telemetry_buffer: bytearray = field(default_factory=bytearray)
 
 
@@ -93,8 +90,8 @@ def open_log_sink(path: Path) -> LogSink:
             "debug_raw_encoder",
             "target_left_wheel_mps",
             "target_right_wheel_mps",
-            "current_left_wheel_mps",
-            "current_right_wheel_mps",
+            "current_linear_mps",
+            "current_angular_rps",
             "odom_x_m",
             "odom_y_m",
             "odom_heading_rad",
@@ -200,13 +197,6 @@ def wheel_targets(cmd: Command) -> tuple[float, float]:
     return left_mps, right_mps
 
 
-def encoder_delta_to_wheel_mps(delta: int) -> float:
-    counts_per_second = delta * (1000.0 / CONTROL_PERIOD_MS)
-    motor_rps = counts_per_second / ENCODER_COUNTS_PER_MOTOR_REV
-    wheel_rps = motor_rps 
-    return wheel_rps * WHEEL_CIRCUMFERENCE_M
-
-
 def open_realtime_plot(window_s: float, update_rate_hz: float) -> RealtimePlot:
     try:
         import matplotlib.pyplot as plt
@@ -248,17 +238,15 @@ def open_realtime_plot(window_s: float, update_rate_hz: float) -> RealtimePlot:
 def update_realtime_plot(
     plot: RealtimePlot | None,
     cmd: Command,
-    telemetry: tuple[float, float, float, int, int, int, int],
+    telemetry: tuple[float, float, float, int, int, int, int, float, float],
 ) -> None:
     if plot is None:
         return
 
     now = time.monotonic()
     elapsed_s = now - plot.start_monotonic
-    current_left_mps = encoder_delta_to_wheel_mps(telemetry[3])
-    current_right_mps = encoder_delta_to_wheel_mps(telemetry[4])
-    current_linear_mps = 0.5 * (current_left_mps + current_right_mps)
-    current_angular_rps = (current_right_mps - current_left_mps) / TRACK_WIDTH_M
+    current_linear_mps = telemetry[7]
+    current_angular_rps = telemetry[8]
 
     plot.elapsed_s.append(elapsed_s)
     plot.target_linear_mps.append(cmd.linear_mps)
@@ -313,7 +301,7 @@ def log_row(
     cmd: Command,
     packet: bytes = b"",
     stats: SerialStats | None = None,
-    telemetry: tuple[float, float, float, int, int, int, int] | None = None,
+    telemetry: tuple[float, float, float, int, int, int, int, float, float] | None = None,
 ) -> None:
     if sink is None:
         return
@@ -321,8 +309,8 @@ def log_row(
     target_left_mps, target_right_mps = wheel_targets(cmd)
     elapsed_s = time.monotonic() - sink.start_monotonic
 
-    current_left_mps = ""
-    current_right_mps = ""
+    current_linear_mps = ""
+    current_angular_rps = ""
     odom_x_m = ""
     odom_y_m = ""
     odom_heading_rad = ""
@@ -340,9 +328,9 @@ def log_row(
             raw_right_encoder_delta,
             left_pwm,
             right_pwm,
+            current_linear_mps,
+            current_angular_rps,
         ) = telemetry
-        current_left_mps = encoder_delta_to_wheel_mps(raw_left_encoder_delta)
-        current_right_mps = encoder_delta_to_wheel_mps(raw_right_encoder_delta)
 
     sink.writer.writerow(
         [
@@ -355,8 +343,8 @@ def log_row(
             str(cmd.debug_raw_encoder),
             f"{target_left_mps:.6f}",
             f"{target_right_mps:.6f}",
-            "" if current_left_mps == "" else f"{current_left_mps:.6f}",
-            "" if current_right_mps == "" else f"{current_right_mps:.6f}",
+            "" if current_linear_mps == "" else f"{current_linear_mps:.6f}",
+            "" if current_angular_rps == "" else f"{current_angular_rps:.6f}",
             "" if odom_x_m == "" else f"{odom_x_m:.6f}",
             "" if odom_y_m == "" else f"{odom_y_m:.6f}",
             "" if odom_heading_rad == "" else f"{odom_heading_rad:.6f}",
@@ -386,6 +374,8 @@ def drain_telemetry(
             raw = bytes(stats.telemetry_buffer[: TELEMETRY_PACKET.size])
             del stats.telemetry_buffer[: TELEMETRY_PACKET.size]
             telemetry = TELEMETRY_PACKET.unpack(raw)
+            stats.current_linear_mps = telemetry[7]
+            stats.current_angular_rps = telemetry[8]
             log_row(
                 sink=sink,
                 event="rx",
@@ -553,6 +543,11 @@ def draw_ui(
     )
     stdscr.addstr(10, 0, f"UART RX bytes drained: {stats.rx_bytes}")
     stdscr.addstr(11, 0, f"Last key code: {stats.last_key_code}")
+    stdscr.addstr(
+        12,
+        0,
+        f"Measured speed -> linear: {stats.current_linear_mps:+.3f} m/s   angular: {stats.current_angular_rps:+.3f} rad/s",
+    )
     stdscr.refresh()
 
 

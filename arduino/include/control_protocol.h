@@ -16,4 +16,6 @@ struct __attribute__((packed)) TelemetryPacket {
     int32_t raw_right_encoder_delta;
     int16_t left_pwm;
     int16_t right_pwm;
+    float current_linear_mps;
+    float current_angular_rps;
 };

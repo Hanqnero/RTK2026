@@ -25,7 +25,8 @@ except ImportError as exc:  # pragma: no cover
 # float odom_x_m, odom_y_m, odom_heading_rad
 # int32 raw_left_encoder_delta, raw_right_encoder_delta
 # int16 left_pwm, right_pwm
-PACKET_STRUCT = struct.Struct("<fffiihh")
+# float current_linear_mps, current_angular_rps
+PACKET_STRUCT = struct.Struct("<fffiihhff")
 PACKET_SIZE = PACKET_STRUCT.size
 
 
@@ -46,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def format_packet(fields: tuple[float, float, float, int, int, int, int]) -> str:
+def format_packet(fields: tuple[float, float, float, int, int, int, int, float, float]) -> str:
     (
         odom_x_m,
         odom_y_m,
@@ -55,12 +56,15 @@ def format_packet(fields: tuple[float, float, float, int, int, int, int]) -> str
         raw_right_encoder_delta,
         left_pwm,
         right_pwm,
+        current_linear_mps,
+        current_angular_rps,
     ) = fields
 
     heading_deg = odom_heading_rad * 180.0 / math.pi
 
     return (
         f"odom=(x={odom_x_m: .3f} m, y={odom_y_m: .3f} m, yaw={odom_heading_rad: .3f} rad / {heading_deg: .1f} deg) "
+        f"speed=(linear={current_linear_mps:+.3f} m/s, angular={current_angular_rps:+.3f} rad/s) "
         f"enc=(L={raw_left_encoder_delta:+d}, R={raw_right_encoder_delta:+d}) "
         f"pwm=(L={left_pwm:+d}, R={right_pwm:+d})"
     )
