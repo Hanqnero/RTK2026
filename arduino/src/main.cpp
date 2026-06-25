@@ -22,7 +22,7 @@ EncoderCounter left_encoder(LEFT_ENC_CLK, LEFT_ENC_DT, kLeftEncoderReverse, INPU
 EncoderCounter right_encoder(RIGHT_ENC_CLK, RIGHT_ENC_DT, kRightEncoderReverse, INPUT_PULLUP);
 
 uPID linear_pid( D_ERROR, kControlPeriodMs);
-uPID angular_pid( D_ERROR, kControlPeriodMs);
+uPID angular_pid( D_ERROR | I_KI_INSIDE, kControlPeriodMs);
 
 ControlPacket command_packet = {0.0F, 0.0F, 0U};
 TelemetryPacket telemetry_packet = {};

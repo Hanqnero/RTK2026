@@ -48,19 +48,19 @@ constexpr float kEncoderCountsPerMotorRev = 1300.0f;
 constexpr float kMaxMotorRpm = 960.0f;
 
 constexpr float kMaxLinearCommandMps = 1.5f;
-constexpr float kMaxAngularCommandRadS = kPi/4.0f;
-constexpr int32_t kStoppedWheelDeltaDeadbandCounts = 2;
-constexpr int32_t kStraightDiffDeltaDeadbandCounts = 2;
-constexpr float kAngularCommandDeadbandRadS = 0.02f;
+constexpr float kMaxAngularCommandRadS = kPi/2.0f;
+constexpr int32_t kStoppedWheelDeltaDeadbandCounts = 5;
+constexpr int32_t kStraightDiffDeltaDeadbandCounts = 5;
+constexpr float kAngularCommandDeadbandRadS = 0.05f;
 constexpr float kLinearCommandDeadbandMps = 0.01f;
 
 constexpr float kLMotorKp = 0.700f;
 constexpr float kLMotorKi = 2.500f;
-constexpr float kLMotorKd = 0.010f;
+constexpr float kLMotorKd = 0.000f;
 
-constexpr float kAMotorKp = 0.0f;
-constexpr float kAMotorKi = 0.0f;
-constexpr float kAMotorKd = 0.0f;
+constexpr float kAMotorKp = 0.400f;
+constexpr float kAMotorKi = 2.000f;
+constexpr float kAMotorKd = 0.000f;
 
 constexpr float kMaxPwmDuty = 0.90f;
 constexpr float kMaxPwmCommand = 255.0f * kMaxPwmDuty;
