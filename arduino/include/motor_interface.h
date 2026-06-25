@@ -26,7 +26,7 @@ constexpr float kPi = 3.14159265358979323846F;
 
 constexpr bool kLeftMotorReverse = true;
 constexpr bool kRightMotorReverse = true;
-constexpr bool kLeftEncoderReverse = false;
+constexpr bool kLeftEncoderReverse = true;
 constexpr bool kRightEncoderReverse = false;
 
 constexpr uint8_t kImuSpiCsPin = 53;
@@ -40,7 +40,7 @@ constexpr uint16_t kControlPeriodMs = 100;
 constexpr uint16_t kCommandTimeoutMs = 500;
 
 constexpr float kWheelRadiusM = 0.024f;
-constexpr float kTrackWidthM = 0.040f;
+constexpr float kTrackWidthM = 0.195f;
 
 // Effective encoder counts per motor revolution after quadrature decoding.
 constexpr float kEncoderCountsPerMotorRev = 1300.0f;
@@ -50,11 +50,11 @@ constexpr float kMaxMotorRpm = 960.0f;
 constexpr float kMaxLinearCommandMps = 1.5f;
 constexpr float kMaxAngularCommandRadS = kPi/4.0f;
 
-constexpr float kLMotorKp = 1.0f;
+constexpr float kLMotorKp = 0.5f;
 constexpr float kLMotorKi = 0.0f;
 constexpr float kLMotorKd = 0.0f;
 
-constexpr float kAMotorKp = 1.0f;
+constexpr float kAMotorKp = 0.5f;
 constexpr float kAMotorKi = 0.0f;
 constexpr float kAMotorKd = 0.0f;
 
