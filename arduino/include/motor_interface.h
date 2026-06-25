@@ -49,6 +49,10 @@ constexpr float kMaxMotorRpm = 960.0f;
 
 constexpr float kMaxLinearCommandMps = 1.5f;
 constexpr float kMaxAngularCommandRadS = kPi/4.0f;
+constexpr int32_t kStoppedWheelDeltaDeadbandCounts = 2;
+constexpr int32_t kStraightDiffDeltaDeadbandCounts = 2;
+constexpr float kAngularCommandDeadbandRadS = 0.02f;
+constexpr float kLinearCommandDeadbandMps = 0.01f;
 
 constexpr float kLMotorKp = 0.700f;
 constexpr float kLMotorKi = 2.500f;

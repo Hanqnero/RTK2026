@@ -54,6 +54,38 @@ float clampFloat(float value, float low, float high) {
     return value;
 }
 
+struct EncoderDeltas {
+    int32_t left;
+    int32_t right;
+};
+
+int32_t absInt32(int32_t value) {
+    return value < 0 ? -value : value;
+}
+
+EncoderDeltas filterEncoderDeltas(
+    int32_t left_delta,
+    int32_t right_delta,
+    float target_linear_mps,
+    float target_angular_rps) {
+    const bool linear_stopped = fabsf(target_linear_mps) <= kLinearCommandDeadbandMps;
+    const bool angular_stopped = fabsf(target_angular_rps) <= kAngularCommandDeadbandRadS;
+
+    if (linear_stopped && angular_stopped &&
+        absInt32(left_delta) <= kStoppedWheelDeltaDeadbandCounts &&
+        absInt32(right_delta) <= kStoppedWheelDeltaDeadbandCounts) {
+        return {0, 0};
+    }
+
+    if (!linear_stopped && angular_stopped &&
+        absInt32(right_delta - left_delta) <= kStraightDiffDeltaDeadbandCounts) {
+        const int32_t average_delta = (left_delta + right_delta) / 2;
+        return {average_delta, average_delta};
+    }
+
+    return {left_delta, right_delta};
+}
+
 float countsToMotorRps(int32_t counts_per_cycle) {
     const float counts_per_second = counts_per_cycle * (1000.0f / kControlPeriodMs);
     return counts_per_second / kEncoderCountsPerMotorRev;
@@ -138,9 +170,14 @@ void applyCommandTimeout() {
 void runControlCycle() {
     const int32_t left_delta = left_encoder.readAndResetDelta();
     const int32_t right_delta = right_encoder.readAndResetDelta();
+    const EncoderDeltas filtered_deltas = filterEncoderDeltas(
+        left_delta,
+        right_delta,
+        command_packet.target_linear_mps,
+        command_packet.target_angular_rps);
 
-    const float left_motor_rps = countsToMotorRps(left_delta);
-    const float right_motor_rps = countsToMotorRps(right_delta);
+    const float left_motor_rps = countsToMotorRps(filtered_deltas.left);
+    const float right_motor_rps = countsToMotorRps(filtered_deltas.right);
     const float current_left_wheel_rpm = motorRpsToRpm(left_motor_rps);
     const float current_right_wheel_rpm = motorRpsToRpm(right_motor_rps);
 
@@ -148,9 +185,9 @@ void runControlCycle() {
     const float current_right_wheel_mps = motorRpsToWheelLinearMps(right_motor_rps);
 
     const float current_linear_mps = 0.5f * (current_left_wheel_mps + current_right_wheel_mps);
-    const float current_angular_rps = (current_right_wheel_mps - current_left_wheel_mps) / kTrackWidthM;
+    const float current_angular_rps = -(current_right_wheel_mps - current_left_wheel_mps) / kTrackWidthM;
     const float current_linear_rpm = 0.5f * (current_left_wheel_rpm + current_right_wheel_rpm);
-    const float current_angular_rpm = current_right_wheel_rpm - current_left_wheel_rpm;
+    const float current_angular_rpm = -(current_right_wheel_rpm - current_left_wheel_rpm);
 
     // Midpoint integration improves accuracy versus pure Euler for curved motion.
     const float delta_heading = current_angular_rps * kControlPeriodS;
