@@ -1,181 +1,222 @@
-"""
-ROS2 нода: мост между Arduino и ROS2.
+# Copyright 2025 RTK2026
+# SPDX-License-Identifier: Apache-2.0
 
-Отвечает за:
-  - открытие serial порта и handshake с Arduino (через SerialTransport)
-  - периодическое чтение телеметрии и публикацию /encoder_report
-  - подписку на /cmd_vel и отправку линейной/угловой скорости на Arduino
-  - корректную остановку моторов при завершении ноды
-
-Локальная кинематика колёс теперь живёт на Arduino:
-Pi отправляет только линейную и угловую скорость робота.
-"""
+import struct
+import time
 
 import rclpy
+import serial
 from geometry_msgs.msg import Twist
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import Header
 
-from rtk2026_driver.protocol import InvalidChecksumError, pack_command, parse_telemetry
-from rtk2026_driver.transport import HandshakeTimeoutError, SerialTransport
-from rtk2026_interfaces.msg import EncoderReport
+from rtk2026_interfaces.msg import EncoderReport, WheelVelocityCommand
+
+
+CONTROL_FORMAT = "<ffB"
+TELEMETRY_FORMAT = "<fffiihhff"
+TELEMETRY_SIZE = struct.calcsize(TELEMETRY_FORMAT)
+
+
+def pack_control(linear_mps: float, angular_rps: float) -> bytes:
+    return struct.pack(CONTROL_FORMAT, float(linear_mps), float(angular_rps), 1)
+
+
+def wheel_ticks_to_body_command(
+    left_tps: int,
+    right_tps: int,
+    ticks_per_meter: float,
+    wheel_separation: float,
+) -> tuple[float, float]:
+    left_mps = float(left_tps) / ticks_per_meter
+    right_mps = float(right_tps) / ticks_per_meter
+    return (left_mps + right_mps) * 0.5, -((right_mps - left_mps) / wheel_separation)
 
 
 class ArduinoBridgeNode(Node):
-
-    def __init__(self) -> None:
+    def __init__(self):
         super().__init__("arduino_bridge")
 
-        # --- параметры из arduino_bridge.yaml ---
         self.declare_parameter("serial_port", "/dev/ttyUSB0")
+        self.declare_parameter("baud_rate", 115200)
         self.declare_parameter("baudrate", 115200)
-        self.declare_parameter("handshake_timeout_sec", 5.0)
-        self.declare_parameter("handshake_poll_interval_sec", 0.01)
-        self.declare_parameter("encoder_report_topic", "encoder_report")
+        self.declare_parameter("read_timeout_sec", 0.5)
+        self.declare_parameter("publish_rate", 10.0)
         self.declare_parameter("cmd_vel_topic", "cmd_vel")
-        self.declare_parameter("telemetry_poll_period_sec", 0.01)
-        self.declare_parameter("command_send_interval_sec", 0.02)
+        self.declare_parameter("wheel_velocity_command_topic", "wheel_velocity_command")
+        self.declare_parameter("encoder_report_topic", "encoder_report")
+        self.declare_parameter("min_send_interval_sec", 0.05)
         self.declare_parameter("drop_stale_cmd_after_sec", 0.30)
+        self.declare_parameter("left_motor_inverted", False)
+        self.declare_parameter("right_motor_inverted", False)
         self.declare_parameter("left_encoder_inverted", False)
         self.declare_parameter("right_encoder_inverted", False)
+        self.declare_parameter("ticks_per_meter", 3000.0)
+        self.declare_parameter("wheel_separation", 0.24)
+        self.declare_parameter("control_period_ms", 100)
 
-        # legacy-параметры оставлены declared, чтобы старые yaml не ломали старт
-        self.declare_parameter("wheel_velocity_command_topic", "wheel_velocity_command")
-        self.declare_parameter("left_wheel_inverted", False)
-        self.declare_parameter("right_wheel_inverted", False)
+        baud_rate = int(self.get_parameter("baud_rate").value)
+        legacy_baudrate = int(self.get_parameter("baudrate").value)
+        self._baud = legacy_baudrate if baud_rate == 115200 and legacy_baudrate != 115200 else baud_rate
+        self._port_path = self.get_parameter("serial_port").value
+        self._read_timeout = float(self.get_parameter("read_timeout_sec").value)
+        self._publish_rate = float(self.get_parameter("publish_rate").value)
+        self._min_send_interval = float(self.get_parameter("min_send_interval_sec").value)
+        self._drop_stale_cmd_after_sec = float(self.get_parameter("drop_stale_cmd_after_sec").value)
+        self._left_motor_sign = -1 if self.get_parameter("left_motor_inverted").value else 1
+        self._right_motor_sign = -1 if self.get_parameter("right_motor_inverted").value else 1
+        self._left_encoder_sign = -1 if self.get_parameter("left_encoder_inverted").value else 1
+        self._right_encoder_sign = -1 if self.get_parameter("right_encoder_inverted").value else 1
+        self._ticks_per_meter = float(self.get_parameter("ticks_per_meter").value)
+        self._wheel_separation = float(self.get_parameter("wheel_separation").value)
+        self._control_period_sec = float(self.get_parameter("control_period_ms").value) / 1000.0
 
-        port = self.get_parameter("serial_port").value
-        baudrate = self.get_parameter("baudrate").value
-        hs_timeout = self.get_parameter("handshake_timeout_sec").value
-        hs_poll = self.get_parameter("handshake_poll_interval_sec").value
-        enc_topic = self.get_parameter("encoder_report_topic").value
-        cmd_topic = self.get_parameter("cmd_vel_topic").value
-        telemetry_poll_period = float(self.get_parameter("telemetry_poll_period_sec").value)
-        command_send_interval = float(self.get_parameter("command_send_interval_sec").value)
-        self._drop_stale_cmd_after_sec = float(
-            self.get_parameter("drop_stale_cmd_after_sec").value
+        if self._ticks_per_meter <= 0.0:
+            raise ValueError("ticks_per_meter must be > 0")
+        if self._wheel_separation <= 0.0:
+            raise ValueError("wheel_separation must be > 0")
+        if self._control_period_sec <= 0.0:
+            raise ValueError("control_period_ms must be > 0")
+
+        self._ser = None
+        self._rx = bytearray()
+        self._left_count = 0
+        self._right_count = 0
+        self._pending_payload = pack_control(0.0, 0.0)
+        self._last_send_time = 0.0
+        self._last_cmd_time_ns = None
+
+        qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
+        )
+        self._encoder_pub = self.create_publisher(
+            EncoderReport,
+            self.get_parameter("encoder_report_topic").value,
+            qos,
+        )
+        self.create_subscription(Twist, self.get_parameter("cmd_vel_topic").value, self._on_cmd_vel, 10)
+        self.create_subscription(
+            WheelVelocityCommand,
+            self.get_parameter("wheel_velocity_command_topic").value,
+            self._on_wheel_velocity,
+            10,
         )
 
-        # инверсия encoder counts через yaml — финальный runtime override
-        self._left_enc_sign = -1 if self.get_parameter("left_encoder_inverted").value else 1
-        self._right_enc_sign = -1 if self.get_parameter("right_encoder_inverted").value else 1
+        self._timer = self.create_timer(1.0 / self._publish_rate, self._timer_cb)
+        self._open_serial()
 
-        self._transport = SerialTransport(
-            port=port,
-            baudrate=baudrate,
-            handshake_timeout_sec=hs_timeout,
-            handshake_poll_interval_sec=hs_poll,
-        )
-        self._rx_buf = bytearray()
-        self._last_motor_send_time = 0.0
-        self._pending_payload = None
-        self._has_pending = False
-        self._telemetry_rx = bytearray()
-
-        self._last_linear_mps = 0.0
-        self._last_angular_rps = 0.0
-        self._last_cmd_time_ns: int | None = None
-
-        self._encoder_pub = self.create_publisher(EncoderReport, enc_topic, 10)
-        self._cmd_sub = self.create_subscription(Twist, cmd_topic, self._on_cmd_vel, 10)
-
-        self._read_timer = self.create_timer(telemetry_poll_period, self._read_telemetry)
-        self._send_timer = self.create_timer(command_send_interval, self._send_command)
-
-        self._open_transport(port)
-
-        self.get_logger().info(
-            "Arduino bridge started: "
-            f"cmd_vel_topic={cmd_topic}, send_period={command_send_interval:.3f}s, "
-            f"telemetry_poll={telemetry_poll_period:.3f}s"
-        )
-
-    def _open_transport(self, port: str) -> None:
-        """Открыть serial порт и выполнить handshake с Arduino."""
+    def _open_serial(self):
         try:
-            first_frame = self._transport.open()
-            self.get_logger().info(
-                f"Arduino handshake successful on {port} "
-                f"(left_count={first_frame.left_count}, "
-                f"right_count={first_frame.right_count})"
+            self._ser = serial.Serial(
+                port=self._port_path,
+                baudrate=self._baud,
+                timeout=self._read_timeout,
+                write_timeout=0.1,
             )
-        except HandshakeTimeoutError as e:
-            # нода не может работать без Arduino — завершаемся
-            self.get_logger().fatal(f"Handshake failed: {e}")
-            raise SystemExit(1)
+            time.sleep(3.0)
+            self._ser.reset_input_buffer()
+            self._rx.clear()
+            self.get_logger().info("Opened serial %s at %d" % (self._port_path, self._baud))
+        except Exception as e:
+            self.get_logger().warn("Could not open serial %s: %s" % (self._port_path, e))
+            self._ser = None
 
-    def _read_telemetry(self) -> None:
-        """
-        Таймер: читаем байты из serial буфера и публикуем EncoderReport.
+    def _on_cmd_vel(self, msg: Twist):
+        self._pending_payload = pack_control(msg.linear.x, msg.angular.z)
+        self._last_cmd_time_ns = self.get_clock().now().nanoseconds
 
-        Извлекаем все полные фреймы за один вызов — буфер может накопить
-        несколько фреймов если таймер сработал позже обычного.
-        """
-        raw = self._transport.read(256)
-        if not raw:
+    def _on_wheel_velocity(self, msg: WheelVelocityCommand):
+        left_tps = self._left_motor_sign * int(msg.left_tps)
+        right_tps = self._right_motor_sign * int(msg.right_tps)
+        linear_mps, angular_rps = wheel_ticks_to_body_command(
+            left_tps,
+            right_tps,
+            self._ticks_per_meter,
+            self._wheel_separation,
+        )
+        self._pending_payload = pack_control(linear_mps, angular_rps)
+        self._last_cmd_time_ns = self.get_clock().now().nanoseconds
+
+    def _timer_cb(self):
+        if self._ser is None or not self._ser.is_open:
+            self._open_serial()
             return
 
         try:
-            waiting = self._ser.in_waiting
-            if waiting > 0:
-                self._rx_buf.extend(self._ser.read(waiting))
-
-        consecutive_errors = 0
-        max_consecutive_errors = 10
-
-                left_speed, left_cnt, right_speed, right_cnt = struct.unpack(
-                    "<iiii", raw
-                )
-
-                report = EncoderReport()
-                report.header = Header()
-                report.header.stamp = self.get_clock().now().to_msg()
-                report.header.frame_id = "base_link"
-                report.left_count = int(left_cnt)
-                report.right_count = int(right_cnt)
-                report.left_speed = int(left_speed)
-                report.right_speed = int(right_speed)
-                self._encoder_pub.publish(report)
+            self._read_telemetry()
+            self._write_command()
         except Exception as e:
-            self._reconnect_serial(f"UART read error on {self._port_path}: {e}")
+            self.get_logger().warn("Serial error: %s" % e)
+            try:
+                self._ser.close()
+            except Exception:
+                pass
+            self._ser = None
 
-    def _write_motor_command(self) -> None:
-        if self._ser is None or not self._ser.is_open or not self._has_pending:
+    def _read_telemetry(self):
+        raw = self._ser.read(256)
+        if raw:
+            self._rx.extend(raw)
+
+        while len(self._rx) >= TELEMETRY_SIZE:
+            packet = bytes(self._rx[:TELEMETRY_SIZE])
+            del self._rx[:TELEMETRY_SIZE]
+            (
+                _odom_x_m,
+                _odom_y_m,
+                _odom_heading_rad,
+                left_delta,
+                right_delta,
+                _left_pwm,
+                _right_pwm,
+                _current_linear_mps,
+                _current_angular_rps,
+            ) = struct.unpack(TELEMETRY_FORMAT, packet)
+            self._left_count += int(left_delta)
+            self._right_count += int(right_delta)
+            self._publish_encoder_report(left_delta, right_delta)
+
+    def _publish_encoder_report(self, left_delta: int, right_delta: int):
+        report = EncoderReport()
+        report.header = Header()
+        report.header.stamp = self.get_clock().now().to_msg()
+        report.header.frame_id = "base_link"
+        report.left_count = self._left_encoder_sign * self._left_count
+        report.right_count = self._right_encoder_sign * self._right_count
+        if hasattr(report, "left_speed"):
+            report.left_speed = self._left_encoder_sign * int(round(left_delta / self._control_period_sec))
+        if hasattr(report, "right_speed"):
+            report.right_speed = self._right_encoder_sign * int(round(right_delta / self._control_period_sec))
+        self._encoder_pub.publish(report)
+
+    def _write_command(self):
+        now = time.monotonic()
+        if now - self._last_send_time < self._min_send_interval:
             return
 
-            if frame is None:
-                break
+        if self._last_cmd_time_ns is not None:
+            age = (self.get_clock().now().nanoseconds - self._last_cmd_time_ns) / 1e9
+            if age > self._drop_stale_cmd_after_sec:
+                self._pending_payload = pack_control(0.0, 0.0)
 
-            msg = EncoderReport()
-            msg.header.stamp = self.get_clock().now().to_msg()
-            msg.header.frame_id = "base_link"
-            msg.left_count = self._left_enc_sign * frame.left_count
-            msg.right_count = self._right_enc_sign * frame.right_count
-            self._encoder_pub.publish(msg)
+        self._ser.write(self._pending_payload)
+        self._last_send_time = now
 
-    def _on_wheel_velocity_command(self, msg: WheelVelocityCommand) -> None:
-        """
-        Подписка: получаем целевые скорости бортов и отправляем на Arduino.
-
-        Инверсия знака мотора применяется здесь через yaml параметры —
-        прошивка Arduino знаков не меняет.
-        """
-        left_tps  = self._left_mot_sign  * int(msg.left_tps)
-        right_tps = self._right_mot_sign * int(msg.right_tps)
-        self._transport.write(pack_command(left_tps, right_tps))
-
-    def _stop_motors(self) -> None:
-        """Отправить нулевую команду движения — остановить оба борта."""
-        self._transport.write(pack_command(0.0, 0.0))
-
-    def destroy_node(self) -> None:
-        """Корректное завершение: останавливаем моторы и закрываем порт."""
-        self._stop_motors()
-        self._transport.close()
+    def destroy_node(self):
+        if self._ser is not None and self._ser.is_open:
+            try:
+                self._ser.write(pack_control(0.0, 0.0))
+            except Exception:
+                pass
+            self._ser.close()
         super().destroy_node()
 
 
-def main(args=None) -> None:
+def main(args=None):
     rclpy.init(args=args)
     node = ArduinoBridgeNode()
     try:
