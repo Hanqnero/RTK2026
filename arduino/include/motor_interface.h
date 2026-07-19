@@ -36,7 +36,7 @@ constexpr float kOdomYawRateEncoderWeight = 0.7f;
 constexpr uint16_t kImuGyroBiasSampleCount = 50;
 
 constexpr uint32_t kSerialBaudRate = 115200;
-constexpr uint16_t kControlPeriodMs = 100;
+constexpr uint16_t kControlPeriodMs = 100; // ! 10 гц это очень много, хотя бы 100 гц (ну или с 50 начать)
 constexpr uint16_t kCommandTimeoutMs = 500;
 
 constexpr float kWheelRadiusM = 0.024f;
