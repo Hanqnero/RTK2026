@@ -1,0 +1,163 @@
+# Нативный ARM64-образ ROS 2 Jazzy для Apple Silicon.
+#
+# В отличие от osrf/ros:jazzy-desktop-full,
+# официальный ros:jazzy-ros-base-noble имеет ARM64-вариант.
+FROM ros:jazzy-ros-base-noble
+
+
+# Используется только во время сборки.
+# Не сохраняется в окружении готового контейнера.
+ARG DEBIAN_FRONTEND=noninteractive
+
+
+# Все RUN-команды будут выполняться через Bash.
+#
+# pipefail заставляет сборку завершиться ошибкой,
+# если упала любая команда внутри конвейера.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+
+# Устанавливаем desktop-компоненты ROS, Gazebo,
+# SLAM, контроллеры, инструменты сборки и noVNC.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    \
+    # Полный desktop-набор ROS 2:
+    # RViz, robot_state_publisher, стандартные GUI-инструменты
+    # и другие desktop-пакеты.
+    ros-jazzy-desktop-full \
+    \
+    # Интеграция ROS 2 с современным Gazebo.
+    ros-jazzy-ros-gz \
+    \
+    # Подключение ros2_control к Gazebo.
+    ros-jazzy-gz-ros2-control \
+    \
+    # Готовые ROS 2 контроллеры:
+    # diff_drive_controller, joint_state_broadcaster и другие.
+    ros-jazzy-ros2-controllers \
+    \
+    # Построение карты по LaserScan и TF.
+    ros-jazzy-slam-toolbox \
+    \
+    # Клавиатурное управление через /cmd_vel.
+    ros-jazzy-teleop-twist-keyboard \
+    \
+    # Система сборки ROS workspace.
+    python3-colcon-common-extensions \
+    \
+    # Разрешение зависимостей из package.xml.
+    python3-rosdep \
+    \
+    # Python-библиотека pyserial для rtk2026_driver.
+    python3-serial \
+    \
+    # Виртуальный X11-сервер.
+    xvfb \
+    \
+    # Передача X11-экрана по VNC.
+    x11vnc \
+    \
+    # Браузерный VNC-клиент.
+    novnc \
+    \
+    # WebSocket-прокси между браузером и VNC.
+    websockify \
+    \
+    # Лёгкий оконный менеджер.
+    fluxbox \
+    \
+    # Содержит xdpyinfo для проверки Xvfb.
+    x11-utils \
+    \
+    # Программный OpenGL через Mesa.
+    libgl1-mesa-dri \
+    libglx-mesa0 \
+    mesa-utils \
+    \
+    # D-Bus для Linux GUI-приложений.
+    dbus-x11 \
+    \
+    # Удаляем APT-индексы, чтобы уменьшить image.
+    && rm -rf /var/lib/apt/lists/*
+
+
+# Виртуальный X11-дисплей.
+ENV DISPLAY=:1
+
+# Не использовать MIT-SHM в Qt.
+ENV QT_X11_NO_MITSHM=1
+
+# Использовать программный OpenGL.
+#
+# На первом этапе это наиболее предсказуемый вариант
+# для Linux-контейнера внутри Docker Desktop на macOS.
+ENV LIBGL_ALWAYS_SOFTWARE=1
+
+# Runtime-каталог для Qt и других GUI-приложений.
+ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+
+
+# Корень ROS workspace.
+WORKDIR /workspace
+
+
+# Копируем исходники из корня проекта.
+#
+# Build context в compose равен "..",
+# поэтому src находится относительно корня проекта.
+COPY src/ /workspace/src/
+
+
+# Подключаем системный ROS.
+#
+# Инициализируем rosdep, если это ещё не сделано.
+#
+# Затем устанавливаем зависимости package.xml
+# и собираем четыре пользовательских пакета.
+RUN source /opt/ros/jazzy/setup.bash && \
+    \
+    if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
+        rosdep init; \
+    fi && \
+    \
+    rosdep update && \
+    \
+    # После предыдущего RUN APT-индексы удалены,
+    # поэтому перед rosdep install загружаем их снова.
+    apt-get update && \
+    \
+    rosdep install \
+        --from-paths src \
+        --ignore-src \
+        --rosdistro jazzy \
+        --skip-keys=sllidar_ros2 \
+        -r \
+        -y && \
+    \
+    colcon build \
+        --symlink-install \
+        --packages-select \
+            rtk2026_description \
+            rtk2026_driver \
+            rtk2026_slam \
+            rtk2026_bringup && \
+    \
+    rm -rf /var/lib/apt/lists/*
+
+
+# Копируем entrypoint-скрипт и сразу делаем его исполняемым.
+COPY --chmod=755 \
+    docker/start_sim_novnc.sh \
+    /usr/local/bin/start_sim_novnc
+
+
+# Порт веб-интерфейса noVNC внутри контейнера.
+EXPOSE 6080
+
+
+# Скрипт поднимает Xvfb, VNC и затем запускает команду из CMD.
+ENTRYPOINT ["/usr/local/bin/start_sim_novnc"]
+
+# Команда запуска симуляции по умолчанию.
+# Имя launch-файла должно точно совпадать с файлом в launch/.
+CMD ["ros2", "launch", "rtk2026_bringup", "sim_slam_launch.py"]

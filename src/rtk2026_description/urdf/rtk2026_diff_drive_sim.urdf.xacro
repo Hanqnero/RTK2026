@@ -1,0 +1,199 @@
+<?xml version="1.0"?>
+
+<robot
+  name="rtk2026_diff_drive_sim"
+  xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Аргументы верхнего уровня -->
+  <xacro:arg name="prefix" default=""/>
+  <xacro:arg name="use_meshes" default="false"/>
+
+  <!-- Общие макросы -->
+  <xacro:include
+    filename="$(find rtk2026_description)/urdf/common/materials.xacro"/>
+
+  <xacro:include
+    filename="$(find rtk2026_description)/urdf/common/inertials.xacro"/>
+
+  <!-- Новая база по схеме DiffBot -->
+  <xacro:include
+    filename="$(find rtk2026_description)/urdf/chassis/diffbot_base.xacro"/>
+
+  <!-- ros2_control для Gazebo -->
+  <xacro:include
+    filename="$(find rtk2026_description)/urdf/control/diffbot_ros2_control.xacro"/>
+
+  <!-- Упрощённые сенсоры и Gazebo-лидар. -->
+  <xacro:include
+    filename="$(find rtk2026_description)/urdf/sensors/imu.xacro"/>
+
+  <xacro:include
+    filename="$(find rtk2026_description)/urdf/sensors/lidar.xacro"/>
+
+  <xacro:include
+    filename="$(find rtk2026_description)/urdf/sensors/lidar_gazebo.xacro"/>
+
+  <xacro:include
+    filename="$(find rtk2026_description)/urdf/sensors/webcam.xacro"/>
+
+  <!-- ROBOT PARAMETERS  -->
+
+  <xacro:property name="base_mass" value="1.6"/>
+
+  <xacro:property name="base_length" value="0.300"/>
+  <xacro:property name="base_width" value="0.240"/>
+  <xacro:property name="base_height" value="0.113"/>
+
+  <!--
+    Высота origin base_link над землёй
+    При wheel_radius = 0.06 центр base_link будет находиться
+    примерно на высоте центра колёс
+  -->
+  <xacro:property name="base_link_z" value="0.08"/>
+
+  <xacro:property name="wheel_radius" value="0.06"/>
+  <xacro:property name="wheel_x" value="0.06"/>
+  <xacro:property name="wheel_width" value="0.030"/>
+  <xacro:property name="wheel_separation" value="0.246"/>
+
+  <xacro:property name="wheel_mass" value="0.155"/>
+  <xacro:property name="wheel_max_effort" value="5.0"/>
+  <xacro:property name="wheel_max_velocity" value="30.0"/>
+
+  <xacro:property name="caster_mass" value="0.02"/>
+  <xacro:property name="caster_radius" value="0.06"/>
+  <xacro:property name="caster_x" value="0.09"/>
+
+  <!--
+    Упрощённые размеры сенсоров нужны для их размещения относительно граней
+    корпуса. STL конкретных устройств в симуляционной модели не используем.
+  -->
+  <xacro:property name="imu_height" value="0.01"/>
+  <xacro:property name="lidar_height" value="0.040"/>
+  <xacro:property name="camera_depth" value="0.025"/>
+
+  <!-- PHYSICAL ROBOT -->
+
+  <xacro:rtk2026_diffbot_base
+    prefix="$(arg prefix)"
+
+    base_mass="${base_mass}"
+    base_length="${base_length}"
+    base_width="${base_width}"
+    base_height="${base_height}"
+    base_link_z="${base_link_z}"
+
+    wheel_mass="${wheel_mass}"
+    wheel_radius="${wheel_radius}"
+    wheel_width="${wheel_width}"
+    wheel_separation="${wheel_separation}"
+    wheel_x="${wheel_x}"
+    wheel_effort="${wheel_max_effort}"
+    wheel_velocity="${wheel_max_velocity}"
+
+    caster_mass="${caster_mass}"
+    caster_radius="${caster_radius}"
+    caster_x="${caster_x}"
+
+    use_base_mesh="$(arg use_meshes)"
+    base_mesh="package://rtk2026_description/meshes/tank/base_link.stl"/>
+
+  <!--
+    IMU по центру на внутренней стороне днища.
+
+    При текущем дорожном просвете внешний корпус IMU пересекал бы плоскость
+    пола, поэтому его нижняя грань совмещена с нижней гранью base_link.
+  -->
+  <xacro:rtk2026_imu
+    prefix="$(arg prefix)"
+    parent="$(arg prefix)base_link"
+    xyz="0 0 ${-base_height/2.0 + imu_height/2.0}"
+    rpy="0 0 0"
+    use_mesh="false"
+    mesh=""/>
+
+  <!-- Лидар сверху в геометрическом центре корпуса. -->
+  <xacro:rtk2026_lidar
+    prefix="$(arg prefix)"
+    parent="$(arg prefix)base_link"
+    xyz="0 0 ${base_height/2.0 + lidar_height/2.0}"
+    rpy="0 0 0"
+    use_mesh="false"
+    mesh=""
+    scan_yaw="0"/>
+
+  <!-- Gazebo-лидар публикует скан в транспортный топик /scan. -->
+  <xacro:rtk2026_lidar_gazebo
+    prefix="$(arg prefix)"
+    update_rate="10.0"
+    samples="720"
+    min_angle="${-pi}"
+    max_angle="${pi}"
+    min_range="0.12"
+    max_range="12.0"
+    range_resolution="0.01"
+    noise_stddev="0.005"/>
+
+  <!-- Камера по центру передней грани; пока только геометрия и TF-фреймы. -->
+  <xacro:rtk2026_webcam
+    prefix="$(arg prefix)"
+    parent="$(arg prefix)base_link"
+    xyz="${base_length/2.0 + camera_depth/2.0} 0 0"
+    rpy="0 0 0"
+    mass="0.035"
+    width="0.060"
+    height="0.025"
+    depth="${camera_depth}"/>
+
+  <!-- ROS 2 CONTROL  -->
+
+  <xacro:rtk2026_diffbot_ros2_control
+    prefix="$(arg prefix)"
+    max_velocity="${wheel_max_velocity}"/>
+
+  <!--
+    Gazebo plugin:
+      - находит ros2_control tag;
+      - создаёт controller_manager;
+      - загружает YAML;
+      - соединяет контроллеры с Gazebo joints.
+  -->
+  <gazebo>
+
+    <plugin
+      filename="libgz_ros2_control-system.so"
+      name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+
+      <parameters>
+        $(find rtk2026_description)/config/diffbot_controllers.yaml
+      </parameters>
+
+    </plugin>
+
+<!--
+  Публикует идеальную позу модели, полученную непосредственно
+  из физического движка Gazebo.
+
+  Этот топик используется только для анализа и калибровки.
+  SLAM и навигация не должны использовать ground truth.-->
+    <plugin
+    filename="gz-sim-odometry-publisher-system"
+    name="gz::sim::systems::OdometryPublisher">
+
+    <odom_frame>odom</odom_frame>
+    <robot_base_frame>base_footprint</robot_base_frame>
+
+    <odom_topic>/ground_truth/odom</odom_topic>
+    <tf_topic>/ground_truth/tf</tf_topic>
+
+    <odom_publish_frequency>50</odom_publish_frequency>
+    <dimensions>2</dimensions>
+
+    <!-- Ground truth оставляем без искусственного шума. -->
+    <gaussian_noise>0.0</gaussian_noise>
+
+  </plugin>
+
+  </gazebo>
+
+</robot>

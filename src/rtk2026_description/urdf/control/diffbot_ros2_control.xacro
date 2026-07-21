@@ -1,0 +1,67 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Подключение двух ведущих суставов к gz_ros2_control.
+
+    Gazebo становится виртуальным hardware interface:
+      команда velocity поступает в Gazebo;
+      position и velocity читаются обратно из Gazebo.
+  -->
+  <xacro:macro
+    name="rtk2026_diffbot_ros2_control"
+    params="
+      prefix:=''
+      max_velocity">
+
+    <ros2_control
+      name="${prefix}GazeboDiffBotSystem"
+      type="system">
+
+      <hardware>
+
+        <!--
+          Стандартный hardware plugin для Gazebo Sim.
+        -->
+        <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+
+      </hardware>
+
+      <!-- Левое ведущее колесо. -->
+      <joint name="${prefix}left_wheel_joint">
+
+        <!-- Контроллер задаёт скорость вращения. -->
+        <command_interface name="velocity">
+          <param name="min">${-max_velocity}</param>
+          <param name="max">${max_velocity}</param>
+        </command_interface>
+
+        <!--
+          position используется как значение энкодера.
+        -->
+        <state_interface name="position"/>
+
+        <!-- Текущая угловая скорость колеса. -->
+        <state_interface name="velocity"/>
+
+      </joint>
+
+      <!-- Правое ведущее колесо. -->
+      <joint name="${prefix}right_wheel_joint">
+
+        <command_interface name="velocity">
+          <param name="min">${-max_velocity}</param>
+          <param name="max">${max_velocity}</param>
+        </command_interface>
+
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+
+      </joint>
+
+    </ros2_control>
+
+  </xacro:macro>
+
+</robot>

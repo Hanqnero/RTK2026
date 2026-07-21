@@ -1,0 +1,54 @@
+services:
+  sim:
+    build:
+      # Корнем контекста является корень проекта.
+      #
+      # Поэтому Dockerfile имеет доступ к:
+      # src/
+      # docker/start_sim_novnc.sh
+      context: ..
+
+      # Путь относительно build context.
+      dockerfile: docker/Dockerfile.sim
+
+    # Фиксированное имя контейнера.
+    container_name: rtk2026_sim
+
+    # Добавляет минимальный init-процесс.
+    #
+    # Он передаёт сигналы и удаляет завершившиеся
+    # дочерние процессы.
+    init: true
+
+    ports:
+      # noVNC доступен только на этом Mac.
+      #
+      # Порт 6080 на macOS перенаправляется
+      # на порт 6080 внутри контейнера.
+      - "127.0.0.1:6080:6080"
+
+    environment:
+      # X11-дисплей, создаваемый Xvfb.
+      DISPLAY: ":1"
+
+      # Отключение MIT-SHM для Qt.
+      QT_X11_NO_MITSHM: "1"
+
+      # Программный рендеринг OpenGL.
+      LIBGL_ALWAYS_SOFTWARE: "1"
+
+      # Runtime-каталог графических приложений.
+      XDG_RUNTIME_DIR: "/tmp/runtime-root"
+
+    # Увеличенный /dev/shm для Gazebo и RViz.
+    shm_size: "1gb"
+
+    # Оставляет stdin открытым.
+    stdin_open: true
+
+    # Создаёт псевдотерминал.
+    tty: true
+
+    # Даёт ROS-процессам время завершиться
+    # после получения SIGTERM.
+    stop_grace_period: 20s

@@ -1,0 +1,17 @@
+set(CMAKE_SYSTEM_NAME Generic)
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+find_program(AVR_GCC_PROGRAM NAMES avr-gcc REQUIRED)
+find_program(AVR_GXX_PROGRAM NAMES avr-g++ REQUIRED)
+
+set(CMAKE_C_COMPILER "${AVR_GCC_PROGRAM}" CACHE FILEPATH "" FORCE)
+set(CMAKE_CXX_COMPILER "${AVR_GXX_PROGRAM}" CACHE FILEPATH "" FORCE)
+set(CMAKE_ASM_COMPILER "${AVR_GCC_PROGRAM}" CACHE FILEPATH "" FORCE)
+
+# Disable standard library detection for AVR cross-compilation
+set(CMAKE_CXX_ABI_INCLUDE_DIR "" CACHE FILEPATH "" FORCE)
+set(CMAKE_CXX_ABI "" CACHE STRING "" FORCE)
+
+# Set proper flags for AVR compilation
+set(CMAKE_C_FLAGS_INIT "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS_INIT "-Wall -Wextra -std=c++11")

@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+
+<package format="3">
+  <name>rtk2026_bringup</name>
+  <version>0.1.0</version>
+
+  <description>
+    Launch package for the RTK2026 real robot and Gazebo SLAM simulation.
+  </description>
+
+  <maintainer email="kamilisxakof@gmail.com">
+    maintainer
+  </maintainer>
+
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <exec_depend>rtk2026_driver</exec_depend>
+  <exec_depend>rtk2026_description</exec_depend>
+  <exec_depend>rtk2026_slam</exec_depend>
+
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>ros_gz_sim</exec_depend>
+  <exec_depend>rosgraph_msgs</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>sllidar_ros2</exec_depend>
+  <exec_depend>slam_toolbox</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <!-- Внешний интерактивный узел; запускается в отдельном TTY с stamped:=true. -->
+  <exec_depend>teleop_twist_keyboard</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

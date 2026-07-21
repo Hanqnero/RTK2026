@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<!--
+  Главный сборочный макрос реального робота
+
+  Он объединяет:
+    - материалы;
+    - инерциальные макросы;
+    - фиксированное шасси;
+    - IMU;
+    - лидар;
+    - веб-камеру
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find rtk2026_description)/urdf/common/materials.xacro"/>
+  <xacro:include filename="$(find rtk2026_description)/urdf/common/inertials.xacro"/>
+  <xacro:include filename="$(find rtk2026_description)/urdf/chassis/tank_base_fixed.xacro"/>
+  <xacro:include filename="$(find rtk2026_description)/urdf/sensors/imu.xacro"/>
+  <xacro:include filename="$(find rtk2026_description)/urdf/sensors/lidar.xacro"/>
+  <xacro:include filename="$(find rtk2026_description)/urdf/sensors/webcam.xacro"/>
+
+ <!--
+      Предварительные параметры основного корпуса
+    -->
+  <xacro:macro name="rtk2026_robot" params="prefix:='' use_meshes:=true use_webcam:=true">
+    <xacro:property name="base_mass" value="1.6"/>
+    <xacro:property name="base_length" value="0.30"/>
+    <xacro:property name="base_width" value="0.15"/>
+    <xacro:property name="base_height" value="0.10"/>
+    <!-- Высота CAD-origin корпуса над плоскостью base_footprint. -->
+    <xacro:property name="base_link_z" value="0.127"/>
+
+    <!--
+      Предварительное положение центра масс корпуса
+    -->
+    <xacro:property name="base_com_x" value="0.0"/>
+    <xacro:property name="base_com_y" value="0.0"/>
+    <xacro:property name="base_com_z" value="-0.13"/>
+    <!--
+      Создаём фиксированное шасси.
+
+      Оба STL:
+        base_link.stl;
+        wheel_link.stl
+
+      используются в общей CAD-системе координат
+    -->
+    <xacro:rtk2026_tank_base_fixed
+      prefix="${prefix}"
+      base_mass="${base_mass}"
+      base_length="${base_length}"
+      base_width="${base_width}"
+      base_height="${base_height}"
+      base_link_z="${base_link_z}"
+      base_com_x="${base_com_x}"
+      base_com_y="${base_com_y}"
+      base_com_z="${base_com_z}"
+      use_base_mesh="${use_meshes}"
+      base_mesh="package://rtk2026_description/meshes/tank/base_link.stl"
+      use_running_gear_mesh="${use_meshes}"
+      running_gear_mesh="package://rtk2026_description/meshes/tank/wheel_link.stl"/>
+
+    <xacro:rtk2026_imu
+      prefix="${prefix}" parent="${prefix}base_link"
+      xyz="0.0048416 0.011168 -0.0057398" rpy="${pi} 0 ${-pi/2.0}"
+      use_mesh="${use_meshes}"
+      mesh="package://rtk2026_description/meshes/tank/imu_link.stl"/>
+
+    <xacro:rtk2026_lidar
+      prefix="${prefix}" parent="${prefix}base_link"
+      xyz="0.0900034859353204 0 0.0405195774179554" rpy="0 0 0"
+      use_mesh="${use_meshes}"
+      mesh="package://rtk2026_description/meshes/tank/lidar_link.stl"
+      scan_yaw="${2*pi}"/>
+
+    <xacro:if value="${use_webcam}">
+      <!-- Replace with the measured optical-centre pose. -->
+      <xacro:rtk2026_webcam
+        prefix="${prefix}" parent="${prefix}base_link"
+        xyz="0.125 0 0.075" rpy="0 0 0"
+        mass="0.035" width="0.060" height="0.025" depth="0.025"/>
+    </xacro:if>
+  </xacro:macro>
+</robot>

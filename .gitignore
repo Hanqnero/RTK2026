@@ -1,0 +1,17 @@
+# ROS / colcon build artifacts
+build/
+install/
+log/
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+docs/_build/
+
+# Local runtime dumps
+src/rtk2026_route_nav/config/local_planner_points_v3_dump.json
+docker/config/local_planner_points_v3_dump.json
+
+# OS / editor noise
+.DS_Store

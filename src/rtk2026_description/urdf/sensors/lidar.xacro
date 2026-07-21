@@ -1,0 +1,188 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Макрос создаёт геометрию лидара и его TF-фреймы.
+
+    lidar_link:
+      физическое звено лидара;
+      содержит inertial, visual и collision;
+      к нему привязывается Gazebo gpu_lidar sensor.
+
+    lidar_frame:
+      служебный ROS-фрейм;
+      используется как header.frame_id сообщения LaserScan;
+      может корректировать нулевое направление скана через scan_yaw.
+  -->
+  <xacro:macro
+    name="rtk2026_lidar"
+    params="
+      prefix
+      parent
+      xyz
+      rpy
+      use_mesh
+      mesh
+      scan_yaw">
+
+    <!--
+      Физическое звено лидара.
+
+      Именно к lidar_link в lidar_gazebo.xacro
+      подключается Gazebo Sensor.
+    -->
+    <link name="${prefix}lidar_link">
+
+      <!--
+        Масса, центр масс и тензор инерции физического лидара.
+      -->
+      <inertial>
+
+        <!--
+          Положение центра масс относительно origin lidar_link.
+        -->
+        <origin
+          xyz="-0.000511459223461241
+               -0.00026215532436116
+               -0.0101267502723355"
+          rpy="0 0 0"/>
+
+        <!-- Масса лидара в килограммах. -->
+        <mass value="0.165604343849592"/>
+
+        <!-- Тензор инерции относительно центра масс. -->
+        <inertia
+          ixx="5.88498679907636E-05"
+          ixy="4.6459735242599E-07"
+          ixz="-1.56610114830903E-07"
+          iyy="5.96988334453293E-05"
+          iyz="-8.03105723289238E-08"
+          izz="0.000108238967260097"/>
+
+      </inertial>
+
+      <!--
+        При use_mesh=true отображаем STL-модель лидара.
+      -->
+      <xacro:if value="${use_mesh}">
+        <visual>
+          <geometry>
+            <mesh filename="${mesh}"/>
+          </geometry>
+
+          <material name="black"/>
+        </visual>
+      </xacro:if>
+
+      <!--
+        При use_mesh=false используем простую форму цилиндра.
+
+        Это удобно для симуляции, потому что:
+          STL не требуется;
+          модель загружается быстрее;
+          геометрия остаётся предсказуемой.
+      -->
+      <xacro:unless value="${use_mesh}">
+        <visual>
+          <geometry>
+            <cylinder radius="0.035" length="0.04"/>
+          </geometry>
+
+          <material name="black"/>
+        </visual>
+      </xacro:unless>
+
+      <!--
+        Collision намеренно остаётся простой геометрией,
+        даже если visual использует STL.
+
+        Это уменьшает вычислительную нагрузку Gazebo.
+      -->
+      <collision>
+        <geometry>
+          <cylinder radius="0.035" length="0.04"/>
+        </geometry>
+      </collision>
+
+    </link>
+
+
+    <!--
+      Фиксированное соединение лидара с корпусом робота.
+
+      parent:
+        обычно base_link.
+
+      xyz и rpy:
+        реальное положение лидара относительно корпуса.
+    -->
+    <joint name="${prefix}lidar_joint" type="fixed">
+
+      <parent link="${parent}"/>
+
+      <child link="${prefix}lidar_link"/>
+
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+
+    </joint>
+
+
+    <!--
+      По умолчанию Gazebo объединяет links,
+      соединённые fixed joint.
+
+      Без этой настройки lidar_link может быть объединён
+      с base_link или base_footprint при преобразовании URDF в SDF.
+
+      reference должен указывать именно на имя joint:
+        lidar_joint
+
+      После preserveFixedJoint:
+        lidar_link остаётся отдельным SDF link;
+        Gazebo Sensor остаётся прикреплённым к lidar_link.
+    -->
+    <gazebo reference="${prefix}lidar_joint">
+      <preserveFixedJoint>true</preserveFixedJoint>
+    </gazebo>
+
+
+    <!--
+      Служебный фрейм сообщения лидара.
+
+      Он не содержит:
+        visual;
+        collision;
+        inertial.
+
+      Это нормально, поскольку данный link нужен только для TF.
+    -->
+    <link name="${prefix}lidar_frame"/>
+
+
+    <!--
+      Система координат драйвера относительно физического лидара.
+
+      При scan_yaw=0:
+        lidar_frame совпадает с lidar_link.
+
+      При scan_yaw=pi:
+        lidar_frame развёрнут на 180 градусов относительно lidar_link.
+    -->
+    <joint
+      name="${prefix}lidar_frame_joint"
+      type="fixed">
+
+      <parent link="${prefix}lidar_link"/>
+
+      <child link="${prefix}lidar_frame"/>
+
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 ${scan_yaw}"/>
+
+    </joint>
+
+  </xacro:macro>
+
+</robot>

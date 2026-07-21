@@ -1,0 +1,74 @@
+# Clangd configuration for AVR cross-compilation on macOS
+# The key insight: clangd runs on macOS (arm64-apple-darwin) but needs to understand
+# AVR code. We suppress target-specific errors and rely on the compilation database.
+
+CompileFlags:
+  CompilationDatabase: build
+  Compiler: avr-g++
+
+  Add:
+    # C++ standard
+    - -std=gnu++11
+
+    # Arduino board defines
+    - -DF_CPU=16000000UL
+    - -DARDUINO=10819
+    - -DARDUINO_ARCH_AVR
+    - -DARDUINO_AVR_MEGA2560
+
+    # Include directories (relative to project root)
+    - -Iinclude
+    - -IArduinoCore-avr-1.8.7/cores/arduino
+    - -IArduinoCore-avr-1.8.7/variants/mega
+    - -Ivendor
+    - -Ivendor/GyverMotor2
+    - -Ivendor/uPID
+    - -Ivendor/uEncoder/src
+    - -Ivendor/GyverIO/src
+
+    # Compilation flags
+    - -ffunction-sections
+    - -fdata-sections
+    - -fno-exceptions
+    - -fno-rtti
+    - -fno-threadsafe-statics
+    - -flto
+
+    # Suppress AVR-specific warnings that don't apply on host
+    - -Wno-error=narrowing
+
+  Remove:
+    # Remove conflicting flags that cause target mismatch errors
+    - -std=*
+    - -stdlib=*
+    - -target
+    - --target=*
+    - -mmcu=*
+    - -march=*
+    - -mtune=*
+
+# Clangd-specific settings
+InlayHints:
+  Enabled: true
+  DeducedTypes: true
+
+# Diagnostics configuration
+Diagnostics:
+  # Suppress errors about unsupported options for the host target
+  Suppress:
+    - -Werror
+    - -Wno-unknown-warning-option
+
+  ClangTidy:
+    Add:
+      - modernize-use-auto
+      - readability-simplify-boolean-expr
+      - readability-make-member-function-const
+    Remove:
+      - modernize-use-trailing-return-type
+      - readability-magic-numbers
+
+# Use compilation database for accurate project understanding
+Index:
+  Background: Build
+  StandardLibrary: false

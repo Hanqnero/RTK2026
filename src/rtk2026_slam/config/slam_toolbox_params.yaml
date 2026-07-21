@@ -1,0 +1,60 @@
+slam_toolbox:
+  ros__parameters:
+    use_sim_time: true # & использовать время из ROS-топика /clock вместо системных часов Raspberry Pi (это актуально для симмуляции)
+    odom_frame: odom # ? имя локальной системы координат колесной одометрии
+    map_frame: map # ? глобальсая система координат создаваемой карты
+    base_frame: base_footprint # ? система координат основания робота.
+    scan_topic: /scan # ? топик с лазерными сканами
+    use_map_saver: false # & создавать встроенный сервис сохранения обычной растровой карты
+    mode: mapping # Режим работы slam_toolbox
+                    # ~ mapping:
+                    # строит новую карту и расширяет pose graph.
+                    # ~ localization:
+                    # загружает существующий сериализованный pose graph и использует его для локализации.
+    debug_logging: false # & включить подробные отладочные сообщения slam_toolbox.
+    throttle_scans: 1 # & Обрабатывать каждый N-й лазерный скан (1 означает обрабатывать каждый скан)
+    transform_publish_period: 0.02 # ? Период публикации TF map -> odom в секундах
+    map_update_interval: 0.5 # & Период пересоздания и публикации nav_msgs/OccupancyGrid (в сек)
+    resolution: 0.05 # & Размер одной ячейки occupancy grid в метрах
+    min_laser_range: 0.12 # & Минимальная рабочая дальность RPLIDAR C1; более близкие возвраты не используем при растеризации
+    max_laser_range: 12.0 # & Максимальная дальность RPLIDAR C1, используемая при растеризации карты
+    minimum_time_interval: 0.2 # & Минимальное время между двумя обрабатываемыми сканами в сек (в случае нас мы можем и до 0.1 установить (это 10 гц))
+    transform_timeout: 0.2 # ? Максимальное время ожидания требуемого TF в секундах
+    tf_buffer_duration: 30.0 # ? Продолжительность истории, хранящейся во внутреннем TF-буфере
+    scan_queue_size: 1 # & Для online_async обрабатываем актуальный скан и не накапливаем очередь устаревших измерений
+    stack_size_to_use: 40000000 # Размер стека процесса в байтах (+- 40 мб)
+    enable_interactive_mode: true # Разрешить интерактивное редактирование pose graph через RViz-плагин.
+    use_scan_matching: true # Использовать сопоставление лазерных сканов для уточнения начальной позы, полученной из колесной одометрии
+    use_scan_barycenter: true # Использовать геометрический центр облака точек скана вместо исходной позы лазерного сенсора как опорную точку сопоставления.
+    minimum_travel_distance: 0.05 # Минимальное линейное перемещение робота перед добавлением следующего обработанного скана в pose graph (в м)
+    minimum_travel_heading: 0.05 # Минимальное изменение курса перед добавлением следующего скана (в радианах, 2.86 градуса)
+    scan_buffer_size: 10 # Количество последних сканов, хранящихся в локальной цепочке (которые используются для уточнения локализации)
+    scan_buffer_maximum_scan_distance: 10.0 # Максимальное расстояние в метрах между текущей позой и сохранённым сканом в локальном буфере
+    link_match_minimum_response_fine: 0.1 # Минимально допустимый отклик точного локального сопоставления двух связанных сканов
+    link_scan_maximum_distance: 1.5 # Максимальное расстояние в метрах между сканами, которые разрешается соединить обычным последовательным ограничением
+    loop_search_maximum_distance: 3.0 # Максимальное расстояние в метрах до старых сканов, рассматриваемых как кандидаты на замыкание цикла
+    do_loop_closing: true # Включить поиск замыканий цикла
+    loop_match_minimum_chain_size: 10 # Минимальное число последовательных сканов, которое должно образовывать подходящую цепочку-кандидат для проверки замыкания цикла
+    loop_match_maximum_variance_coarse: 3.0 # Максимально допустимая внутренняя оценка разброса результата грубого поиска замыкания цикла
+    loop_match_minimum_response_coarse: 0.35  # Минимальный response грубого сопоставления, необходимый для перехода к точному поиску loop closure
+    loop_match_minimum_response_fine: 0.45 # Минимальный response точного сопоставления, необходимый для принятия замыкания цикла
+    correlation_search_space_dimension: 0.5  # Линейный размер поисковой области обычного scan matching в метрах
+    correlation_search_space_resolution: 0.01 # Пространственный шаг поисковой сетки scan matching в метрах
+    correlation_search_space_smear_deviation: 0.1 # Стандартное отклонение размытия откликов поисковой сетки.
+    loop_search_space_dimension: 8.0 # Линейный размер поисковой области при проверке loop closure
+    loop_search_space_resolution: 0.05 # Пространственный шаг сетки грубого поиска loop closure в метрах
+    loop_search_space_smear_deviation: 0.03 # Стандартное отклонение размытия откликов
+    distance_variance_penalty: 0.5 # Коэффициент штрафа за линейное отклонение найденной позиции скана
+    angle_variance_penalty: 1.0 # Коэффициент штрафа за угловое отклонение найденной ориентации
+    fine_search_angle_offset: 0.00349 # Диапазон проверки углов на точном этапе scan matching
+    coarse_search_angle_offset: 0.349 # Диапазон проверки углов на грубом этапе scan matching
+    coarse_angle_resolution: 0.0349 # Шаг перебора углов при грубом scan matching (в радианах)
+    minimum_angle_penalty: 0.9 # Нижняя граница углового штрафа
+    minimum_distance_penalty: 0.5 # Нижняя граница линейного штрафа
+    use_response_expansion: true # Автоматически расширять поисковую область, если в исходной области не найдено приемлемого совпадения
+    solver_plugin: solver_plugins::CeresSolver # Плагин нелинейного оптимизатора pose graph
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY # Метод решения линейной системы внутри Ceres
+    ceres_preconditioner: SCHUR_JACOBI # Предобуславливатель Ceres
+    ceres_trust_strategy: LEVENBERG_MARQUARDT # Стратегия изменения доверительной области во время нелинейной оптимизации
+    ceres_dogleg_type: TRADITIONAL_DOGLEG # Тип алгоритма Dogleg
+    ceres_loss_function: None # Робастная функция потерь для ограничений pose graph
