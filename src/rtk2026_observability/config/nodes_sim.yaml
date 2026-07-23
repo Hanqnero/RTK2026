@@ -1,0 +1,89 @@
+# Универсальный профиль нод симуляции RTK2026.
+#
+# Монитор проверяет наличие ноды в ROS graph, обязательные сервисы,
+# lifecycle-состояние и недавние WARN/ERROR из /rosout.
+
+nodes:
+
+  controller_manager:
+    node: /controller_manager
+    required: true
+    expected_services:
+      - /controller_manager/list_controllers
+      - /controller_manager/list_hardware_interfaces
+    loggers:
+      - controller_manager
+
+  robot_state_publisher:
+    node: /robot_state_publisher
+    required: true
+    loggers:
+      - robot_state_publisher
+
+  gazebo_bridge:
+    node: /gazebo_bridge
+    required: true
+    loggers:
+      - gazebo_bridge
+
+  ekf:
+    node: /ekf_filter_node
+    required: true
+    loggers:
+      - ekf_filter_node
+
+    # robot_localization пишет ERROR даже при единичном превышении периода
+    # 20 мс на несколько миллисекунд. Событие сохраняется в счётчике, но
+    # красный live-статус удерживаем недолго; повторяющиеся ошибки всё равно
+    # не успеют погаснуть.
+    error_hold_time: 5.0
+
+  slam_toolbox:
+    node: /slam_toolbox
+    required: true
+
+    # online_async_launch.py запускает lifecycle-ноду и при autostart=true
+    # должен перевести её в состояние active.
+    lifecycle: true
+    expected_state: active
+    lifecycle_max_age: 3.0
+
+    # Эти сервисы подтверждают, что поднялся именно рабочий SLAM Toolbox,
+    # а не только участник ROS graph с таким же именем.
+    expected_services:
+      - /slam_toolbox/get_state
+      - /slam_toolbox/pause_new_measurements
+      - /slam_toolbox/serialize_map
+
+    # WARN и ERROR slam_toolbox поступают через стандартный /rosout.
+    loggers:
+      - slam_toolbox
+
+    # WARN отображается в дереве ещё 30 секунд после последнего события.
+    # ERROR удерживается дольше, чтобы кратковременная ошибка не потерялась.
+    warn_hold_time: 30.0
+    error_hold_time: 120.0
+
+  rviz:
+    node: /rviz2
+
+    # RViz разрешено отключать аргументом use_rviz:=false.
+    required: false
+    loggers:
+      - rviz2
+
+  topic_monitor:
+    node: /topic_monitor
+    required: true
+
+  tf_time_monitor:
+    node: /tf_time_monitor
+    required: true
+
+  sensor_monitor:
+    node: /sensor_monitor
+    required: true
+
+  localization_monitor:
+    node: /localization_monitor
+    required: true

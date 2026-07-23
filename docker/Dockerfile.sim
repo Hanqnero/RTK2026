@@ -39,8 +39,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Построение карты по LaserScan и TF.
     ros-jazzy-slam-toolbox \
     \
+    # Локальный EKF для непрерывной одометрии.
+    ros-jazzy-robot-localization \
+    \
+    # Минимальный набор Nav2 для particle localization по готовой карте.
+    ros-jazzy-nav2-amcl \
+    ros-jazzy-nav2-map-server \
+    ros-jazzy-nav2-lifecycle-manager \
+    \
     # Клавиатурное управление через /cmd_vel.
     ros-jazzy-teleop-twist-keyboard \
+    \
+    # Стандартная инфраструктура диагностики ROS 2:
+    # diagnostic_updater, aggregator и системные мониторы.
+    ros-jazzy-diagnostics \
+    \
+    # Просмотр исходной и агрегированной диагностики.
+    ros-jazzy-rqt-runtime-monitor \
+    ros-jazzy-rqt-robot-monitor \
+    \
+    # Временные графики ROS topics и чтение rosbag2.
+    ros-jazzy-plotjuggler-ros \
+    \
+    # Запись экспериментов в формате MCAP.
+    ros-jazzy-rosbag2-storage-mcap \
     \
     # Система сборки ROS workspace.
     python3-colcon-common-extensions \
@@ -84,6 +106,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Виртуальный X11-дисплей.
 ENV DISPLAY=:1
 
+# Отдельный X11-дисплей для PlotJuggler и RQt.
+# Он доступен через второй noVNC на порту 6081.
+ENV DIAGNOSTICS_DISPLAY=:2
+
 # Не использовать MIT-SHM в Qt.
 ENV QT_X11_NO_MITSHM=1
 
@@ -107,13 +133,20 @@ WORKDIR /workspace
 # поэтому src находится относительно корня проекта.
 COPY src/ /workspace/src/
 
+# Готовые карты нужны Map Server при проверке particle localization.
+# YAML хранит относительное имя PGM, поэтому копируется весь каталог.
+COPY maps/ /workspace/maps/
+
+# Пользовательские Gazebo worlds передаются launch-файлу абсолютным путём.
+COPY worlds/ /workspace/worlds/
+
 
 # Подключаем системный ROS.
 #
 # Инициализируем rosdep, если это ещё не сделано.
 #
 # Затем устанавливаем зависимости package.xml
-# и собираем четыре пользовательских пакета.
+# и собираем шесть пользовательских пакетов.
 RUN source /opt/ros/jazzy/setup.bash && \
     \
     if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
@@ -127,10 +160,16 @@ RUN source /opt/ros/jazzy/setup.bash && \
     apt-get update && \
     \
     rosdep install \
-        --from-paths src \
+        --from-paths \
+            src/rtk2026_description \
+            src/rtk2026_driver \
+            src/rtk2026_slam \
+            src/rtk2026_localization \
+            src/rtk2026_observability \
+            src/rtk2026_bringup \
         --ignore-src \
         --rosdistro jazzy \
-        --skip-keys=sllidar_ros2 \
+        --skip-keys="sllidar_ros2 ament_python" \
         -r \
         -y && \
     \
@@ -140,10 +179,11 @@ RUN source /opt/ros/jazzy/setup.bash && \
             rtk2026_description \
             rtk2026_driver \
             rtk2026_slam \
+            rtk2026_localization \
+            rtk2026_observability \
             rtk2026_bringup && \
     \
     rm -rf /var/lib/apt/lists/*
-
 
 # Копируем entrypoint-скрипт и сразу делаем его исполняемым.
 COPY --chmod=755 \
@@ -151,13 +191,24 @@ COPY --chmod=755 \
     /usr/local/bin/start_sim_novnc
 
 
-# Порт веб-интерфейса noVNC внутри контейнера.
-EXPOSE 6080
+# Порты двух веб-интерфейсов noVNC внутри контейнера:
+# 6080 — Gazebo и RViz;
+# 6081 — диагностика и графики.
+EXPOSE 6080 6081
 
-
-# Скрипт поднимает Xvfb, VNC и затем запускает команду из CMD.
+RUN printf '%s\n' \
+    'set +u' \
+    'source /opt/ros/jazzy/setup.bash' \
+    'source /workspace/install/setup.bash' \
+    'set -u' \
+    >> /root/.bashrc
+# При запуске контейнера entrypoint поднимает:
+# Xvfb, Fluxbox, x11vnc и noVNC.
 ENTRYPOINT ["/usr/local/bin/start_sim_novnc"]
 
-# Команда запуска симуляции по умолчанию.
-# Имя launch-файла должно точно совпадать с файлом в launch/.
-CMD ["ros2", "launch", "rtk2026_bringup", "sim_slam_launch.py"]
+# Контейнер остаётся запущенным, но ROS launch автоматически
+# не стартует.
+#
+# sleep infinity ничего не вычисляет и ожидает бесконечно,
+# пока контейнер не получит сигнал завершения.
+CMD ["sleep", "infinity"]

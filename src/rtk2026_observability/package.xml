@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+
+<package format="3">
+  <name>rtk2026_observability</name>
+  <version>0.1.0</version>
+
+  <description>
+    Logging, diagnostics, experiment recording and profiling tools for RTK2026.
+  </description>
+
+  <maintainer email="kamilisxakof@gmail.com">
+    RTK2026 Team
+  </maintainer>
+
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <!-- Стандартные диагностические сообщения и инструменты ROS 2. -->
+  <exec_depend>diagnostic_msgs</exec_depend>
+  <exec_depend>diagnostic_updater</exec_depend>
+  <exec_depend>diagnostic_aggregator</exec_depend>
+  <exec_depend>diagnostic_common_diagnostics</exec_depend>
+
+  <!-- GUI запускаются на отдельном noVNC desktop. -->
+  <exec_depend>rqt_runtime_monitor</exec_depend>
+  <exec_depend>rqt_robot_monitor</exec_depend>
+  <exec_depend>plotjuggler_ros</exec_depend>
+  <!-- Универсальные диагностические ноды topics и ROS graph. -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
+  <exec_depend>rosidl_runtime_py</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>tf2_msgs</exec_depend>
+
+  <!-- Стандартные типы наблюдаемых сообщений. -->
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>nav2_msgs</exec_depend>
+  <exec_depend>rosgraph_msgs</exec_depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

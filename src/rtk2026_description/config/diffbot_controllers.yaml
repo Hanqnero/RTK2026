@@ -49,11 +49,9 @@ diff_drive_controller:
     odom_frame_id: odom
     base_frame_id: base_footprint
 
-    # Пока стандартный контроллер публикует TF odom -> base_footprint.
-    #
-    # Когда подключите собственный узел одометрии,
-    # это нужно будет изменить на false.
-    enable_odom_tf: true
+    # TF odom -> base_footprint публикует EKF из rtk2026_localization.
+    # Контроллер оставляет только сырое измерение /wheel/odom, иначе в TF появятся два конкурирующих издателя одной и той же трансформации.
+    enable_odom_tf: false
 
     # Частота публикации стандартной одометрии.
     publish_rate: 50.0

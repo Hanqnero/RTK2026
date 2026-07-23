@@ -119,8 +119,12 @@ plugin верхнеуровневой модели создаёт ``controller_m
 
 ``rtk2026_imu(prefix, parent, xyz, rpy, use_mesh, mesh)``
    Создаёт ``imu_link`` и fixed ``imu_joint``. Visual выбирается между STL и
-   box 40×30×12 мм; collision всегда box. Физического Gazebo IMU sensor этот
-   макрос не добавляет.
+   box 40×30×12 мм; collision всегда box.
+
+``rtk2026_imu_gazebo(prefix, update_rate, angular_velocity_stddev, linear_acceleration_stddev)``
+   Сохраняет ``imu_link`` при URDF→SDF conversion и добавляет Gazebo sensor
+   типа ``imu``. Публикует ``imu/data``; параметры noise задают σ независимого
+   гауссовского шума каждой оси.
 
 ``rtk2026_lidar(prefix, parent, xyz, rpy, use_mesh, mesh, scan_yaw)``
    Создаёт физический ``lidar_link``, ``lidar_joint``, служебный

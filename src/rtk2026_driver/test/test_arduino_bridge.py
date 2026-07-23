@@ -112,6 +112,7 @@ class _FakeOdometry:
         self.child_frame_id = ""
 
         self.pose = types.SimpleNamespace(
+            covariance=[0.0] * 36,
             pose=types.SimpleNamespace(
                 position=types.SimpleNamespace(
                     x=0.0,
@@ -128,6 +129,7 @@ class _FakeOdometry:
         )
 
         self.twist = types.SimpleNamespace(
+            covariance=[0.0] * 36,
             twist=types.SimpleNamespace(
                 linear=types.SimpleNamespace(
                     x=0.0,
@@ -641,6 +643,23 @@ def test_publish_odometry_publishes_ros_message_and_tf(
     node._base_frame = "base_footprint"
     node._odom_publisher = publisher
     node._tf_broadcaster = broadcaster
+    node._publish_odom_tf = True
+    node._pose_covariance_diagonal = (
+        0.02,
+        0.02,
+        1.0e6,
+        1.0e6,
+        1.0e6,
+        0.05,
+    )
+    node._twist_covariance_diagonal = (
+        0.01,
+        0.01,
+        1.0e6,
+        1.0e6,
+        1.0e6,
+        0.03,
+    )
     node.get_clock = lambda: _FakeClock(1_000_000_000)
 
     telemetry = _FakeTelemetryPacket(
@@ -692,6 +711,10 @@ def test_publish_odometry_publishes_ros_message_and_tf(
         odom.twist.twist.angular.z
         == pytest.approx(-0.20)
     )
+    assert odom.pose.covariance[0] == pytest.approx(0.02)
+    assert odom.pose.covariance[35] == pytest.approx(0.05)
+    assert odom.twist.covariance[0] == pytest.approx(0.01)
+    assert odom.twist.covariance[35] == pytest.approx(0.03)
 
     assert transform.header.stamp == odom.header.stamp
     assert transform.header.frame_id == "odom"
@@ -716,6 +739,34 @@ def test_publish_odometry_publishes_ros_message_and_tf(
         transform.transform.rotation.w
         == pytest.approx(expected_w)
     )
+
+
+# проверяет, что при включённом EKF bridge не создаёт второй odom TF
+def test_publish_odometry_does_not_publish_tf_when_disabled(
+    monkeypatch,
+):
+    module = _load_bridge_module(monkeypatch)
+
+    publisher = _FakePublisher()
+    broadcaster = _FakeTransformBroadcaster()
+
+    node = module.ArduinoBridgeNode.__new__(
+        module.ArduinoBridgeNode
+    )
+
+    node._odom_frame = "odom"
+    node._base_frame = "base_footprint"
+    node._odom_publisher = publisher
+    node._tf_broadcaster = broadcaster
+    node._publish_odom_tf = False
+    node._pose_covariance_diagonal = (0.0,) * 6
+    node._twist_covariance_diagonal = (0.0,) * 6
+    node.get_clock = lambda: _FakeClock(1_000_000_000)
+
+    node._publish_odometry(_FakeTelemetryPacket())
+
+    assert len(publisher.messages) == 1
+    assert broadcaster.transforms == []
 
 # проверяет реакцию на потерю serial-порта.
 def test_handle_serial_error_closes_transport_and_shutdowns_ros(

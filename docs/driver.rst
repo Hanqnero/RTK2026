@@ -10,7 +10,7 @@ ROS 2-драйвер Arduino
    Потокобезопасное неблокирующее чтение и запись Serial.
 
 ``arduino_bridge.py``
-   ROS-параметры, подписка |cmd_vel|, публикация |odom| и TF.
+   ROS-параметры, подписка |cmd_vel| и публикация сырой |wheel_odom|.
 
 Поток данных
 ------------
@@ -28,7 +28,9 @@ ROS 2-драйвер Arduino
    SerialTransport.read_available() -> _receive_buffer
       │ pop_telemetry_packet(), по 32 bytes
       ▼
-   TelemetryPacket -> /odom + TF odom -> base_footprint
+   TelemetryPacket -> /wheel/odom -> EKF
+                              ├── /odometry/filtered
+                              └── TF odom -> base_footprint
 
 Параметры ArduinoBridgeNode
 ---------------------------
@@ -61,9 +63,9 @@ ROS 2-драйвер Arduino
      - topic
      - Вход ``TwistStamped``.
    * - ``odom_topic``
-     - ``/odom``
+     - ``/wheel/odom``
      - topic
-     - Выход ``Odometry``.
+     - Сырой выход ``Odometry`` по энкодерам.
    * - ``odom_frame``
      - ``odom``
      - frame
@@ -72,6 +74,18 @@ ROS 2-драйвер Arduino
      - ``base_footprint``
      - frame
      - Дочерний frame одометрии.
+   * - ``publish_odom_tf``
+     - false
+     - bool
+     - Аварийный TF без EKF; в штатном bringup должен оставаться false.
+   * - ``pose_covariance_diagonal``
+     - 6 чисел
+     - м²/рад²
+     - Диагональ неопределённости позы.
+   * - ``twist_covariance_diagonal``
+     - 6 чисел
+     - (м/с)²/(рад/с)²
+     - Диагональ неопределённости скоростей.
    * - ``command_send_interval_sec``
      - 0.02
      - с
@@ -115,16 +129,20 @@ Arduino уже передаёт интегрированные X, Y и heading. 
 
    q_z = \sin(\theta/2), \qquad q_w = \cos(\theta/2)
 
-Одинаковые pose и timestamp используются в ``nav_msgs/Odometry`` и
-``TransformStamped``. Это предотвращает внутреннее расхождение между
-``/odom`` и ``odom -> base_footprint``.
+Pose и twist получают один timestamp и публикуются как
+``nav_msgs/msg/Odometry`` в ``/wheel/odom``. В штатном режиме bridge не
+публикует TF: ``odom -> base_footprint`` формирует EKF по этому измерению.
+Параметр ``publish_odom_tf=true`` оставлен только для изолированной проверки
+bridge без EKF.
 
 Ковариация
 ~~~~~~~~~~
 
-Текущая реализация не заполняет ``pose.covariance`` и ``twist.covariance`` —
-в ROS они остаются нулевыми. Перед объединением с IMU через фильтр состояния
-необходимо оценить и задать реальные дисперсии энкодерной одометрии.
+Bridge заполняет диагонали ``pose.covariance`` и ``twist.covariance`` из
+YAML. Стартовые значения выражают меньшую уверенность по Z/roll/pitch и
+конечную неопределённость планарной одометрии. Это не автоматическая
+калибровка: значения X/Y/yaw и vx/vy/vyaw нужно уточнить по повторяемым
+экспериментам.
 
 Обработка ошибок и завершение
 -----------------------------
@@ -139,7 +157,7 @@ API ноды
 
 .. autoclass:: rtk2026_driver.arduino_bridge.ArduinoBridgeNode
    :members: destroy_node
-   :private-members: _on_cmd_vel, _send_command, _read_telemetry, _publish_odometry, _handle_serial_error
+   :private-members: _read_covariance_diagonal, _on_cmd_vel, _send_command, _read_telemetry, _publish_odometry, _handle_serial_error
    :show-inheritance:
 
 .. autofunction:: rtk2026_driver.arduino_bridge.main
@@ -180,7 +198,8 @@ API транспорта
 .. code-block:: bash
 
    ros2 topic info -v /cmd_vel
-   ros2 topic hz /odom
+   ros2 topic hz /wheel/odom
+   ros2 topic echo /wheel/odom --once --field twist.covariance
    ros2 run tf2_ros tf2_echo odom base_footprint
 
 Исходники: `пакет rtk2026_driver <https://github.com/Hanqnero/RTK2026/tree/main/src/rtk2026_driver>`_.

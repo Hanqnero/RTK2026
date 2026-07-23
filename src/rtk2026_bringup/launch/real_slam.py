@@ -1,16 +1,21 @@
 """Составной запуск описания, датчиков, драйвера и SLAM реального робота."""
 
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import (
     PythonLaunchDescriptionSource,
 )
-from launch.substitutions import PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description() -> LaunchDescription:
     """Сформировать полный стек картографирования на реальном роботе."""
+
+    use_rviz = LaunchConfiguration("use_rviz")
+    ekf_config = LaunchConfiguration("ekf_config")
 
     # Каталог launch-файлов пакета rtk2026_bringup.
     bringup_launch_directory = PathJoinSubstitution(
@@ -23,7 +28,9 @@ def generate_launch_description() -> LaunchDescription:
     # Запуск описания реального робота.
     #
     # robot_state_publisher публикует фиксированные TF:
-    # base_footprint → base_link → lidar_link → lidar_frame.
+    # base_footprint → base_link → lidar_link → lidar_frame;
+    #                              → imu_link;
+    #                              → camera_link → camera_optical_frame.
     description_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution(
@@ -65,6 +72,28 @@ def generate_launch_description() -> LaunchDescription:
         )
     )
 
+    # Локальный EKF реального робота.
+    #
+    # Arduino bridge публикует сырую /wheel/odom без TF. Отдельная нода
+    # Raspberry Pi должна публиковать BMI270 как /imu/data в imu_link.
+    # EKF использует vx, vy=0 и gyro Z, затем публикует
+    # /odometry/filtered и единственный TF odom -> base_footprint.
+    ekf_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution(
+                [
+                    FindPackageShare("rtk2026_localization"),
+                    "launch",
+                    "ekf.launch.py",
+                ]
+            )
+        ),
+        launch_arguments={
+            "use_sim_time": "false",
+            "config_file": ekf_config,
+        }.items(),
+    )
+
     # Запуск построения карты.
     slam_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -74,14 +103,56 @@ def generate_launch_description() -> LaunchDescription:
                     "slam_launch.py",
                 ]
             )
-        )
+        ),
+        launch_arguments={
+            "use_sim_time": "false",
+        }.items(),
+    )
+
+    # RViz необязателен: на Raspberry Pi стек запускается headless, а на ПК
+    # его можно включить аргументом use_rviz:=true.
+    rviz = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="screen",
+        arguments=[
+            "-d",
+            PathJoinSubstitution(
+                [
+                    FindPackageShare("rtk2026_bringup"),
+                    "rviz",
+                    "rtk2026_real_robot.rviz",
+                ]
+            ),
+        ],
+        parameters=[{"use_sim_time": False}],
+        condition=IfCondition(use_rviz),
     )
 
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "use_rviz",
+                default_value="false",
+                description="Запустить RViz на текущем X11-дисплее.",
+            ),
+            DeclareLaunchArgument(
+                "ekf_config",
+                default_value=PathJoinSubstitution(
+                    [
+                        FindPackageShare("rtk2026_localization"),
+                        "config",
+                        "ekf_real.yaml",
+                    ]
+                ),
+                description="Конфигурация EKF реального робота.",
+            ),
             description_launch,
             arduino_launch,
             lidar_launch,
+            ekf_launch,
             slam_launch,
+            rviz,
         ]
     )

@@ -6,6 +6,20 @@
 ``rtk2026_bringup/slam_launch.py`` через официальный
 ``online_async_launch.py``.
 
+Runtime-блок ноды:
+
+.. code-block:: text
+
+   /scan ──> slam_toolbox ──> /map
+                │
+                ├── TF map -> odom
+                └── /slam_toolbox/transition_event
+
+Одометрическое предсказание приходит через TF ``odom -> base_footprint``, а не
+через прямую подписку ``slam_toolbox`` на ``/wheel/odom`` или
+``/odometry/filtered``. Поэтому обычный
+``rqt_graph`` со скрытыми TF показывает только цепочку ``/scan -> /map``.
+
 Интерфейсы
 ----------
 
@@ -151,3 +165,4 @@ scan matcher может выбрать неверный локальный ма�
 В симуляции ``use_sim_time`` принудительно true, на реальном роботе должен
 быть false. Исходный YAML:
 `slam_toolbox_params.yaml <https://github.com/Hanqnero/RTK2026/blob/main/src/rtk2026_slam/config/slam_toolbox_params.yaml>`_.
+Команды проверки lifecycle, входного скана, карты и TF: :doc:`running`.

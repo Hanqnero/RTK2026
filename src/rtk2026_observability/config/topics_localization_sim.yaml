@@ -1,0 +1,121 @@
+# Topics симуляции при локализации AMCL по готовой карте.
+#
+# В отличие от mapping, Map Server публикует /map один раз с
+# TRANSIENT_LOCAL QoS. AMCL pose и particle cloud также событийные.
+
+topics:
+
+  scan:
+    topic: /scan
+    type: sensor_msgs/msg/LaserScan
+    required: true
+    expected_rate: 10.0
+    tolerance: 0.25
+    window_size: 20
+    max_age: 0.5
+    stamp_field: header.stamp
+    qos: sensor_data
+
+  imu:
+    topic: /imu/data
+    type: sensor_msgs/msg/Imu
+    required: true
+    expected_rate: 100.0
+    tolerance: 0.20
+    window_size: 50
+    max_age: 0.2
+    stamp_field: header.stamp
+    qos: sensor_data
+
+  wheel_odometry:
+    topic: /wheel/odom
+    type: nav_msgs/msg/Odometry
+    required: true
+    expected_rate: 50.0
+    tolerance: 0.20
+    window_size: 30
+    max_age: 0.3
+    stamp_field: header.stamp
+    qos: system_default
+
+  filtered_odometry:
+    topic: /odometry/filtered
+    type: nav_msgs/msg/Odometry
+    required: true
+    expected_rate: 50.0
+    tolerance: 0.20
+    window_size: 30
+    max_age: 0.3
+    stamp_field: header.stamp
+    qos: system_default
+
+  ground_truth_odometry:
+    topic: /ground_truth/odom
+    type: nav_msgs/msg/Odometry
+    required: true
+    expected_rate: 50.0
+    tolerance: 0.20
+    window_size: 30
+    max_age: 0.3
+    stamp_field: header.stamp
+    qos: system_default
+
+  joint_states:
+    topic: /joint_states
+    type: sensor_msgs/msg/JointState
+    required: true
+    expected_rate: 100.0
+    tolerance: 0.25
+    window_size: 50
+    max_age: 0.3
+    stamp_field: header.stamp
+    qos: system_default
+
+  map:
+    topic: /map
+    type: nav_msgs/msg/OccupancyGrid
+    required: true
+    expected_rate: 0.0
+    max_age: 0.0
+
+    # Map Server в Jazzy оставляет header.stamp нулевым. Для статической
+    # карты это допустимо, поэтому проверяем наличие, но не timestamp.
+    qos: transient_local
+
+  amcl_pose:
+    topic: /amcl_pose
+    type: geometry_msgs/msg/PoseWithCovarianceStamped
+    required: true
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: transient_local
+
+  particle_cloud:
+    topic: /particle_cloud
+    type: nav2_msgs/msg/ParticleCloud
+
+    # Событийный отладочный выход AMCL с BEST_EFFORT QoS.
+    required: false
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: sensor_data
+
+  cmd_vel:
+    topic: /cmd_vel
+    type: geometry_msgs/msg/TwistStamped
+    required: false
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: system_default
+
+  applied_cmd_vel:
+    topic: /diff_drive_controller/cmd_vel_out
+    type: geometry_msgs/msg/TwistStamped
+    required: false
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: system_default

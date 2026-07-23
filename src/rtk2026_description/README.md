@@ -59,9 +59,11 @@ right_wheel_joint : continuous
 ```
 
 Они подключены к `ros2_control` и штатному `diff_drive_controller`. Контроллер
-получает положения колёс как обратную связь энкодеров, рассчитывает `/odom` и
-публикует TF `odom -> base_footprint`. Этот стенд не является механической моделью
-реального робота для RViz и не должен включаться в `rtk2026_real`.
+получает положения колёс как обратную связь энкодеров и рассчитывает сырую
+`/wheel/odom`. TF `odom -> base_footprint` публикует EKF из
+`rtk2026_localization`; у контроллера `enable_odom_tf=false`. Этот стенд не
+является механической моделью реального робота для RViz и не должен включаться
+в `rtk2026_real`.
 
 Тракт тестирования:
 
@@ -71,8 +73,10 @@ right_wheel_joint : continuous
   -> diff_drive_controller
   -> left/right wheel joints in Gazebo
   -> /joint_states
-  -> /diff_drive_controller/odom
-  -> TF odom -> base_footprint
+  -> /wheel/odom
+  + /imu/data
+  -> ekf_filter_node
+  -> /odometry/filtered + TF odom -> base_footprint
 ```
 
 Единый внешний интерфейс проекта — `/cmd_vel` типа

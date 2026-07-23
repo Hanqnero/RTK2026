@@ -1,0 +1,131 @@
+# Универсальный профиль topics симуляции.
+#
+# expected_rate проверяется по timestamp самого сообщения, а не по wall time.
+# Поэтому real_time_factor Gazebo не влияет на результат.
+
+topics:
+
+  scan:
+    topic: /scan
+    type: sensor_msgs/msg/LaserScan
+    required: true
+    expected_rate: 10.0
+    tolerance: 0.25
+    window_size: 20
+    max_age: 0.5
+    stamp_field: header.stamp
+    qos: sensor_data
+
+  imu:
+    topic: /imu/data
+    type: sensor_msgs/msg/Imu
+    required: true
+    expected_rate: 100.0
+    tolerance: 0.20
+    window_size: 50
+    max_age: 0.2
+    stamp_field: header.stamp
+    qos: sensor_data
+
+  wheel_odometry:
+    topic: /wheel/odom
+    type: nav_msgs/msg/Odometry
+    required: true
+    expected_rate: 50.0
+    tolerance: 0.20
+    window_size: 30
+    max_age: 0.3
+    stamp_field: header.stamp
+    qos: system_default
+
+  filtered_odometry:
+    topic: /odometry/filtered
+    type: nav_msgs/msg/Odometry
+    required: true
+    expected_rate: 50.0
+    tolerance: 0.20
+    window_size: 30
+    max_age: 0.3
+    stamp_field: header.stamp
+    qos: system_default
+
+  ground_truth_odometry:
+    topic: /ground_truth/odom
+    type: nav_msgs/msg/Odometry
+    required: true
+    expected_rate: 50.0
+    tolerance: 0.20
+    window_size: 30
+    max_age: 0.3
+    stamp_field: header.stamp
+    qos: system_default
+
+  joint_states:
+    topic: /joint_states
+    type: sensor_msgs/msg/JointState
+    required: true
+    expected_rate: 100.0
+    tolerance: 0.25
+    window_size: 50
+    max_age: 0.3
+    stamp_field: header.stamp
+    qos: system_default
+
+  map:
+    topic: /map
+    type: nav_msgs/msg/OccupancyGrid
+    required: true
+
+    # Частота карты зависит от настроек SLAM, поэтому пока проверяется
+    # только наличие и возраст последнего сообщения.
+    expected_rate: 0.0
+    max_age: 5.0
+    stamp_field: header.stamp
+    qos: transient_local
+
+  slam_pose:
+    topic: /pose
+    type: geometry_msgs/msg/PoseWithCovarianceStamped
+
+    # slam_toolbox публикует pose после принятого scan matching.
+    # На неподвижном роботе новые измерения могут не добавляться,
+    # поэтому отсутствие постоянной частоты не считается неисправностью.
+    required: false
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: system_default
+
+  cmd_vel:
+    topic: /cmd_vel
+    type: geometry_msgs/msg/TwistStamped
+
+    # Команда событийная: её отсутствие при стоящем роботе не является
+    # неисправностью системы.
+    required: false
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: system_default
+
+  applied_cmd_vel:
+    topic: /diff_drive_controller/cmd_vel_out
+    type: geometry_msgs/msg/TwistStamped
+
+    # Команда после velocity/acceleration limits контроллера.
+    required: false
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: system_default
+
+  amcl_pose:
+    topic: /amcl_pose
+    type: geometry_msgs/msg/PoseWithCovarianceStamped
+
+    # В mapping-режиме AMCL намеренно не запущен.
+    required: false
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: system_default

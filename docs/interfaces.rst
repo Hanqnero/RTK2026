@@ -6,45 +6,128 @@ ROS-интерфейсы и соглашения
 
 .. list-table:: Основные топики
    :header-rows: 1
-   :widths: 22 32 18 28
+   :widths: 18 27 19 19 27
 
    * - Имя
      - Тип
-     - Источник
+     - Publisher
+     - Основной subscriber
      - Назначение
    * - ``/cmd_vel``
      - ``geometry_msgs/msg/TwistStamped``
      - teleop или навигация
+     - ``diff_drive_controller`` или ``arduino_bridge``
      - ``twist.linear.x`` и ``twist.angular.z``; остальные компоненты приводом
        не используются.
-   * - ``/odom``
+   * - ``/diff_drive_controller/cmd_vel_out``
+     - ``geometry_msgs/msg/TwistStamped``
+     - ``diff_drive_controller``
+     - диагностика/bag
+     - Команда после velocity/acceleration limits и timeout.
+   * - ``/wheel/odom``
      - ``nav_msgs/msg/Odometry``
-     - Arduino bridge или ``diff_drive_controller``
-     - Локальная непрерывная колёсная одометрия.
+     - ``diff_drive_controller`` или ``arduino_bridge``
+     - EKF/диагностика
+     - Сырая одометрия колёс: joint feedback в Gazebo или телеметрия
+       энкодеров на реальном роботе.
+   * - ``/odometry/filtered``
+     - ``nav_msgs/msg/Odometry``
+     - ``ekf_filter_node``
+     - RViz/диагностика
+     - Непрерывный локальный estimate; соответствует TF
+       ``odom -> base_footprint``.
+   * - ``/imu/data``
+     - ``sensor_msgs/msg/Imu``
+     - Gazebo bridge; позже драйвер BMI270
+     - EKF/диагностика
+     - EKF использует ``angular_velocity.z`` в frame ``imu_link``.
    * - ``/scan``
      - ``sensor_msgs/msg/LaserScan``
      - RPLIDAR или мост Gazebo
+     - ``slam_toolbox``
      - Вход ``slam_toolbox``; ожидаемый ``frame_id`` — ``lidar_frame``.
    * - ``/joint_states``
      - ``sensor_msgs/msg/JointState``
      - ``joint_state_broadcaster``
+     - ``robot_state_publisher``
      - Положения и скорости симулируемых колёс.
+   * - ``/robot_description``
+     - ``std_msgs/msg/String``
+     - ``robot_state_publisher``
+     - ``controller_manager``; при старте ``spawn_rtk2026``
+     - Развёрнутый URDF. Не является результатом вычисления
+       ``/joint_states``.
    * - ``/encoder_joint_states``
      - ``sensor_msgs/msg/JointState``
      - ``quantize_joint_states``
+     - диагностика
      - Диагностическая копия с разрешением реального энкодера.
    * - ``/ground_truth/odom``
-     - ``nav_msgs/msg/Odometry`` после ``ros_gz_bridge``
-     - Gazebo ``OdometryPublisher``
-     - Только калибровка симуляции; не является входом SLAM.
+     - ``nav_msgs/msg/Odometry`` после отдельного bridge
+     - Gazebo ``OdometryPublisher`` при его включении
+     - диагностика
+     - Truth только для симуляционной калибровки. Текущий sim launch мостит
+       его автоматически и не создаёт из него TF.
    * - ``/map``
      - ``nav_msgs/msg/OccupancyGrid``
-     - ``slam_toolbox``
-     - Текущая растровая карта.
+     - ``slam_toolbox`` или ``map_server``
+     - RViz, AMCL, map tools
+     - Строящаяся либо заранее сохранённая растровая карта.
+   * - ``/amcl_pose``
+     - ``geometry_msgs/msg/PoseWithCovarianceStamped``
+     - AMCL
+     - RViz/навигация/диагностика
+     - Глобальная оценка позы частицами по известной карте.
+   * - ``/particle_cloud``
+     - ``nav2_msgs/msg/ParticleCloud``
+     - AMCL
+     - RViz/диагностика
+     - Текущее распределение частиц.
    * - ``/clock``
      - ``rosgraph_msgs/msg/Clock``
-     - Gazebo
+     - ``gazebo_bridge``
+     - все ноды с ``use_sim_time=true``
      - Симуляционное время.
+   * - ``/tf``
+     - ``tf2_msgs/msg/TFMessage``
+     - SLAM или AMCL, EKF, ``robot_state_publisher``
+     - transform listeners
+     - Динамические ``map -> odom``, ``odom -> base_footprint`` и wheel TF.
+   * - ``/tf_static``
+     - ``tf2_msgs/msg/TFMessage``
+     - ``robot_state_publisher``
+     - transform listeners
+     - Фиксированные преобразования корпуса и сенсоров.
+
+Блоки runtime-графа
+-------------------
+
+Модель робота
+   ``joint_state_broadcaster -> /joint_states -> robot_state_publisher`` и
+   ``robot_state_publisher -> /robot_description -> controller_manager``.
+
+Привод
+   ``teleop -> /cmd_vel -> diff_drive_controller -> /wheel/odom -> EKF``;
+   параллельно ``Gazebo IMU -> /imu/data -> EKF``.
+   Связь локализации со SLAM/AMCL идёт через скрытый на обычном ``rqt_graph``
+   TF ``odom -> base_footprint``.
+
+Реальный привод
+   ``teleop/navigation -> /cmd_vel -> arduino_bridge -> Serial`` и
+   ``Arduino telemetry -> /wheel/odom -> EKF``. Независимая нода на Raspberry
+   Pi читает BMI270 по I²C и публикует ``/imu/data -> EKF``; Arduino bridge в
+   тракт IMU не входит.
+
+Сенсор и SLAM
+   ``gazebo_bridge -> /scan -> slam_toolbox -> /map``. Дополнительно SLAM
+   публикует TF ``map -> odom`` и lifecycle transition events.
+
+Известная карта
+   ``map_server -> /map -> AMCL`` и ``gazebo_bridge -> /scan -> AMCL``.
+   AMCL публикует ``/amcl_pose``, ``/particle_cloud`` и TF ``map -> odom``.
+
+Фактический publisher/subscriber всегда проверяется командой
+``ros2 topic info <имя> -v``. Полный набор команд приведён в :doc:`running`.
 
 Системы координат
 -----------------

@@ -1,0 +1,66 @@
+ekf_filter_node:
+  ros__parameters:
+
+    # Arduino рассчитывает и передаёт энкодерную одометрию примерно с частотой
+    # цикла управления. EKF публикует непрерывную локальную оценку с 50 Гц.
+    frequency: 50.0
+    sensor_timeout: 0.3
+
+    # Реальный робот рассматривается как плоская дифференциальная платформа.
+    two_d_mode: true
+    transform_time_offset: 0.0
+    transform_timeout: 0.0
+
+    print_diagnostics: true
+    debug: false
+    publish_acceleration: false
+
+    # В штатном bringup это единственный издатель odom -> base_footprint.
+    publish_tf: true
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_footprint
+    world_frame: odom
+
+    # Сырая одометрия формируется Arduino по энкодерам и публикуется bridge.
+    odom0: /wheel/odom
+
+    # Порядок 15 флагов:
+    # x, y, z, roll, pitch, yaw,
+    # vx, vy, vz, vroll, vpitch, vyaw,
+    # ax, ay, az.
+    #
+    # Используем скорости vx и vy=0. Wheel vyaw выключен: угловую скорость
+    # даёт независимый BMI270, подключённый по I2C непосредственно к Raspberry
+    # Pi. Pose и twist одного энкодерного источника одновременно не объединяем.
+    odom0_config:
+      [false, false, false,
+       false, false, false,
+       true,  true,  false,
+       false, false, false,
+       false, false, false]
+
+    odom0_differential: false
+    odom0_relative: false
+    odom0_queue_size: 10
+
+    use_control: false
+
+    # Отдельная ROS-нода Raspberry Pi должна читать BMI270 по I2C и публиковать
+    # sensor_msgs/msg/Imu с header.frame_id=imu_link. Arduino bridge в этот
+    # тракт не входит.
+    imu0: /imu/data
+
+    # BMI270 не имеет магнитометра, поэтому абсолютный yaw из orientation не
+    # используем. EKF интегрирует только измеренную angular_velocity.z.
+    imu0_config:
+      [false, false, false,
+       false, false, false,
+       false, false, false,
+       false, false, true,
+       false, false, false]
+
+    imu0_differential: false
+    imu0_relative: false
+    imu0_queue_size: 20
+    imu0_remove_gravitational_acceleration: false

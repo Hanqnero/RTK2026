@@ -1,4 +1,4 @@
-"""Запуск Gazebo Sim, ros2_control, SLAM Toolbox и RViz для RTK2026."""
+"""Запуск Gazebo Sim, EKF, SLAM Toolbox и RViz для RTK2026."""
 
 from launch import LaunchDescription
 from launch.actions import (
@@ -26,6 +26,7 @@ def generate_launch_description() -> LaunchDescription:
     world = LaunchConfiguration("world")
     use_meshes = LaunchConfiguration("use_meshes")
     use_rviz = LaunchConfiguration("use_rviz")
+    use_slam = LaunchConfiguration("use_slam")
     rviz_config = LaunchConfiguration("rviz_config")
 
     # ~ Пути к установленным ресурсам проекта
@@ -127,7 +128,11 @@ def generate_launch_description() -> LaunchDescription:
     # ~ Мост Gazebo Transport -> ROS 2.
     #
     # Символ [ означает одностороннее направление из Gazebo в ROS.
-    # /clock нужен всем узлам с use_sim_time=true, /scan нужен slam_toolbox.
+    # /clock нужен всем узлам с use_sim_time=true, /scan — SLAM или AMCL,
+    # /imu/data — локальному EKF.
+    # /ground_truth/odom нужен только диагностике и будущей оценке экспериментов;
+    # ground_truth/tf намеренно не мостим, чтобы не создать второго издателя
+    # odom -> base_footprint.
     gazebo_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
@@ -136,7 +141,13 @@ def generate_launch_description() -> LaunchDescription:
         arguments=[
             "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
             "/scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan",
+            "/imu/data@sensor_msgs/msg/Imu[gz.msgs.IMU",
+            (
+                "/ground_truth/odom@nav_msgs/msg/Odometry"
+                "[gz.msgs.Odometry"
+            ),
         ],
+        parameters=[{"use_sim_time": True}],
     )
 
     # ~ Публикация состояний вращающихся joints.
@@ -159,8 +170,8 @@ def generate_launch_description() -> LaunchDescription:
     # ~ Штатный дифференциальный привод.
     #
     # Внутренние топики контроллера приводим к общему API робота:
-    #   /cmd_vel : geometry_msgs/msg/TwistStamped;
-    #   /odom    : nav_msgs/msg/Odometry.
+    #   /cmd_vel   : geometry_msgs/msg/TwistStamped;
+    #   /wheel/odom: сырая nav_msgs/msg/Odometry по joint feedback.
     diff_drive_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
@@ -178,7 +189,7 @@ def generate_launch_description() -> LaunchDescription:
             (
                 "--ros-args "
                 "--remap /diff_drive_controller/cmd_vel:=/cmd_vel "
-                "--remap /diff_drive_controller/odom:=/odom"
+                "--remap /diff_drive_controller/odom:=/wheel/odom"
             ),
         ],
     )
@@ -192,6 +203,26 @@ def generate_launch_description() -> LaunchDescription:
             joint_state_broadcaster_spawner,
             diff_drive_controller_spawner,
         ],
+    )
+
+    # ~ Локальный EKF одометрии.
+    #
+    # Контроллер публикует /wheel/odom без TF. EKF фильтрует скорости,
+    # публикует /odometry/filtered и является единственным владельцем
+    # динамической трансформации odom -> base_footprint.
+    ekf = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution(
+                [
+                    FindPackageShare("rtk2026_localization"),
+                    "launch",
+                    "ekf.launch.py",
+                ]
+            )
+        ),
+        launch_arguments={
+            "use_sim_time": "true",
+        }.items(),
     )
 
     # ~ Запуск slam_toolbox в режиме mapping.
@@ -211,6 +242,7 @@ def generate_launch_description() -> LaunchDescription:
         launch_arguments={
             "use_sim_time": "true",
         }.items(),
+        condition=IfCondition(use_slam),
     )
 
     # ~ RViz запускается в том же X-дисплее, который отдаёт noVNC.
@@ -249,6 +281,13 @@ def generate_launch_description() -> LaunchDescription:
                 description="Запустить RViz для локального X11/noVNC-дисплея.",
             ),
             DeclareLaunchArgument(
+                "use_slam",
+                default_value="true",
+                description=(
+                    "Запустить slam_toolbox. Укажите false перед запуском AMCL."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "rviz_config",
                 default_value=PathJoinSubstitution(
                     [
@@ -264,6 +303,7 @@ def generate_launch_description() -> LaunchDescription:
             spawn_robot,
             gazebo_bridge,
             delayed_controller_spawners,
+            ekf,
             slam,
             rviz,
         ]

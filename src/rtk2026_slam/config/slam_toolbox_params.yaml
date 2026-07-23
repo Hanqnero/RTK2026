@@ -1,6 +1,6 @@
 slam_toolbox:
   ros__parameters:
-    use_sim_time: true # & использовать время из ROS-топика /clock вместо системных часов Raspberry Pi (это актуально для симмуляции)
+    # Источник времени задаёт launch: true для Gazebo и false для робота.
     odom_frame: odom # ? имя локальной системы координат колесной одометрии
     map_frame: map # ? глобальсая система координат создаваемой карты
     base_frame: base_footprint # ? система координат основания робота.

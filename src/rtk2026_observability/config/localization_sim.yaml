@@ -1,0 +1,52 @@
+# Профиль mapping-режима: SLAM обязателен, AMCL ожидаемо выключен.
+# Для отдельного localization launch достаточно переопределить mode.
+mode: mapping
+
+topics:
+  wheel_odometry: /wheel/odom
+  filtered_odometry: /odometry/filtered
+  ground_truth: /ground_truth/odom
+  imu: /imu/data
+  slam_pose: /pose
+  amcl_pose: /amcl_pose
+  particle_cloud: /particle_cloud
+  map: /map
+
+covariance:
+  max_age: 1.0
+  symmetry_tolerance: 1.0e-9
+  positive_semidefinite_tolerance: 1.0e-10
+  # Wheel odometry и локальный EKF не имеют абсолютного наблюдения x/y/yaw,
+  # поэтому их sigma закономерно растут и только отображаются как метрики.
+  # Пределы применяем к глобальным оценкам, которые должны быть ограничены
+  # картой и лазерными измерениями.
+  uncertainty_limits:
+    slam:
+      sigma_xy_warn: 2.0
+      sigma_xy_error: 10.0
+      sigma_yaw_warn: 1.5
+      sigma_yaw_error: 3.14
+    amcl:
+      sigma_xy_warn: 1.0
+      sigma_xy_error: 3.0
+      sigma_yaw_warn: 0.8
+      sigma_yaw_error: 2.0
+
+consistency:
+  max_timestamp_skew: 0.15
+  linear_difference_warn: 0.20
+  angular_difference_warn: 0.35
+
+ground_truth:
+  # Пороги предназначены для live-сигнала. Точные RMSE и drift считаются
+  # по всей траектории уже в модуле записанных экспериментов.
+  position_error_warn: 0.20
+  yaw_error_warn: 0.20
+
+slam:
+  map_frame: map
+  max_map_age: 5.0
+  minimum_known_ratio: 0.01
+
+amcl:
+  minimum_particles: 100

@@ -9,12 +9,14 @@
 ---------------
 
 1. Устанавливается ROS 2 desktop, Gazebo integration, ``gz_ros2_control``,
-   контроллеры, ``slam_toolbox`` и ``teleop_twist_keyboard``.
+   контроллеры, ``slam_toolbox``, ``robot_localization``, компоненты AMCL и
+   ``teleop_twist_keyboard``.
 2. Устанавливается графический стек ``Xvfb → fluxbox → x11vnc → websockify``.
-3. В ``/workspace/src`` копируется текущий ``src/``.
+3. В ``/workspace`` копируются ``src/``, ``maps/`` и ``worlds/``.
 4. ``rosdep`` разрешает зависимости, кроме внешнего ``sllidar_ros2``.
-5. ``colcon`` собирает только description, driver, slam и bringup.
-6. Entrypoint поднимает виртуальный экран и выполняет команду из ``CMD``.
+5. ``colcon`` собирает description, driver, slam, localization и bringup.
+6. Entrypoint поднимает виртуальный экран и выполняет ``CMD ["sleep",
+   "infinity"]``.
 
 ``--symlink-install`` полезен внутри build stage, но исходный каталог хоста не
 смонтирован в контейнер. После изменения кода образ необходимо пересобрать.
@@ -41,13 +43,20 @@
    * - ``websockify`` / noVNC
      - TCP 6080
      - HTTP/WebSocket-доступ из браузера.
-   * - ROS launch
+   * - ``sleep infinity``
      - PID основного процесса
-     - Получает сигналы напрямую благодаря ``exec "$@"``.
+     - Удерживает контейнер запущенным; ROS launch пользователь запускает
+       вручную через ``docker exec``.
 
 Entrypoint проверяет запуск каждого фонового процесса. Логи находятся в
 ``/tmp/xvfb.log``, ``/tmp/fluxbox.log``, ``/tmp/x11vnc.log`` и
 ``/tmp/novnc.log``.
+
+.. important::
+
+   Успешный ``docker compose up`` означает, что готовы shell и noVNC, но не
+   означает, что запущены Gazebo, ROS-ноды или SLAM. Это намеренное поведение
+   текущего ``start_sim_novnc.sh``.
 
 Compose
 -------
@@ -70,14 +79,35 @@ loopback хоста:
 
 .. code-block:: bash
 
-   docker compose -f docker/docker-compose.sim.yml build
-   docker compose -f docker/docker-compose.sim.yml up
+   docker compose -f docker/docker-compose.sim.yml up -d --build
+   docker compose -f docker/docker-compose.sim.yml ps
 
-Интерфейс RViz:
+Интерфейс noVNC:
 
 .. code-block:: text
 
    http://127.0.0.1:6080/vnc.html
+
+Вход в контейнер:
+
+.. code-block:: bash
+
+   docker exec -it rtk2026_sim bash
+
+В интерактивном shell ``.bashrc`` подключает ROS 2 Jazzy и собранный
+``/workspace/install``. Запуск полного стека выполняется вручную:
+
+.. code-block:: bash
+
+   ros2 launch rtk2026_bringup sim_slam_launch.py
+
+Для ``rqt_graph``, teleop и диагностических команд откройте ещё один shell:
+
+.. code-block:: bash
+
+   docker exec -it rtk2026_sim bash
+
+Полный список команд и ожидаемых топиков: :doc:`running`.
 
 Остановка:
 
@@ -88,18 +118,23 @@ loopback хоста:
 Запуск с другим world
 ---------------------
 
-Compose позволяет заменить CMD:
+Launch принимает абсолютный путь аргументом ``world``. Стандартный
+установленный мир:
 
 .. code-block:: bash
 
-   docker compose -f docker/docker-compose.sim.yml run --rm --service-ports sim \
-     ros2 launch rtk2026_bringup sim_slam_launch.py \
+   ros2 launch rtk2026_bringup sim_slam_launch.py \
      world:=/workspace/install/rtk2026_description/share/rtk2026_description/worlds/rtk2026_slam_world.sdf
 
-Корневой ``worlds/polygon_5x5.world`` сейчас не копируется Dockerfile в образ.
-Чтобы использовать его без переноса в пакет description, нужен bind mount или
-дополнительный ``COPY``. Предпочтительный вариант — установить world как ресурс
-``rtk2026_description`` и передавать путь через ament index.
+Корневой ``worlds/polygon_5x5.world`` копируется в ``/workspace/worlds``:
+
+.. code-block:: bash
+
+   ros2 launch rtk2026_bringup sim_slam_launch.py \
+     world:=/workspace/worlds/polygon_5x5.world
+
+Сохранённая карта для AMCL находится в ``/workspace/maps/my_map.yaml``.
+Полный двухпроцессный запуск описан в :doc:`localization`.
 
 Диагностика
 -----------
@@ -108,8 +143,11 @@ Compose позволяет заменить CMD:
 
    docker logs -f rtk2026_sim
    docker exec -it rtk2026_sim bash
+   docker exec rtk2026_sim bash -lc 'ps -ef'
    docker exec rtk2026_sim bash -lc \
      'source /opt/ros/jazzy/setup.bash; source /workspace/install/setup.bash; ros2 node list'
+   docker exec rtk2026_sim bash -lc 'tail -100 /tmp/xvfb.log'
+   docker exec rtk2026_sim bash -lc 'tail -100 /tmp/novnc.log'
 
 Для software rendering ожидается меньшая частота GUI, чем на нативном GPU.
 Физическую частоту проверяют по ``/clock`` и sensor topics, а не по плавности

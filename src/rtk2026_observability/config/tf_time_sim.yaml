@@ -1,0 +1,68 @@
+# TF и временные контракты симуляционного mapping-режима.
+
+transforms:
+  - key: map_to_odom
+    parent: map
+    child: odom
+    required: true
+    max_age: 1.0
+    # Коррекция SLAM может немного сдвигать odom, но большой одиночный
+    # скачок обычно означает плохое сопоставление scan.
+    translation_jump_warn: 0.50
+    yaw_jump_warn: 0.50
+
+  - key: odom_to_base
+    parent: odom
+    child: base_footprint
+    required: true
+    max_age: 0.20
+    translation_jump_warn: 0.10
+    yaw_jump_warn: 0.20
+
+chains:
+  - key: base_to_lidar
+    parent: base_footprint
+    child: lidar_frame
+    required: true
+
+  - key: base_to_imu
+    parent: base_footprint
+    child: imu_link
+    required: true
+
+streams:
+  - key: scan
+    topic: /scan
+    type: sensor_msgs/msg/LaserScan
+    frame_id: lidar_frame
+    required: true
+    max_age: 0.5
+    qos: sensor_data
+
+  - key: imu
+    topic: /imu/data
+    type: sensor_msgs/msg/Imu
+    frame_id: imu_link
+    required: true
+    max_age: 0.2
+    qos: sensor_data
+    compare_with: scan
+    max_skew: 0.25
+
+  - key: wheel_odom
+    topic: /wheel/odom
+    type: nav_msgs/msg/Odometry
+    frame_id: odom
+    required: true
+    max_age: 0.3
+    compare_with: imu
+    max_skew: 0.15
+
+  - key: filtered_odom
+    topic: /odometry/filtered
+    type: nav_msgs/msg/Odometry
+    frame_id: odom
+    required: true
+    max_age: 0.3
+    compare_with: wheel_odom
+    max_skew: 0.10

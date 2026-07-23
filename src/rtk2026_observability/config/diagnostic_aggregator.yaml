@@ -1,0 +1,73 @@
+diagnostic_aggregator:
+  ros__parameters:
+
+    # Корень дерева в rqt_robot_monitor.
+    path: RTK2026
+
+    # Агрегированное состояние публикуется раз в секунду.
+    pub_rate: 1.0
+
+    # При ухудшении состояния результат публикуется немедленно.
+    critical: true
+
+    # Сохраняем числовые диагностические значения:
+    # CPU load, RAM load, свободное место и другие.
+    publish_values: true
+
+    # Диагностика вычислительной платформы.
+    #
+    # contains проверяет вхождение строки в имя DiagnosticStatus.
+    # Поэтому правило не зависит от имени контейнера.
+    compute:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Compute
+      contains:
+        - CPU Information
+        - RAM Information
+        - HD Usage
+
+    # Диагностика стандартных ROS 2 topics.
+    # Все задачи topic_monitor имеют имя Topics/<key>.
+    topics:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Topics
+      contains:
+        - "Topics/"
+
+    # Состояние ROS graph, lifecycle и WARN/ERROR выбранных нод.
+    # Все задачи node_monitor имеют имя Nodes/<key>.
+    nodes:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Nodes
+      contains:
+        - "Nodes/"
+
+    # Целостность map -> odom -> base_footprint и статических ветвей.
+    transforms:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: TF
+      contains:
+        - "TF/"
+
+    # Нулевые/обратные timestamp, frame_id и рассинхронизация потоков.
+    time:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Time
+      contains:
+        - "Time/"
+
+    # Проверки содержимого LaserScan, IMU и wheel feedback.
+    sensors:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Sensors
+      contains:
+        - "Sensors/"
+
+    # Выходы EKF, SLAM Toolbox и AMCL. Сюда же попадает штатный
+    # DiagnosticStatus robot_localization при print_diagnostics=true.
+    localization:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Localization
+      contains:
+        - "Localization/"
+        - "ekf_filter_node"

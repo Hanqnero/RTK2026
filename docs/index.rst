@@ -25,6 +25,7 @@ ROS 2-драйвер, построение карты, модели URDF/Xacro, 
 
    arduino/index
    driver
+   localization
    slam
    description/index
    bringup
@@ -34,6 +35,7 @@ ROS 2-драйвер, построение карты, модели URDF/Xacro, 
    :maxdepth: 2
    :caption: Эксплуатация и разработка
 
+   running
    calibration
    diagnostics
    development

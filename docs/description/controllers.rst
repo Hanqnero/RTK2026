@@ -11,6 +11,26 @@ Controller manager
 контроллеров и записи wheel velocity commands. ``joint_state_broadcaster``
 публикует ``position`` и ``velocity`` обоих joints в ``/joint_states``.
 
+В runtime-графе блок управления разбит между ROS-топиками и невидимыми
+hardware interfaces:
+
+.. code-block:: text
+
+   Gazebo joints
+      ↕ gz_ros2_control state/command interfaces
+   controller_manager
+      ├── joint_state_broadcaster -> /joint_states
+      └── diff_drive_controller  <- /cmd_vel
+                                 -> /wheel/odom, cmd_vel_out
+                                            │
+                                            ▼
+                                     ekf_filter_node
+                                 -> /odometry/filtered, /tf
+
+``controller_manager`` создаётся Gazebo-плагином из Xacro, а не отдельным
+``Node(...)`` в launch. Поэтому работоспособность блока проверяют одновременно
+через ``rqt_graph`` и ``ros2 control list_hardware_interfaces -v``.
+
 DiffDriveController
 -------------------
 
@@ -47,7 +67,7 @@ DiffDriveController
      - Команды не подменяют обратную связь.
    * - ``publish_rate``
      - 50 Гц
-     - Частота ``/odom`` и TF.
+     - Частота сырого ``/wheel/odom``.
    * - ``cmd_vel_timeout``
      - 0.5 с
      - Нулевая команда после потери input.
@@ -76,10 +96,10 @@ DiffDriveController
 Frames и TF
 -----------
 
-``odom_frame_id=odom``, ``base_frame_id=base_footprint`` и
-``enable_odom_tf=true`` означают, что контроллер является единственным
-издателем ``odom -> base_footprint``. Нельзя одновременно публиковать этот TF
-другим узлом одометрии.
+``odom_frame_id=odom`` и ``base_frame_id=base_footprint`` задают frame_id
+сырой wheel odometry. ``enable_odom_tf=false`` запрещает контроллеру
+публиковать ``odom -> base_footprint``: единственным владельцем этого TF
+является EKF из :doc:`../localization`.
 
 Ограничения команды
 -------------------
@@ -93,6 +113,9 @@ Frames и TF
 
 ``publish_limited_velocity=true`` позволяет видеть применённую после limits
 команду в ``/diff_drive_controller/cmd_vel_out``.
+
+Команды наблюдения этого блока и ожидаемые частоты приведены в
+:doc:`../running`.
 
 Ковариации
 -----------

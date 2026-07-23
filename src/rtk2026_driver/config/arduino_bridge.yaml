@@ -39,13 +39,12 @@ arduino_bridge:
     #
     # Тип сообщения:
     # nav_msgs/msg/Odometry
-    odom_topic: "/odom"
+    odom_topic: "/wheel/odom"
 
     # ~ Система координат, относительно которой Arduino рассчитывает
     # положение робота x, y и yaw.
     #
-    # Это родительский frame для TF:
-    # odom -> base_footprint
+    # Это frame_id сообщения /wheel/odom.
     odom_frame: "odom"
 
     # ~ Система координат основания робота.
@@ -53,9 +52,30 @@ arduino_bridge:
     # Она записывается в:
     # odom.child_frame_id
     #
-    # И используется как дочерний frame преобразования:
-    # odom -> base_footprint
+    # EKF использует ту же пару frame_id при публикации отфильтрованного TF.
     base_frame: "base_footprint"
+
+    # ~ Не публиковать второй TF odom -> base_footprint.
+    #
+    # В штатном real_slam этот TF принадлежит robot_localization/EKF.
+    # true допустимо только для отдельного запуска bridge без EKF.
+    publish_odom_tf: false
+
+    # ~ Диагональ covariance позы: x, y, z, roll, pitch, yaw.
+    #
+    # Pose и twist получены из одних энкодеров. EKF реального робота ниже
+    # использует только twist, но корректная covariance нужна всем внешним
+    # потребителям /wheel/odom.
+    pose_covariance_diagonal:
+      [0.02, 0.02, 1000000.0, 1000000.0, 1000000.0, 0.05]
+
+    # ~ Диагональ covariance скорости:
+    # vx, vy, vz, vroll, vpitch, vyaw.
+    #
+    # Это стартовые оценки, а не результаты калибровки. Их следует уточнить
+    # по серии повторяемых прямых, поворотов и замкнутых маршрутов.
+    twist_covariance_diagonal:
+      [0.01, 0.01, 1000000.0, 1000000.0, 1000000.0, 0.03]
 
     # ~ Период отправки последней команды на Arduino в секундах.
     #

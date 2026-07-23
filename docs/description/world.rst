@@ -34,7 +34,8 @@
      - Отличимый круговой объект.
 
 Physics использует шаг 1 мс и real-time factor 1.0. Мир подключает системы
-Physics, UserCommands, SceneBroadcaster и Sensors с Ogre2.
+Physics, UserCommands, SceneBroadcaster, Sensors с Ogre2 и отдельную систему
+Imu. ``polygon_5x5.world`` содержит тот же IMU system plugin.
 
 Другой world
 ------------
@@ -46,5 +47,6 @@ Launch принимает абсолютный путь:
    ros2 launch rtk2026_bringup sim_slam_launch.py \
      world:=/path/to/polygon_5x5.world
 
-World должен содержать как минимум Physics, UserCommands, SceneBroadcaster и
-Sensors plugins, иначе создание модели, lidar или GUI-данные могут не работать.
+World должен содержать как минимум Physics, UserCommands, SceneBroadcaster,
+Sensors и Imu plugins, иначе создание модели, lidar, IMU или GUI-данные могут
+не работать.

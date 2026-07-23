@@ -1,0 +1,76 @@
+# ROS graph для симуляции локализации по готовой карте.
+
+nodes:
+  controller_manager:
+    node: /controller_manager
+    required: true
+    expected_services:
+      - /controller_manager/list_controllers
+      - /controller_manager/list_hardware_interfaces
+    loggers:
+      - controller_manager
+
+  robot_state_publisher:
+    node: /robot_state_publisher
+    required: true
+    loggers:
+      - robot_state_publisher
+
+  gazebo_bridge:
+    node: /gazebo_bridge
+    required: true
+    loggers:
+      - gazebo_bridge
+
+  ekf:
+    node: /ekf_filter_node
+    required: true
+    loggers:
+      - ekf_filter_node
+    error_hold_time: 5.0
+
+  map_server:
+    node: /map_server
+    required: true
+    lifecycle: true
+    expected_state: active
+    lifecycle_max_age: 3.0
+    expected_services:
+      - /map_server/get_state
+    loggers:
+      - map_server
+
+  amcl:
+    node: /amcl
+    required: true
+    lifecycle: true
+    expected_state: active
+    lifecycle_max_age: 3.0
+    expected_services:
+      - /amcl/get_state
+    loggers:
+      - amcl
+    warn_hold_time: 30.0
+    error_hold_time: 120.0
+
+  rviz:
+    node: /rviz2
+    required: false
+    loggers:
+      - rviz2
+
+  topic_monitor:
+    node: /topic_monitor
+    required: true
+
+  tf_time_monitor:
+    node: /tf_time_monitor
+    required: true
+
+  sensor_monitor:
+    node: /sensor_monitor
+    required: true
+
+  localization_monitor:
+    node: /localization_monitor
+    required: true

@@ -5,8 +5,10 @@
 #. Получает :class:`geometry_msgs.msg.TwistStamped` из ``/cmd_vel``.
 #. Периодически передаёт последнюю команду Arduino.
 #. Читает :class:`~rtk2026_driver.protocol.TelemetryPacket` из USB Serial.
-#. Публикует ``/odom`` и динамическую трансформацию
-   ``odom -> base_footprint``.
+#. Публикует сырую колёсную одометрию ``/wheel/odom``.
+
+Динамическую трансформацию ``odom -> base_footprint`` по умолчанию публикует
+EKF. Bridge может публиковать её сам только в аварийном режиме без фильтра.
 """
 
 import math
@@ -41,10 +43,22 @@ class ArduinoBridgeNode(Node):
         self.declare_parameter("arduino_reset_wait_sec", 1.0) # время ожидания после открытия порта
 
         self.declare_parameter("cmd_vel_topic", "/cmd_vel") # входной топик данной ноды (по умолч "/cmd_vel")
-        self.declare_parameter("odom_topic", "/odom") # выходной топик данной ноды
+        self.declare_parameter("odom_topic", "/wheel/odom") # выходной топик данной ноды
 
         self.declare_parameter("odom_frame", "odom") # создаем неподвижную СК одометрии
         self.declare_parameter("base_frame", "base_footprint") # создаем СК робота
+        self.declare_parameter("publish_odom_tf", False) # TF обычно принадлежит EKF
+
+        # Диагонали ковариаций задаются отдельно от прошивки: это оценка
+        # неопределённости энкодерной одометрии, а не геометрия робота.
+        self.declare_parameter(
+            "pose_covariance_diagonal",
+            [0.02, 0.02, 1.0e6, 1.0e6, 1.0e6, 0.05],
+        )
+        self.declare_parameter(
+            "twist_covariance_diagonal",
+            [0.01, 0.01, 1.0e6, 1.0e6, 1.0e6, 0.03],
+        )
 
         self.declare_parameter("command_send_interval_sec", 0.02) # интервал отправки команд на ардуино (в сек)
         self.declare_parameter("telemetry_poll_period_sec", 0.01) # интервал проверки буфера (в сек)
@@ -77,6 +91,15 @@ class ArduinoBridgeNode(Node):
         )
         self._base_frame = str(
             self.get_parameter("base_frame").value
+        )
+        self._publish_odom_tf = bool(
+            self.get_parameter("publish_odom_tf").value
+        )
+        self._pose_covariance_diagonal = self._read_covariance_diagonal(
+            "pose_covariance_diagonal"
+        )
+        self._twist_covariance_diagonal = self._read_covariance_diagonal(
+            "twist_covariance_diagonal"
         )
 
         command_send_interval_sec = float(
@@ -140,6 +163,36 @@ class ArduinoBridgeNode(Node):
         self.get_logger().info(
             f"Arduino bridge started on {serial_port}"
         )
+
+    def _read_covariance_diagonal(self, parameter_name: str) -> tuple[float, ...]:
+        """Прочитать и проверить шесть диагональных элементов ковариации.
+
+        Порядок значений: ``x, y, z, roll, pitch, yaw`` для pose и
+        ``vx, vy, vz, vroll, vpitch, vyaw`` для twist.
+
+        :param parameter_name: имя ROS-параметра с массивом из шести чисел.
+        :raises ValueError: если размер, знак или конечность значений неверны.
+        """
+
+        diagonal = tuple(
+            float(value)
+            for value in self.get_parameter(parameter_name).value
+        )
+
+        if len(diagonal) != 6:
+            raise ValueError(
+                f"{parameter_name} must contain exactly 6 values"
+            )
+
+        if any(
+            value < 0.0 or not math.isfinite(value)
+            for value in diagonal
+        ):
+            raise ValueError(
+                f"{parameter_name} must contain finite non-negative values"
+            )
+
+        return diagonal
     # тот самый колбек подписки
     def _on_cmd_vel(self, message: TwistStamped) -> None:
         """Проверить и сохранить новую команду скорости.
@@ -246,16 +299,17 @@ class ArduinoBridgeNode(Node):
                 break
 
             self._publish_odometry(telemetry)
-            
-    # ~ распаковка одометрии с ардуинки и ее публкикация 
+
+    # ~ распаковка одометрии с ардуинки и ее публкикация
     def _publish_odometry(
         self,
         telemetry: TelemetryPacket,
     ) -> None:
-        """Опубликовать одометрию и соответствующую динамическую TF.
+        """Опубликовать сырую одометрию и, при необходимости, динамическую TF.
 
-        Оба сообщения получают одну временную метку. Плоский угол курса из
-        телеметрии переводится в quaternion вращения вокруг оси Z.
+        Плоский угол курса из телеметрии переводится в quaternion вращения
+        вокруг оси Z. При ``publish_odom_tf=false`` TF не отправляется:
+        единственным владельцем ``odom -> base_footprint`` остаётся EKF.
 
         :param telemetry: разобранный пакет состояния Arduino.
         """
@@ -295,7 +349,17 @@ class ArduinoBridgeNode(Node):
             telemetry.current_angular_rps
         )
 
+        for index, value in enumerate(self._pose_covariance_diagonal):
+            odom_message.pose.covariance[index * 7] = value
+
+        for index, value in enumerate(self._twist_covariance_diagonal):
+            odom_message.twist.covariance[index * 7] = value
+
         self._odom_publisher.publish(odom_message) # публикация сообщения
+
+        if not self._publish_odom_tf:
+            return
+
         transform = TransformStamped() # создаем дерево трансформаций (чтобы в рвиз визуализировать собственно локализацию робота)
 
         transform.header.stamp = stamp
@@ -373,4 +437,4 @@ def main(args=None) -> None:
 
 
 if __name__ == "__main__":
-    main()     
+    main()

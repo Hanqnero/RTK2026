@@ -63,6 +63,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 rst_prolog = """
 .. |cmd_vel| replace:: ``/cmd_vel``
 .. |odom| replace:: ``/odom``
+.. |wheel_odom| replace:: ``/wheel/odom``
 .. |scan| replace:: ``/scan``
 .. |base_footprint| replace:: ``base_footprint``
 """
@@ -77,7 +78,11 @@ intersphinx_mapping = {
 # должна мешать проверке внешней документации через ``make linkcheck``.
 linkcheck_ignore = [
     r"https://github\.com/Hanqnero/RTK2026/(?:blob|tree)/.*",
+    # GitHub периодически отвечает linkcheck rate limit, хотя ссылка ведёт на
+    # официальный шаблон robot_localization и остаётся полезной читателю.
+    r"https://github\.com/cra-ros-pkg/robot_localization/blob/.*",
     r"http://127\.0\.0\.1:6080/.*",
+    r"http://127\.0\.0\.1:6081/.*",
 ]
 
 todo_include_todos = True

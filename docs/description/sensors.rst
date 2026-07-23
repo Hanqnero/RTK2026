@@ -12,8 +12,32 @@ IMU
    rpy = π 0 -π/2
 
 В diff-drive-симуляции упрощённый IMU находится по центру у нижней грани
-корпуса. Макрос создаёт инерцию, visual, collision и TF, но сейчас не создаёт
-Gazebo sensor и не публикует ``sensor_msgs/Imu``.
+корпуса. ``imu.xacro`` создаёт инерцию, visual, collision и TF, а
+``imu_gazebo.xacro`` добавляет sensor Gazebo Harmonic.
+
+.. list-table:: Симуляционная IMU
+   :header-rows: 1
+
+   * - Параметр
+     - Значение
+   * - Gazebo system
+     - ``gz::sim::systems::Imu``
+   * - Частота
+     - 100 Гц
+   * - Frame
+     - ``imu_link``
+   * - Gazebo topic
+     - ``/imu/data``
+   * - ROS topic после bridge
+     - ``/imu/data`` типа ``sensor_msgs/msg/Imu``
+   * - σ angular velocity
+     - 0.002 рад/с на каждую ось
+   * - σ linear acceleration
+     - 0.02 м/с² на каждую ось
+
+EKF использует только ``angular_velocity.z``. Orientation и acceleration
+публикуются для диагностики, но пока не входят в fusion. Шумы являются
+стартовой моделью симуляции, а не результатом калибровки реального BMI270.
 
 Лидар
 -----

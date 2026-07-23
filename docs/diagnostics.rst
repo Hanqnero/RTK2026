@@ -1,13 +1,17 @@
 Диагностика системы
 ===================
 
+Команды первичного запуска, ``rqt_graph``, обхода нод и измерения частот
+собраны в :doc:`running`. Здесь приведён порядок локализации неисправности и
+более узкие проверки модели/одометрии.
+
 Порядок проверки плохой карты
 -----------------------------
 
 Проверяйте снизу вверх:
 
 1. wheel joints и знаки энкодеров;
-2. фактическое движение против ``/odom``;
+2. фактическое движение против ``/wheel/odom`` и ``/odometry/filtered``;
 3. статические TF датчиков;
 4. timestamp и frame_id ``/scan``;
 5. только после этого — параметры scan matching.
@@ -19,13 +23,128 @@
 
    ros2 topic list
    ros2 topic info -v /cmd_vel
-   ros2 topic hz /odom
+   ros2 topic hz /wheel/odom
+   ros2 topic hz /imu/data
+   ros2 topic hz /odometry/filtered
    ros2 topic hz /scan
    ros2 topic echo /joint_states --once
+   ros2 topic echo /imu/data --once
    ros2 topic echo /scan --once --field header
 
 Для симуляции nominal: controller update 100 Гц, odom 50 Гц, lidar 10 Гц,
 SLAM input не чаще 5 Гц из-за ``minimum_time_interval=0.2``.
+
+Автоматическое дерево диагностики
+---------------------------------
+
+Пакет ``rtk2026_observability`` разделяет live-проверки на независимые
+ветки:
+
+``Compute``
+   CPU, RAM и свободное место в каталоге записей.
+
+``Topics``
+   Наличие, частота и свежесть ``/scan``, ``/imu/data``, одометрии,
+   ``/map`` и других интерфейсов. ``/pose`` от ``slam_toolbox`` является
+   событийным: неподвижный робот не обязан публиковать его с постоянной
+   частотой.
+
+``Nodes``
+   Наличие обязательных нод, сервисы, lifecycle-состояние и недавние
+   ``WARN``/``ERROR`` из ``/rosout``.
+
+``TF``
+   Связность ``map -> odom -> base_footprint`` и ветвей лидара/IMU,
+   свежесть динамических преобразований, смена parent и скачки позы.
+
+``Time``
+   Нулевые и обратные timestamp, ``frame_id`` и рассинхронизация
+   ``scan``, IMU, wheel odometry и выхода EKF.
+
+``Sensors``
+   Геометрия и значения ``LaserScan``, ковариации и шум IMU на стоянке,
+   наличие wheel joints и соответствие направления feedback применённой
+   команде ``/diff_drive_controller/cmd_vel_out``.
+
+``Localization``
+   Матрицы ковариации wheel odometry/EKF/SLAM/AMCL, согласованность
+   скоростей EKF с колёсами и gyro Z, пригодность occupancy grid и
+   статистика particle cloud AMCL. В симуляции также показывается текущая
+   ошибка wheel odometry и EKF относительно ``/ground_truth/odom``. Сюда же
+   агрегируются штатные статусы ``robot_localization``.
+
+В ``mapping`` ветка ``Nodes`` требует активный ``slam_toolbox``. В
+``localization`` она автоматически переключается на lifecycle-ноды
+``map_server`` и ``amcl``; одновременно требовать SLAM и AMCL не будет.
+Проверка topics также переключается: обновляемая карта SLAM контролируется
+по возрасту, а статическая карта Map Server считается корректной после
+одного transient-local сообщения. Выходы ``/amcl_pose`` и
+``/particle_cloud`` считаются событийными.
+
+.. note::
+
+   Эти готовые YAML-профили относятся к симуляции и используют IMU, wheel
+   joints и ``/ground_truth/odom``. Их нельзя без изменений считать
+   диагностикой реального робота: до отдельного real-профиля отсутствующие
+   симуляционные источники будут отмечаться как stale.
+
+Запуск backend и GUI:
+
+.. code-block:: bash
+
+   ros2 launch rtk2026_observability diagnostics.launch.py use_gui:=true
+
+Для mapping используется значение по умолчанию. В отдельном AMCL-запуске
+переключите обязательные проверки:
+
+.. code-block:: bash
+
+   ros2 launch rtk2026_observability diagnostics.launch.py \
+     use_gui:=true localization_mode:=localization
+
+Для ``slam_toolbox`` ветка ``Nodes/slam_toolbox`` проверяет:
+
+* наличие ``/slam_toolbox`` в ROS graph;
+* lifecycle-состояние ``active``;
+* сервисы ``get_state``, ``pause_new_measurements`` и ``serialize_map``;
+* число ``WARN`` и ``ERROR/FATAL`` с начала запуска;
+* текст и возраст последнего ещё актуального предупреждения.
+
+Проверка без RQt:
+
+.. code-block:: bash
+
+   ros2 topic echo /diagnostics_agg --once --field status
+   ros2 topic echo /diagnostics --once --field status
+   ros2 lifecycle get /slam_toolbox
+   ros2 service list | grep /slam_toolbox
+
+``/diagnostics`` содержит исходные статусы, ``/diagnostics_agg`` — дерево
+``RTK2026`` для ``rqt_robot_monitor``. Значения ``Correlation X-Y``,
+``Correlation X-yaw`` и ``Correlation Y-yaw`` — нормированные внедиагональные
+элементы covariance в диапазоне от -1 до 1. Знак показывает направление
+совместной ошибки, а модуль около 1 — сильную связанность оценок. Это не
+корреляция карты с лидаром и не метрика scan matching.
+
+У ``/wheel/odom`` и локального EKF нет абсолютного измерения ``x``, ``y`` и
+``yaw``. Поэтому их ``sigma`` закономерно растут во времени: они выводятся в
+дерево и на графики, но сами по себе не создают ERROR. Числовые пределы
+неопределённости применяются только к глобальным оценкам SLAM и AMCL.
+
+``slam_toolbox`` не публикует через стандартный API числовые response каждого
+scan matching или готовую метрику качества loop closure. Такие величины нельзя
+надёжно восстановить из одного ``/diagnostics``. Для них нужен записанный
+эксперимент: ``/scan``, ``/pose``, ``/map``, TF, одометрия, ground truth и
+``/rosout``.
+
+Снимок графа для отчёта
+-----------------------
+
+Во втором терминале контейнера запустите ``rqt_graph`` и откройте окно через
+noVNC. Для основного data flow скройте ``/tf`` и ``/tf_static``; для поиска
+пропавшего преобразования, наоборот, включите их или используйте
+``rqt_tf_tree``. Отсутствие ``spawn_rtk2026`` и controller spawner-ов после
+старта нормально: это завершившиеся служебные процессы.
 
 TF
 --
@@ -80,10 +199,11 @@ TF
 RViz для одометрии
 ------------------
 
-Установите Fixed Frame ``odom`` и добавьте два Odometry display:
-``/odom`` и ``/ground_truth/odom``. На чистом повороте стрелки должны менять
-yaw вокруг одной точки. Сантиметровое смещение ``base_footprint`` при повороте
-указывает на неправильный центр frame или проскальзывание.
+Установите Fixed Frame ``odom`` и добавьте три Odometry display:
+``/wheel/odom``, ``/odometry/filtered`` и ``/ground_truth/odom``. На чистом
+повороте стрелки должны менять yaw вокруг одной точки. Сантиметровое смещение
+``base_footprint`` при повороте указывает на неправильный центр frame или
+проскальзывание.
 
 Запись эксперимента
 -------------------
@@ -92,7 +212,8 @@ yaw вокруг одной точки. Сантиметровое смещен�
 
    ros2 bag record \
      /clock /cmd_vel /diff_drive_controller/cmd_vel_out \
-     /joint_states /odom /ground_truth/odom /scan /tf /tf_static
+     /joint_states /wheel/odom /odometry/filtered \
+     /ground_truth/odom /scan /tf /tf_static
 
 В bag должны попасть команда, применённая команда, feedback, обе одометрии,
 лидар и TF. Без этого невозможно разделить проблему управления, физики и SLAM.

@@ -28,6 +28,9 @@
     filename="$(find rtk2026_description)/urdf/sensors/imu.xacro"/>
 
   <xacro:include
+    filename="$(find rtk2026_description)/urdf/sensors/imu_gazebo.xacro"/>
+
+  <xacro:include
     filename="$(find rtk2026_description)/urdf/sensors/lidar.xacro"/>
 
   <xacro:include
@@ -111,6 +114,16 @@
     rpy="0 0 0"
     use_mesh="false"
     mesh=""/>
+
+  <!--
+    Gazebo IMU публикует ориентацию, angular velocity и linear acceleration.
+    EKF использует только angular_velocity.z; абсолютный yaw не объединяем.
+  -->
+  <xacro:rtk2026_imu_gazebo
+    prefix="$(arg prefix)"
+    update_rate="100.0"
+    angular_velocity_stddev="0.002"
+    linear_acceleration_stddev="0.02"/>
 
   <!-- Лидар сверху в геометрическом центре корпуса. -->
   <xacro:rtk2026_lidar

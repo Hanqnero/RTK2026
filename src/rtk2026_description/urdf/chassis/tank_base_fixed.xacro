@@ -61,7 +61,7 @@
           <material name="gray"/>
         </visual>
       </xacro:if>
-      
+
       <!--
         Если mesh отключён, используем упрощённый box.
         Это fallback-геометрия для отладки.

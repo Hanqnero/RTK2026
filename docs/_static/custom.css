@@ -2,8 +2,41 @@
   --rtk-accent: #275d85;
 }
 
+div.document {
+  width: min(96vw, 1580px);
+  max-width: 1580px;
+}
+
+div.bodywrapper {
+  margin-left: 260px;
+}
+
 div.body {
-  max-width: 980px;
+  box-sizing: border-box;
+  max-width: none;
+  min-width: 0;
+  padding-left: 42px;
+  padding-right: 42px;
+}
+
+div.sphinxsidebar {
+  width: 240px;
+}
+
+a.rqt-graph,
+img.rqt-graph {
+  width: 100%;
+  max-width: none;
+}
+
+a.rqt-graph {
+  display: block;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+div.body img {
+  height: auto;
 }
 
 div.admonition.attention,
@@ -18,4 +51,19 @@ table.docutils th {
 
 code.literal {
   color: var(--rtk-accent);
+}
+
+@media screen and (max-width: 940px) {
+  div.document {
+    width: 100%;
+  }
+
+  div.bodywrapper {
+    margin: 0;
+  }
+
+  div.body {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
 }
