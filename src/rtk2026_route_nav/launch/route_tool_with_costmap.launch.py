@@ -5,18 +5,17 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, TimerAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from launch_ros.descriptions import ParameterFile
-from nav2_common.launch import RewrittenYaml
 
 
 def generate_launch_description() -> LaunchDescription:
     pkg = Path(get_package_share_directory("rtk2026_route_nav"))
+    vector_objects_pkg = Path(get_package_share_directory("rtk2026_vector_objects"))
     costmap_params = pkg / "config" / "route_editor_global_costmap.yaml"
-    vector_params = pkg / "config" / "vector_object_server_params.yaml"
     route_params = pkg / "config" / "nav2_route_params.yaml"
     nav2_execution_params = pkg / "config" / "nav2_execution_params.yaml"
     lane_manager_params = pkg / "config" / "lane_decision_manager_v3.yaml"
@@ -41,15 +40,6 @@ def generate_launch_description() -> LaunchDescription:
     nav2_execution_params_file = LaunchConfiguration("nav2_execution_params_file")
     start_rviz = LaunchConfiguration("start_rviz")
     enable_lane_manager = LaunchConfiguration("enable_lane_manager")
-    configured_vector_params = ParameterFile(
-        RewrittenYaml(
-            source_file=str(vector_params),
-            root_key="",
-            param_rewrites={"use_sim_time": use_sim_time},
-            convert_types=True,
-        ),
-        allow_substs=True,
-    )
 
     return LaunchDescription(
         [
@@ -235,37 +225,14 @@ def generate_launch_description() -> LaunchDescription:
                 output="screen",
                 parameters=[{"use_sim_time": use_sim_time}],
             ),
-            Node(
+            # vector_object_server + costmap_filter_info_server + lifecycle_manager_vector +
+            # keepout_click_tool: вынесены в rtk2026_vector_objects, самодостаточный launch.
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    str(vector_objects_pkg / "launch" / "vector_objects.launch.py")
+                ),
                 condition=IfCondition(use_vector_server),
-                package="nav2_map_server",
-                executable="vector_object_server",
-                name="vector_object_server",
-                output="screen",
-                parameters=[
-                    configured_vector_params,
-                ],
-            ),
-            Node(
-                condition=IfCondition(use_vector_server),
-                package="nav2_map_server",
-                executable="costmap_filter_info_server",
-                name="costmap_filter_info_server",
-                output="screen",
-                parameters=[
-                    configured_vector_params,
-                ],
-            ),
-            Node(
-                condition=IfCondition(use_vector_server),
-                package="nav2_lifecycle_manager",
-                executable="lifecycle_manager",
-                name="lifecycle_manager_vector",
-                output="screen",
-                parameters=[
-                    {"use_sim_time": use_sim_time},
-                    {"autostart": True},
-                    {"node_names": ["vector_object_server", "costmap_filter_info_server"]},
-                ],
+                launch_arguments={"use_sim_time": use_sim_time}.items(),
             ),
             Node(
                 package="nav2_route",
@@ -352,17 +319,6 @@ def generate_launch_description() -> LaunchDescription:
                             {"bond_timeout": 0.0},
                         ],
                     ),
-                ],
-            ),
-            Node(
-                condition=IfCondition(use_vector_server),
-                package="rtk2026_route_nav",
-                executable="keepout_click_tool",
-                name="keepout_click_tool",
-                output="screen",
-                parameters=[
-                    {"add_shapes_service": "/vector_object_server/add_shapes"},
-                    {"frame_id": "map"},
                 ],
             ),
             Node(

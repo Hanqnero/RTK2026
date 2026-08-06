@@ -2,31 +2,28 @@ from glob import glob
 
 from setuptools import setup
 
-package_name = "rtk2026_route_nav"
+package_name = "rtk2026_vector_objects"
 
 setup(
     name=package_name,
     version="0.1.0",
     packages=[],
-    py_modules=[
-        "lane_decision_manager_v3",
-    ],
+    py_modules=["keepout_click_tool"],
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
         (f"share/{package_name}", ["package.xml"]),
         (f"share/{package_name}/config", glob("config/*")),
         (f"share/{package_name}/launch", glob("launch/*.launch.py")),
-        (f"share/{package_name}/rviz", glob("rviz/*.rviz")),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
-    maintainer="rtk2026",
+    maintainer="RTK2026",
     maintainer_email="kamilisxakof@gmail.com",
-    description="Nav2 route_server: конфиг, граф, launch.",
+    description="Обход препятствий через Nav2 VectorObjectServer.",
     license="Apache-2.0",
     entry_points={
         "console_scripts": [
-            "lane_decision_manager_v3 = lane_decision_manager_v3:main",
+            "keepout_click_tool = keepout_click_tool:main",
         ]
     },
 )

@@ -1,7 +1,21 @@
-"""Дорожный граф и геометрия коридора (вариант B)."""
+"""Алгоритм движения по дорожному графу: выбор ребра, планировщики, полосы.
 
-from rtk2026_graph.geometry import polyline_signed_lateral_m, violates_hard_corridor
-from rtk2026_graph.io_geojson import load_geojson_dict, load_geojson_path
+Сама структура графа (вершины, ориентированные рёбра, геометрия коридора,
+загрузка из GeoJSON) вынесена в ``rtk2026_pose_graph`` — она не знает про
+позу робота и решения не принимает, поэтому переживёт переписывание
+алгоритма в этом пакете.
+"""
+
+from rtk2026_pose_graph import (
+    CorridorHardSide,
+    Node,
+    OrientedEdge,
+    RoadGraph,
+    load_geojson_dict,
+    load_geojson_path,
+    polyline_signed_lateral_m,
+    violates_hard_corridor,
+)
 from rtk2026_graph.edge_tracking import (
     ActiveEdgeMatch,
     infer_direction_mode_from_yaw,
@@ -20,7 +34,6 @@ from rtk2026_graph.planner_v2_config import (
     load_planner_v2_config_path,
 )
 from rtk2026_graph.lane_goal_geometry import project_goal_on_lane
-from rtk2026_graph.model import CorridorHardSide, Node, OrientedEdge, RoadGraph
 
 __all__ = [
     "CorridorHardSide",

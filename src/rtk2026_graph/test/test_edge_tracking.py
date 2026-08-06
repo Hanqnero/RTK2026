@@ -4,7 +4,7 @@ from rtk2026_graph.edge_tracking import (
     infer_direction_mode_from_yaw,
     select_active_edge_from_limiters,
 )
-from rtk2026_graph.model import Node, OrientedEdge, RoadGraph
+from rtk2026_pose_graph.model import Node, OrientedEdge, RoadGraph
 
 
 def _build_graph() -> RoadGraph:

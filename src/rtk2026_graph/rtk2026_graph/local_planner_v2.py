@@ -7,7 +7,7 @@ import math
 
 from rtk2026_graph.lane_goal_geometry import project_goal_on_lane
 from rtk2026_graph.lane_mode import normalize_lane_mode
-from rtk2026_graph.model import RoadGraph
+from rtk2026_pose_graph.model import RoadGraph
 
 
 @dataclass(frozen=True)

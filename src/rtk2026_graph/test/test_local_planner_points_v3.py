@@ -2,7 +2,7 @@ import math
 
 from rtk2026_graph.local_planner_points_v3 import LocalPlannerPointsV3
 from rtk2026_graph.local_planner_v2 import LaneGoalRuleV2
-from rtk2026_graph.model import Node, OrientedEdge, RoadGraph
+from rtk2026_pose_graph.model import Node, OrientedEdge, RoadGraph
 
 
 def _graph() -> RoadGraph:

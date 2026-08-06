@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from rtk2026_graph.model import OrientedEdge, RoadGraph
+from rtk2026_pose_graph.model import OrientedEdge, RoadGraph
 
 
 @dataclass(frozen=True)

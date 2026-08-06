@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from rtk2026_graph.model import CorridorHardSide, Node, OrientedEdge, RoadGraph
+from rtk2026_pose_graph.model import CorridorHardSide, Node, OrientedEdge, RoadGraph
 
 
 def load_geojson_path(path: str | Path) -> RoadGraph:

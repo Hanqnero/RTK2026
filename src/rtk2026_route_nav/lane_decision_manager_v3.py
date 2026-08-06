@@ -23,8 +23,9 @@ from rclpy.parameter import Parameter as RclpyParameter
 from rtk2026_interfaces.msg import DrivingDetection
 from visualization_msgs.msg import Marker
 
-from rtk2026_graph import GlobalPlannerV2, RoadGraph, load_geojson_path, load_planner_v2_config_path, normalize_lane_mode
+from rtk2026_graph import GlobalPlannerV2, load_planner_v2_config_path, normalize_lane_mode
 from rtk2026_graph.local_planner_points_v3 import LocalPlannerPointsV3
+from rtk2026_pose_graph import RoadGraph, load_geojson_path
 
 
 @dataclass

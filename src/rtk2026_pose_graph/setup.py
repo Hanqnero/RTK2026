@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = "rtk2026_graph"
+package_name = "rtk2026_pose_graph"
 
 setup(
     name=package_name,
@@ -14,6 +14,6 @@ setup(
     zip_safe=True,
     maintainer="RTK2026",
     maintainer_email="kamilisxakof@gmail.com",
-    description="Алгоритм движения по дорожному графу: выбор ребра, планировщики, полосы.",
+    description="Ориентированный дорожный граф и геометрия коридора.",
     license="Apache-2.0",
 )

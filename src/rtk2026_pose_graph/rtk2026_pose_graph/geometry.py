@@ -6,7 +6,7 @@ import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rtk2026_graph.model import CorridorHardSide
+    from rtk2026_pose_graph.model import CorridorHardSide
 
 
 def polyline_signed_lateral_m(
