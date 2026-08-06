@@ -1,0 +1,39 @@
+# Образ для Raspberry Pi: сборка прошивки, прошивка платы и ретрансляция порта.
+#
+# Pi - единственная машина, физически подключённая к Arduino, поэтому всё,
+# что требует доступа к устройству, живёт здесь. Ноутбук получает данные
+# по сети и о существовании порта не знает.
+#
+# Тулчейн ставится из Debian, а не из состава arduino-cli: пакет собран под
+# ту же архитектуру, что и образ, и не тянет за собой Java с индексами плат.
+#
+# Контекст сборки - корень репозитория, а не pi/: контейнеру нужны и
+# прошивка из arduino/ (для build/flash), и код ретранслятора из pi/tools/.
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc-avr \
+        avr-libc \
+        binutils-avr \
+        avrdude \
+        cmake \
+        ninja-build \
+        make \
+        python3 \
+        python3-pip \
+        python3-serial \
+        udev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
+
+# Инструменты запускаются из смонтированного дерева, поэтому в образ
+# копируется только то, что нужно для работы без монтирования.
+COPY pi/docker/requirements-pi.txt /tmp/requirements-pi.txt
+RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements-pi.txt \
+    || pip3 install --no-cache-dir -r /tmp/requirements-pi.txt
+
+# Порт ретранслятора.
+EXPOSE 5555
+
+CMD ["python3", "pi/tools/link_server.py", "--device", "/dev/arduino"]

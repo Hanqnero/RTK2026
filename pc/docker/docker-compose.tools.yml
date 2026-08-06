@@ -1,0 +1,33 @@
+# Запускается на ноутбуке. Подключается к Raspberry Pi по сети.
+#
+# Задайте адрес Pi перед запуском:
+#   export RTK_LINK=192.168.1.50:5555
+#
+#   docker compose -f pc/docker/docker-compose.tools.yml run --rm tools \
+#       python3 tools/check_encoders.py --port $RTK_LINK --auto --no-plot
+#
+# Окна Qt в контейнере требуют XQuartz, см. docs/arduino/bench.rst.
+# Для графиков проще запускать инструменты из локального .venv.
+#
+# Контекст сборки - pc/ (родитель этой директории): образу не нужен
+# доступ к прошивке в arduino/, только requirement.txt и сами инструменты.
+
+services:
+  tools:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.tools
+    image: rtk2026-arduino-tools
+    volumes:
+      - ..:/work
+      # Логи и выгрузки пишутся в примонтированное дерево и остаются
+      # на хосте после остановки контейнера.
+      - ../records:/work/records
+    environment:
+      - RTK_LINK=${RTK_LINK:-}
+      # Заполняется только при использовании XQuartz.
+      - DISPLAY=${DISPLAY:-}
+    network_mode: host
+    stdin_open: true
+    tty: true
+    command: bash

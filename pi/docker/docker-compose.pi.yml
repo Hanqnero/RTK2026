@@ -1,0 +1,70 @@
+# Запускается на Raspberry Pi.
+#
+#   docker compose -f pi/docker/docker-compose.pi.yml up link        # ретранслятор порта
+#   docker compose -f pi/docker/docker-compose.pi.yml run --rm build # собрать прошивку
+#   docker compose -f pi/docker/docker-compose.pi.yml run --rm flash # собрать и прошить
+#
+# ВАЖНО: link и flash не могут работать одновременно - порт занимает кто-то
+# один. Перед прошивкой остановите link.
+#
+# Контекст сборки - корень репозитория (../..): контейнеру нужны и
+# прошивка из arduino/, и ретранслятор из pi/tools/, а эта директория
+# сама лежит внутри pi/docker/.
+
+services:
+  link:
+    build:
+      context: ../..
+      dockerfile: pi/docker/Dockerfile.pi
+    image: rtk2026-arduino-pi
+    container_name: rtk2026-link
+    volumes:
+      - ../..:/work
+    devices:
+      # Пробросьте стабильный путь устройства. Найти его:
+      #   ls -l /dev/serial/by-id/
+      - "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0:/dev/arduino"
+    ports:
+      - "5555:5555"
+    restart: unless-stopped
+    command: >
+      python3 pi/tools/link_server.py
+      --device /dev/arduino
+      --listen 0.0.0.0
+      --port 5555
+
+  # Сборка прошивки без прошивки платы. Устройство не нужно.
+  build:
+    build:
+      context: ../..
+      dockerfile: pi/docker/Dockerfile.pi
+    image: rtk2026-arduino-pi
+    volumes:
+      - ../..:/work
+    command: bash pi/docker/build_firmware.sh
+
+  # Сборка и заливка. Требует свободного порта.
+  flash:
+    build:
+      context: ../..
+      dockerfile: pi/docker/Dockerfile.pi
+    image: rtk2026-arduino-pi
+    volumes:
+      - ../..:/work
+    devices:
+      - "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0:/dev/arduino"
+    command: bash pi/docker/flash_firmware.sh
+
+  # Оболочка для ручных команд.
+  shell:
+    build:
+      context: ../..
+      dockerfile: pi/docker/Dockerfile.pi
+    image: rtk2026-arduino-pi
+    volumes:
+      - ../..:/work
+    devices:
+      - "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0:/dev/arduino"
+    command: bash
+    stdin_open: true
+    tty: true
