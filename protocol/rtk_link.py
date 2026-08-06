@@ -1,27 +1,12 @@
-"""Бинарный протокол обмена между Raspberry Pi и Arduino, версия 2.
+#!/usr/bin/env python3
+"""Host-кодек протокола обмена с Arduino, версия 2.
 
-Кадр одинаков в обе стороны::
+Модуль намеренно не зависит ни от ROS, ни от pyserial: он работает с байтами.
+Это позволяет использовать один и тот же кодек в стендовых скриптах без
+запущенного ROS и проверять его обычным pytest.
 
-    0xAA 0x55 | msg_id u8 | len u8 | payload[len] | crc16_lo | crc16_hi
-
-CRC16-CCITT (полином 0x1021, начальное значение 0xFFFF) считается по
-``msg_id``, ``len`` и ``payload``. Sync-байты в CRC не входят.
-
-Источник истины по разметке: ``arduino/include/control_protocol.h``, где
-размеры структур закреплены ``static_assert``. Здесь те же размеры
-проверяются при импорте модуля.
-
-Все многобайтовые поля little-endian: это совпадает и с ATmega2560,
-и с хостом, поэтому конвертация порядка байт не нужна.
-
-Границы ответственности: прошивка отдаёт величины уже в соглашении ROS.
-Аппаратные инверсии моторов и энкодеров живут в прошивке
-(``arduino/include/motor_interface.h``) и до этого модуля не доходят.
-
-Модуль намеренно продублирован в ``rtk2026_driver/protocol.py``: стендовые
-инструменты в ``pi/`` и ``pc/`` обязаны работать без установленного ROS.
-Тест ``test_ros_and_bench_codecs_agree`` в ``src/rtk2026_driver/test/``
-сверяет обе копии байт в байт при каждом запуске.
+Соответствие прошивке: ``arduino/include/control_protocol.h``.
+Размеры структур там закреплены static_assert, здесь - проверками при импорте.
 """
 
 from __future__ import annotations
@@ -44,7 +29,6 @@ MSG_CMD_WHEEL_SETPOINT = 0x03
 MSG_SET_GAINS = 0x04
 MSG_SET_CONFIG = 0x05
 MSG_CMD_RESET = 0x06
-
 MSG_SAVE_GAINS = 0x07
 MSG_GET_GAINS = 0x08
 
@@ -62,7 +46,7 @@ COMMAND_FLAG_REQUEST_PID_DEBUG = 0x01
 WHEEL_LEFT = 0
 WHEEL_RIGHT = 1
 
-# Режим управления в TelemetryPacket.mode
+# Режим управления в Telemetry.mode
 CONTROL_MODE_VELOCITY = 0
 CONTROL_MODE_WHEEL_SETPOINT = 1
 CONTROL_MODE_WHEEL_PWM = 2
@@ -71,7 +55,7 @@ CONTROL_MODE_WHEEL_PWM = 2
 GAINS_SOURCE_COMPILED = 0
 GAINS_SOURCE_EEPROM = 1
 
-# Флаги TelemetryPacket.flags
+# Флаги TelemetryPayload.flags
 # Бит 0x01 свободен: раньше означал остановку по сонару, но решение об
 # остановке принимает Raspberry Pi, и прошивка больше не тормозит сама.
 FLAG_COMMAND_TIMEOUT = 0x02
@@ -79,16 +63,13 @@ FLAG_PWM_SATURATED_LEFT = 0x04
 FLAG_PWM_SATURATED_RIGHT = 0x08
 FLAG_CYCLE_OVERRUN = 0x10
 
-# Биты маски сброса
+# Флаги ResetCommandPayload.mask
 RESET_ODOMETRY = 0x01
 RESET_PID = 0x02
 RESET_STATS = 0x04
 # Вернуть коэффициенты к скомпилированным и стереть запись в EEPROM.
 RESET_GAINS_TO_DEFAULT = 0x08
 
-# "<" задаёт little-endian, стандартные размеры типов и отсутствие
-# выравнивания между полями, что соответствует __attribute__((packed))
-# на стороне прошивки.
 VELOCITY_STRUCT = struct.Struct("<ffB")
 RESET_STRUCT = struct.Struct("<B")
 WHEEL_PWM_STRUCT = struct.Struct("<hhB")
@@ -99,8 +80,6 @@ TELEMETRY_STRUCT = struct.Struct("<HIIhhiiffffhhfffffhBB")
 PID_DEBUG_STRUCT = struct.Struct("<H16f")
 STATS_STRUCT = struct.Struct("<BIIIIIIIIIHHHHHH")
 
-# Проверки выполняются при импорте. Если разметка разойдётся с прошивкой,
-# инструмент упадёт сразу, а не будет молча показывать мусор вместо телеметрии.
 assert VELOCITY_STRUCT.size == 9, "VelocityCommandPayload разошёлся с прошивкой"
 assert RESET_STRUCT.size == 1, "ResetCommandPayload разошёлся с прошивкой"
 assert WHEEL_PWM_STRUCT.size == 5, "WheelPwmCommandPayload разошёлся с прошивкой"
@@ -112,16 +91,13 @@ assert PID_DEBUG_STRUCT.size == 66, "PidDebugPayload разошёлся с пр�
 assert STATS_STRUCT.size == 49, "StatsPayload разошёлся с прошивкой"
 
 
+
 def crc16_ccitt(data: bytes, seed: int = 0xFFFF) -> int:
-    """Посчитать CRC16-CCITT для последовательности байт.
+    """CRC16-CCITT, полином 0x1021, начальное значение 0xFFFF.
 
-    Реализация побитовая и повторяет ``crc16Ccitt`` из
-    ``arduino/src/frame.cpp``. Расхождение означало бы, что каждый кадр
-    считается повреждённым, поэтому обе стороны сверяются одним тестовым
-    вектором: ``crc16_ccitt(b"123456789") == 0x29B1``.
-
-    :param data: байты, покрываемые контрольной суммой.
-    :param seed: начальное значение регистра CRC.
+    Побитовая реализация повторяет ``crc16Ccitt`` из ``arduino/src/frame.cpp``
+    буква в букву: расхождение здесь означало бы, что каждый кадр считается
+    повреждённым, поэтому обе стороны проверяются одним тестовым вектором.
     """
 
     crc = seed
@@ -138,13 +114,10 @@ def crc16_ccitt(data: bytes, seed: int = 0xFFFF) -> int:
     return crc
 
 
-def build_frame(message_id: int, payload: bytes = b"") -> bytes:
-    """Собрать готовый к отправке кадр.
 
-    :param message_id: идентификатор сообщения, одна из констант ``MSG_*``.
-    :param payload: полезная нагрузка сообщения.
-    :raises ValueError: если нагрузка не помещается в поле длины.
-    """
+
+def build_frame(message_id: int, payload: bytes = b"") -> bytes:
+    """Собрать кадр целиком, включая sync-байты и CRC."""
 
     if len(payload) > MAX_PAYLOAD_BYTES:
         raise ValueError(
@@ -152,6 +125,7 @@ def build_frame(message_id: int, payload: bytes = b"") -> bytes:
         )
 
     header = bytes((message_id & 0xFF, len(payload)))
+    # CRC покрывает msg_id, len и payload, но не sync-байты.
     crc = crc16_ccitt(header + payload)
 
     return (
@@ -162,19 +136,19 @@ def build_frame(message_id: int, payload: bytes = b"") -> bytes:
     )
 
 
+
+
 def pack_velocity_command(
     linear_mps: float,
     angular_rps: float,
     flags: int = 0,
 ) -> bytes:
-    """Сформировать кадр уставки скорости корпуса.
+    """Кадр уставки скорости корпуса в соглашении ROS.
 
-    :param linear_mps: линейная скорость вдоль оси x, м/с. Положительное
-        значение означает движение вперёд.
-    :param angular_rps: угловая скорость вокруг оси z, рад/с. Положительное
-        значение означает вращение против часовой стрелки, как принято в ROS.
-    :param flags: биты команды, зарезервированы под отладку регуляторов.
-    :returns: полный кадр, готовый к записи в порт.
+    :param linear_mps: линейная скорость вдоль оси x, м/с.
+    :param angular_rps: угловая скорость вокруг оси z, рад/с,
+        положительная против часовой стрелки.
+    :param flags: биты ``FLAG_*`` команды, зарезервированы под шаг 3.
     """
 
     return build_frame(
@@ -187,13 +161,14 @@ def pack_velocity_command(
     )
 
 
-def pack_reset_command(mask: int) -> bytes:
-    """Сформировать кадр сброса состояния прошивки.
 
-    :param mask: комбинация ``RESET_ODOMETRY``, ``RESET_PID``, ``RESET_STATS``.
-    """
+
+def pack_reset_command(mask: int) -> bytes:
+    """Кадр сброса одометрии, интегралов ПИД или счётчиков статистики."""
 
     return build_frame(MSG_CMD_RESET, RESET_STRUCT.pack(int(mask) & 0xFF))
+
+
 
 
 def pack_wheel_setpoint_command(
@@ -222,6 +197,8 @@ def pack_wheel_setpoint_command(
     )
 
 
+
+
 def pack_wheel_pwm_command(
     left_pwm: int,
     right_pwm: int,
@@ -246,6 +223,8 @@ def pack_wheel_pwm_command(
             int(flags) & 0xFF,
         ),
     )
+
+
 
 
 def pack_set_gains(
@@ -284,6 +263,8 @@ def pack_set_gains(
     )
 
 
+
+
 def pack_save_gains() -> bytes:
     """Кадр записи действующих коэффициентов в EEPROM.
 
@@ -295,26 +276,22 @@ def pack_save_gains() -> bytes:
     return build_frame(MSG_SAVE_GAINS)
 
 
+
+
 def pack_get_gains() -> bytes:
     """Кадр запроса действующих коэффициентов обоих колёс."""
 
     return build_frame(MSG_GET_GAINS)
 
 
+
+
 @dataclass(frozen=True, slots=True)
-class TelemetryPacket:
-    """Декодированный пакет телеметрии Arduino.
+class Telemetry:
+    """Разобранный ``TelemetryPayload``."""
 
-    ``frozen=True`` не даёт изменить измерение после разбора,
-    ``slots=True`` убирает ``__dict__`` у каждого объекта, что заметно
-    при десятках пакетов в секунду.
-    """
-
-    #: Номер пакета, растёт подряд и переполняется по модулю 2^16.
     seq: int
-    #: Время MCU на момент формирования пакета.
     mcu_time_ms: int
-    #: Фактический интервал управляющего цикла, микросекунды.
     dt_us: int
 
     left_encoder_delta: int
@@ -344,7 +321,6 @@ class TelemetryPacket:
     current_linear_mps: float
     current_angular_rps: float
 
-    #: Дистанция сонара в сантиметрах, отрицательная при отсутствии эха.
     sonar_distance_cm: int
     flags: int
 
@@ -358,30 +334,28 @@ class TelemetryPacket:
 
     @property
     def command_timeout(self) -> bool:
-        """Прошивка не получала команду дольше своего таймаута."""
         return bool(self.flags & FLAG_COMMAND_TIMEOUT)
 
     @property
     def pwm_saturated(self) -> bool:
-        """Хотя бы один канал PWM упёрся в ограничение."""
         return bool(
             self.flags & (FLAG_PWM_SATURATED_LEFT | FLAG_PWM_SATURATED_RIGHT)
         )
 
     @property
     def cycle_overrun(self) -> bool:
-        """Управляющий цикл не уложился в номинальный период."""
         return bool(self.flags & FLAG_CYCLE_OVERRUN)
 
 
+
+
 @dataclass(frozen=True, slots=True)
-class StatsPacket:
-    """Декодированный пакет статистики прошивки.
+class Stats:
+    """Разобранный ``StatsPayload``.
 
     Поля ``dt_*``, ``cycle_duration_max_us`` и ``sonar_block_max_us``
     относятся к окну между двумя отправками статистики. Остальные счётчики
-    накопительные от старта прошивки; шестнадцатибитные переполняются
-    по модулю 2^16.
+    накопительные от старта прошивки, шестнадцатибитные переполняются.
     """
 
     protocol_version: int
@@ -406,22 +380,23 @@ class StatsPacket:
     free_ram_bytes: int
 
 
-def decode_telemetry(payload: bytes) -> TelemetryPacket:
-    """Разобрать полезную нагрузку кадра ``MSG_TELEMETRY``.
-
-    :raises struct.error: если длина нагрузки не совпадает с разметкой.
-    """
-
-    return TelemetryPacket(*TELEMETRY_STRUCT.unpack(payload))
 
 
-def decode_stats(payload: bytes) -> StatsPacket:
-    """Разобрать полезную нагрузку кадра ``MSG_STATS``.
+def decode_telemetry(payload: bytes) -> Telemetry:
+    """Разобрать полезную нагрузку кадра ``MSG_TELEMETRY``."""
 
-    :raises struct.error: если длина нагрузки не совпадает с разметкой.
-    """
+    return Telemetry(*TELEMETRY_STRUCT.unpack(payload))
 
-    return StatsPacket(*STATS_STRUCT.unpack(payload))
+
+
+
+def decode_stats(payload: bytes) -> Stats:
+    """Разобрать полезную нагрузку кадра ``MSG_STATS``."""
+
+    return Stats(*STATS_STRUCT.unpack(payload))
+
+
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -435,6 +410,8 @@ class WheelGains:
     k_static: float
     #: PWM на один оборот в секунду в установившемся режиме.
     k_velocity: float
+
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -464,6 +441,8 @@ class GainsReport:
     def is_persisted(self) -> bool:
         """Коэффициенты переживут выключение питания."""
         return self.source == GAINS_SOURCE_EEPROM
+
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -501,6 +480,8 @@ class WheelDebug:
         return self.feedforward / self.output_pwm
 
 
+
+
 @dataclass(frozen=True, slots=True)
 class PidDebug:
     """Разобранный ``PidDebugPayload`` обоих колёс."""
@@ -511,10 +492,14 @@ class PidDebug:
     right: WheelDebug
 
 
+
+
 def decode_gains_report(payload: bytes) -> GainsReport:
     """Разобрать полезную нагрузку кадра ``MSG_GAINS_REPORT``."""
 
     return GainsReport(*GAINS_REPORT_STRUCT.unpack(payload))
+
+
 
 
 def decode_pid_debug(payload: bytes) -> PidDebug:
@@ -529,21 +514,18 @@ def decode_pid_debug(payload: bytes) -> PidDebug:
     )
 
 
+
+
 class FrameDecoder:
     """Побайтовый разборщик входящего потока кадров.
 
-    Конечный автомат повторяет ``FrameParser`` из прошивки. Serial-порт не
-    обязан отдавать кадр целиком, поэтому байты скармливаются порциями,
-    а готовые сообщения выдаются по мере сборки.
+    Повторяет конечный автомат ``FrameParser`` из прошивки. В отличие от
+    протокола v1, где первый байт буфера считался началом пакета, здесь
+    синхронизация восстанавливается автоматически.
 
-    Восстановление после повреждения потока автоматическое, но не мгновенное:
-    сдвинутое поле длины заставляет разборщик заглотить начало следующего
-    кадра, поэтому один потерянный байт стоит до двух кадров. Это цена
-    кадрирования по sync-слову без байт-стаффинга и она принята сознательно:
-    в протоколе v1 та же потеря сдвигала поток навсегда.
-
-    Счётчики ошибок публикуются наружу: без них потеря синхронизации
-    выглядит просто как менее частая телеметрия.
+    Восстановление не мгновенное: сдвинутое поле длины заставляет разборщик
+    заглотить начало следующего кадра, поэтому один потерянный байт стоит
+    до двух кадров. Это цена кадрирования по sync-слову без байт-стаффинга.
     """
 
     _STATE_SYNC1 = 0
@@ -555,12 +537,6 @@ class FrameDecoder:
     _STATE_CRC_HIGH = 6
 
     def __init__(self, max_payload_bytes: int = MAX_PAYLOAD_BYTES) -> None:
-        """Создать разборщик.
-
-        :param max_payload_bytes: предел длины нагрузки. Кадры с большей
-            заявленной длиной отбрасываются как повреждённые.
-        """
-
         self._max_payload_bytes = max_payload_bytes
 
         self._state = self._STATE_SYNC1
@@ -571,14 +547,14 @@ class FrameDecoder:
 
         self.frame_count = 0
         self.bad_crc_count = 0
-        #: Число байт, отброшенных при поиске sync-последовательности.
+        # Количество байт, отброшенных при поиске sync-последовательности.
         self.resync_count = 0
         self.bad_length_count = 0
 
-    def feed(self, data: bytes) -> Iterator[tuple[int, bytes]]:
-        """Обработать порцию байт и выдать все собранные кадры.
 
-        :param data: байты, прочитанные из порта.
+    def feed(self, data: bytes) -> Iterator[tuple[int, bytes]]:
+        """Скормить очередную порцию байт и получить готовые кадры.
+
         :returns: генератор пар ``(message_id, payload)``.
         """
 
@@ -588,9 +564,8 @@ class FrameDecoder:
             if message is not None:
                 yield message
 
-    def _feed_byte(self, byte: int) -> tuple[int, bytes] | None:
-        """Обработать один байт и вернуть кадр, если он собрался."""
 
+    def _feed_byte(self, byte: int) -> tuple[int, bytes] | None:
         if self._state == self._STATE_SYNC1:
             if byte == FRAME_SYNC1:
                 self._state = self._STATE_SYNC2
@@ -645,7 +620,6 @@ class FrameDecoder:
         self._state = self._STATE_SYNC1
 
         header = bytes((self._message_id, self._payload_length))
-
         if crc16_ccitt(header + bytes(self._payload)) != self._received_crc:
             self.bad_crc_count += 1
             return None
@@ -654,12 +628,14 @@ class FrameDecoder:
         return (self._message_id, bytes(self._payload))
 
 
+
+
 class SequenceTracker:
     """Учёт потерь телеметрии по полю ``seq``.
 
     Прошивка нумерует пакеты подряд, поэтому разрыв номеров означает именно
-    потерю пакета, а не задержку доставки. В протоколе v1 отличить одно от
-    другого было невозможно.
+    потерю, а не задержку. Без этого потеря пакета выглядела бы на хосте
+    просто как менее частая телеметрия.
     """
 
     def __init__(self) -> None:
@@ -668,12 +644,9 @@ class SequenceTracker:
         self.reordered = 0
         self._last_seq: int | None = None
 
-    def update(self, seq: int) -> int:
-        """Учесть очередной пакет.
 
-        :param seq: номер пакета из телеметрии.
-        :returns: сколько пакетов потеряно непосредственно перед этим.
-        """
+    def update(self, seq: int) -> int:
+        """Учесть пакет и вернуть число потерянных перед ним пакетов."""
 
         self.received += 1
 
@@ -688,9 +661,9 @@ class SequenceTracker:
             self.reordered += 1
             return 0
 
-        # Большой разрыв означает перезапуск MCU или пакет не по порядку,
-        # а не потерю десятков тысяч пакетов. Записывать это в потери нельзя:
-        # статистика перестала бы отражать реальность.
+        # Большой gap означает не потерю тысяч пакетов, а перезапуск MCU
+        # или доставку пакета не по порядку. Считать это потерями нельзя:
+        # статистика стала бы бессмысленной.
         if gap > 0x8000:
             self.reordered += 1
             return 0
@@ -700,9 +673,10 @@ class SequenceTracker:
         self.lost += missing
         return missing
 
+
     @property
     def loss_ratio(self) -> float:
-        """Доля потерянных пакетов от числа ожидавшихся."""
+        """Доля потерянных пакетов от ожидавшихся."""
 
         expected = self.received + self.lost
 
@@ -711,10 +685,30 @@ class SequenceTracker:
 
         return self.lost / expected
 
-    def reset(self) -> None:
-        """Сбросить накопленную статистику."""
 
+    def reset(self) -> None:
         self.received = 0
         self.lost = 0
         self.reordered = 0
         self._last_seq = None
+
+
+
+
+
+def describe_telemetry_flags(flags: int) -> str:
+    """Человекочитаемый список взведённых флагов телеметрии."""
+
+    names = []
+
+    if flags & FLAG_COMMAND_TIMEOUT:
+        names.append("cmd_timeout")
+    if flags & FLAG_PWM_SATURATED_LEFT:
+        names.append("sat_left")
+    if flags & FLAG_PWM_SATURATED_RIGHT:
+        names.append("sat_right")
+    if flags & FLAG_CYCLE_OVERRUN:
+        names.append("overrun")
+
+    return ",".join(names) if names else "-"
+

@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Клавиатурное управление Arduino без ROS 2.
+"""Клавиатурное управление Arduino без ROS 2, протокол v2.
 
-Arrow keys publish velocity commands as packed little-endian values:
-    ControlPacket: <ffB = (target_linear_mps, target_angular_rps, debug_raw_encoder)
+Стрелки задают уставку скорости корпуса, прошивка непрерывно шлёт телеметрию.
+Скрипт обязан её вычитывать, иначе входной буфер хоста переполнится прямо
+во время управления.
 
-The firmware also emits TelemetryPacket records continuously; this script drains
-them so the host serial input buffer does not fill while teleoperating.
+Пример::
 
-Usage example:
   python3 teleop_keyboard.py --port /dev/cu.usbserial-10
 """
 
@@ -16,7 +15,6 @@ from __future__ import annotations
 import argparse
 import curses
 import csv
-import struct
 import sys
 import time
 from dataclasses import dataclass, field
@@ -27,23 +25,35 @@ try:
     import serial
 except ImportError as exc:  # pragma: no cover
     raise SystemExit(
-        "pyserial is required. Install with: pip install pyserial"
+        "Требуется pyserial. Установка: pip install pyserial"
     ) from exc
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+# protocol/ - общий кодек, использует и pi/, и pc/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "protocol"))
 
-CONTROL_PACKET = struct.Struct("<ffB")
-TELEMETRY_PACKET = struct.Struct("<fffiihhff")
+from rtk_link import (  # noqa: E402
+    MSG_TELEMETRY,
+    FrameDecoder,
+    SequenceTracker,
+    Telemetry,
+    decode_telemetry,
+    describe_telemetry_flags,
+    pack_velocity_command,
+)
 
-TRACK_WIDTH_M = 0.040
+# Обязано совпадать с kTrackWidthM из motor_interface.h. Значение участвует
+# только в расчёте ожидаемых скоростей колёс для лога, но расхождение
+# сделало бы этот столбец бессмысленным.
+TRACK_WIDTH_M = 0.195
 
 
 @dataclass
 class Command:
-    """Текущая body-команда и флаг диагностических энкодерных полей."""
+    """Текущая уставка скорости корпуса."""
 
     linear_mps: float = 0.0
     angular_rps: float = 0.0
-    debug_raw_encoder: int = 0
 
 
 @dataclass
@@ -57,13 +67,15 @@ class LogSink:
 
 @dataclass
 class SerialStats:
-    """Состояние UI, последняя скорость и накопительный RX-буфер."""
+    """Состояние UI, последняя измеренная скорость и качество линка."""
 
     rx_bytes: int = 0
     last_key_code: int = -1
     current_linear_mps: float = 0.0
     current_angular_rps: float = 0.0
-    telemetry_buffer: bytearray = field(default_factory=bytearray)
+    last_flags: int = 0
+    decoder: FrameDecoder = field(default_factory=FrameDecoder)
+    sequence: SequenceTracker = field(default_factory=SequenceTracker)
 
 
 @dataclass
@@ -97,18 +109,24 @@ def open_log_sink(path: Path) -> LogSink:
             "key_code",
             "command_linear_mps",
             "command_angular_rps",
-            "debug_raw_encoder",
             "target_left_wheel_mps",
             "target_right_wheel_mps",
+            "seq",
+            "mcu_time_ms",
+            "dt_us",
             "current_linear_mps",
             "current_angular_rps",
             "odom_x_m",
             "odom_y_m",
             "odom_heading_rad",
-            "raw_left_encoder_delta",
-            "raw_right_encoder_delta",
+            "left_encoder_delta",
+            "right_encoder_delta",
+            "left_wheel_rps",
+            "right_wheel_rps",
             "left_pwm",
             "right_pwm",
+            "sonar_distance_cm",
+            "flags",
             "packet_hex",
             "rx_bytes",
         ]
@@ -164,11 +182,6 @@ def parse_args() -> argparse.Namespace:
         help="Seconds to wait after opening serial before sending commands (default: 1.0)",
     )
     parser.add_argument(
-        "--debug-raw-encoder",
-        action="store_true",
-        help="Ask firmware to include raw encoder deltas in telemetry",
-    )
-    parser.add_argument(
         "--log",
         type=Path,
         default=Path(f"teleop_pid_{time.strftime('%Y%m%d_%H%M%S')}.csv"),
@@ -200,9 +213,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def encode_command(cmd: Command) -> bytes:
-    """Упаковать команду в little-endian ``ControlPacket`` размером 9 байт."""
+    """Собрать кадр уставки скорости протокола v2."""
 
-    return CONTROL_PACKET.pack(cmd.linear_mps, cmd.angular_rps, cmd.debug_raw_encoder)
+    return pack_velocity_command(cmd.linear_mps, cmd.angular_rps)
 
 
 def wheel_targets(cmd: Command) -> tuple[float, float]:
@@ -256,7 +269,7 @@ def open_realtime_plot(window_s: float, update_rate_hz: float) -> RealtimePlot:
 def update_realtime_plot(
     plot: RealtimePlot | None,
     cmd: Command,
-    telemetry: tuple[float, float, float, int, int, int, int, float, float],
+    telemetry: Telemetry,
 ) -> None:
     """Добавить telemetry sample и периодически обновить видимое окно."""
 
@@ -265,8 +278,8 @@ def update_realtime_plot(
 
     now = time.monotonic()
     elapsed_s = now - plot.start_monotonic
-    current_linear_mps = telemetry[7]
-    current_angular_rps = telemetry[8]
+    current_linear_mps = telemetry.current_linear_mps
+    current_angular_rps = telemetry.current_angular_rps
 
     plot.elapsed_s.append(elapsed_s)
     plot.target_linear_mps.append(cmd.linear_mps)
@@ -323,7 +336,7 @@ def log_row(
     cmd: Command,
     packet: bytes = b"",
     stats: SerialStats | None = None,
-    telemetry: tuple[float, float, float, int, int, int, int, float, float] | None = None,
+    telemetry: Telemetry | None = None,
 ) -> None:
     """Записать унифицированную CSV-строку команды или телеметрии."""
 
@@ -333,28 +346,29 @@ def log_row(
     target_left_mps, target_right_mps = wheel_targets(cmd)
     elapsed_s = time.monotonic() - sink.start_monotonic
 
-    current_linear_mps = ""
-    current_angular_rps = ""
-    odom_x_m = ""
-    odom_y_m = ""
-    odom_heading_rad = ""
-    raw_left_encoder_delta = ""
-    raw_right_encoder_delta = ""
-    left_pwm = ""
-    right_pwm = ""
-
-    if telemetry is not None:
-        (
-            odom_x_m,
-            odom_y_m,
-            odom_heading_rad,
-            raw_left_encoder_delta,
-            raw_right_encoder_delta,
-            left_pwm,
-            right_pwm,
-            current_linear_mps,
-            current_angular_rps,
-        ) = telemetry
+    # Строки событий команд не несут измерений, поэтому соответствующие
+    # столбцы остаются пустыми и не путаются с настоящим нулём.
+    if telemetry is None:
+        telemetry_columns: list[str] = [""] * 16
+    else:
+        telemetry_columns = [
+            str(telemetry.seq),
+            str(telemetry.mcu_time_ms),
+            str(telemetry.dt_us),
+            f"{telemetry.current_linear_mps:.6f}",
+            f"{telemetry.current_angular_rps:.6f}",
+            f"{telemetry.odom_x_m:.6f}",
+            f"{telemetry.odom_y_m:.6f}",
+            f"{telemetry.odom_heading_rad:.6f}",
+            str(telemetry.left_encoder_delta),
+            str(telemetry.right_encoder_delta),
+            f"{telemetry.left_wheel_rps:.6f}",
+            f"{telemetry.right_wheel_rps:.6f}",
+            str(telemetry.left_pwm),
+            str(telemetry.right_pwm),
+            str(telemetry.sonar_distance_cm),
+            str(telemetry.flags),
+        ]
 
     sink.writer.writerow(
         [
@@ -364,18 +378,11 @@ def log_row(
             str(key_code),
             f"{cmd.linear_mps:.6f}",
             f"{cmd.angular_rps:.6f}",
-            str(cmd.debug_raw_encoder),
             f"{target_left_mps:.6f}",
             f"{target_right_mps:.6f}",
-            "" if current_linear_mps == "" else f"{current_linear_mps:.6f}",
-            "" if current_angular_rps == "" else f"{current_angular_rps:.6f}",
-            "" if odom_x_m == "" else f"{odom_x_m:.6f}",
-            "" if odom_y_m == "" else f"{odom_y_m:.6f}",
-            "" if odom_heading_rad == "" else f"{odom_heading_rad:.6f}",
-            str(raw_left_encoder_delta),
-            str(raw_right_encoder_delta),
-            str(left_pwm),
-            str(right_pwm),
+        ]
+        + telemetry_columns
+        + [
             packet.hex(),
             "" if stats is None else str(stats.rx_bytes),
         ]
@@ -390,27 +397,34 @@ def drain_telemetry(
     stats: SerialStats,
     plot: RealtimePlot | None,
 ) -> int:
-    """Считать доступные байты, разобрать полные packets и обновить consumers."""
+    """Считать доступные байты, разобрать кадры и обновить потребителей."""
 
     waiting = ser.in_waiting
-    if waiting:
-        chunk = ser.read(waiting)
-        stats.telemetry_buffer.extend(chunk)
-        while len(stats.telemetry_buffer) >= TELEMETRY_PACKET.size:
-            raw = bytes(stats.telemetry_buffer[: TELEMETRY_PACKET.size])
-            del stats.telemetry_buffer[: TELEMETRY_PACKET.size]
-            telemetry = TELEMETRY_PACKET.unpack(raw)
-            stats.current_linear_mps = telemetry[7]
-            stats.current_angular_rps = telemetry[8]
-            log_row(
-                sink=sink,
-                event="rx",
-                key_code=-1,
-                cmd=cmd,
-                stats=stats,
-                telemetry=telemetry,
-            )
-            update_realtime_plot(plot, cmd, telemetry)
+    if not waiting:
+        return 0
+
+    for message_id, payload in stats.decoder.feed(ser.read(waiting)):
+        if message_id != MSG_TELEMETRY:
+            # Кадры статистики здесь не нужны: за ними есть
+            # profile_firmware.py, а UI teleop показывает потери и CRC.
+            continue
+
+        telemetry = decode_telemetry(payload)
+        stats.sequence.update(telemetry.seq)
+        stats.current_linear_mps = telemetry.current_linear_mps
+        stats.current_angular_rps = telemetry.current_angular_rps
+        stats.last_flags = telemetry.flags
+
+        log_row(
+            sink=sink,
+            event="rx",
+            key_code=-1,
+            cmd=cmd,
+            stats=stats,
+            telemetry=telemetry,
+        )
+        update_realtime_plot(plot, cmd, telemetry)
+
     return waiting
 
 
@@ -445,7 +459,6 @@ def log_command(
 
 def send_stop_command(
     ser: serial.Serial,
-    debug_raw_encoder: int,
     stats: SerialStats,
     log_sink: LogSink | None,
     plot: RealtimePlot | None,
@@ -453,7 +466,7 @@ def send_stop_command(
 ) -> None:
     """Передать нулевую команду при startup/shutdown и залогировать её."""
 
-    stop_cmd = Command(debug_raw_encoder=debug_raw_encoder)
+    stop_cmd = Command()
     packet = write_command(ser, stop_cmd, stats, log_sink, plot)
     log_command(log_sink, event, -1, stop_cmd, packet, stats)
 
@@ -465,82 +478,50 @@ def command_from_key(
 
     if key == curses.KEY_UP:
         return (
-            Command(
-                linear_mps=linear,
-                angular_rps=0.0,
-                debug_raw_encoder=current.debug_raw_encoder,
-            ),
+            Command(linear_mps=linear, angular_rps=0.0),
             False,
         )
     if key == curses.KEY_DOWN:
         return (
-            Command(
-                linear_mps=-linear,
-                angular_rps=0.0,
-                debug_raw_encoder=current.debug_raw_encoder,
-            ),
+            Command(linear_mps=-linear, angular_rps=0.0),
             False,
         )
     if key == curses.KEY_LEFT:
         return (
-            Command(
-                linear_mps=0.0,
-                angular_rps=angular,
-                debug_raw_encoder=current.debug_raw_encoder,
-            ),
+            Command(linear_mps=0.0, angular_rps=angular),
             False,
         )
     if key == curses.KEY_RIGHT:
         return (
-            Command(
-                linear_mps=0.0,
-                angular_rps=-angular,
-                debug_raw_encoder=current.debug_raw_encoder,
-            ),
+            Command(linear_mps=0.0, angular_rps=-angular),
             False,
         )
 
     # Optional WASD aliases for terminals that don't forward arrow keys reliably.
     if key in (ord("w"), ord("W")):
         return (
-            Command(
-                linear_mps=linear,
-                angular_rps=0.0,
-                debug_raw_encoder=current.debug_raw_encoder,
-            ),
+            Command(linear_mps=linear, angular_rps=0.0),
             False,
         )
     if key in (ord("s"), ord("S")):
         return (
-            Command(
-                linear_mps=-linear,
-                angular_rps=0.0,
-                debug_raw_encoder=current.debug_raw_encoder,
-            ),
+            Command(linear_mps=-linear, angular_rps=0.0),
             False,
         )
     if key in (ord("a"), ord("A")):
         return (
-            Command(
-                linear_mps=0.0,
-                angular_rps=angular,
-                debug_raw_encoder=current.debug_raw_encoder,
-            ),
+            Command(linear_mps=0.0, angular_rps=angular),
             False,
         )
     if key in (ord("d"), ord("D")):
         return (
-            Command(
-                linear_mps=0.0,
-                angular_rps=-angular,
-                debug_raw_encoder=current.debug_raw_encoder,
-            ),
+            Command(linear_mps=0.0, angular_rps=-angular),
             False,
         )
 
     # SPACE force-stops, Q quits.
     if key == ord(" "):
-        return Command(debug_raw_encoder=current.debug_raw_encoder), False
+        return Command(), False
     if key in (ord("q"), ord("Q")):
         return current, True
 
@@ -571,19 +552,28 @@ def draw_ui(
     stdscr.addstr(
         6,
         0,
-        f"Current command -> linear: {cmd.linear_mps:+.3f} m/s   angular: {cmd.angular_rps:+.3f} rad/s   debug_raw_encoder: {cmd.debug_raw_encoder}",
+        f"Current command -> linear: {cmd.linear_mps:+.3f} m/s   "
+        f"angular: {cmd.angular_rps:+.3f} rad/s",
     )
     stdscr.addstr(8, 0, "Controls: arrows or WASD, SPACE stop, Q quit")
+    stdscr.addstr(9, 0, f"UART RX bytes drained: {stats.rx_bytes}")
+    stdscr.addstr(10, 0, f"Last key code: {stats.last_key_code}")
     stdscr.addstr(
-        9, 0, f"Debug raw encoder: {'on' if cmd.debug_raw_encoder else 'off'}"
+        11,
+        0,
+        f"Measured speed -> linear: {stats.current_linear_mps:+.3f} m/s   "
+        f"angular: {stats.current_angular_rps:+.3f} rad/s",
     )
-    stdscr.addstr(10, 0, f"UART RX bytes drained: {stats.rx_bytes}")
-    stdscr.addstr(11, 0, f"Last key code: {stats.last_key_code}")
+    # Качество линка выводится прямо в UI: потери и ошибки CRC иначе
+    # выглядят просто как более редкая телеметрия.
     stdscr.addstr(
         12,
         0,
-        f"Measured speed -> linear: {stats.current_linear_mps:+.3f} m/s   angular: {stats.current_angular_rps:+.3f} rad/s",
+        f"Link -> packets: {stats.sequence.received}   "
+        f"lost: {stats.sequence.lost} ({100.0 * stats.sequence.loss_ratio:.2f} %)   "
+        f"crc: {stats.decoder.bad_crc_count}   junk: {stats.decoder.resync_count}",
     )
+    stdscr.addstr(13, 0, f"Firmware flags: {describe_telemetry_flags(stats.last_flags)}")
     stdscr.refresh()
 
 
@@ -605,7 +595,6 @@ def teleop_loop(
     deadman = max(args.deadman, 0.0)
 
     cmd = Command()
-    cmd.debug_raw_encoder = 1 if args.debug_raw_encoder else 0
     last_key_time = 0.0
     next_publish = time.monotonic()
 
@@ -620,13 +609,13 @@ def teleop_loop(
             packet = encode_command(cmd)
             log_command(log_sink, "key", key, cmd, packet, stats)
             if should_quit:
-                cmd = Command(debug_raw_encoder=cmd.debug_raw_encoder)
+                cmd = Command()
                 packet = write_command(ser, cmd, stats, log_sink, plot)
                 log_command(log_sink, "quit", key, cmd, packet, stats)
                 return 0
 
         if deadman > 0.0 and (now - last_key_time) > deadman:
-            cmd = Command(debug_raw_encoder=cmd.debug_raw_encoder)
+            cmd = Command()
 
         if now >= next_publish:
             packet = write_command(ser, cmd, stats, log_sink, plot)
@@ -650,17 +639,14 @@ def main() -> int:
 
     log_sink = None if args.no_log else open_log_sink(args.log)
     plot = open_realtime_plot(args.plot_window, args.plot_rate) if args.plot else None
-    if log_sink is not None or plot is not None:
-        args.debug_raw_encoder = True
     stats = SerialStats()
 
     time.sleep(max(args.startup_delay, 0.0))
     ser.reset_input_buffer()
     ser.reset_output_buffer()
 
-    # Reset command stream to stop on startup.
-    debug_raw_encoder = 1 if args.debug_raw_encoder else 0
-    startup_cmd = Command(debug_raw_encoder=debug_raw_encoder)
+    # Поток команд начинается с остановки.
+    startup_cmd = Command()
     startup_packet = write_command(ser, startup_cmd, stats, log_sink, plot)
     log_command(log_sink, "startup", -1, startup_cmd, startup_packet, stats)
 
@@ -675,14 +661,13 @@ def main() -> int:
         try:
             send_stop_command(
                 ser,
-                startup_cmd.debug_raw_encoder,
                 stats,
                 log_sink,
                 plot,
                 shutdown_event,
             )
         except Exception as exc:
-            print(f"Failed to send stop command during shutdown: {exc}", file=sys.stderr)
+            print(f"Не удалось отправить стоп при завершении: {exc}", file=sys.stderr)
         finally:
             try:
                 ser.close()
