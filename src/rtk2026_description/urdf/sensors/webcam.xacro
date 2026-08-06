@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    Геометрия камеры и её оптическая система координат.
+
+    Параметры:
+      prefix           — префикс имён link и joint;
+      parent, xyz, rpy — родитель и поза camera_link;
+      mass             — масса камеры в килограммах;
+      width/height/depth — размеры box по Y/Z/X соответственно.
+
+    Макрос не создаёт поток изображения. Симуляционный sensor при
+    необходимости добавляет rtk2026_webcam_gazebo.
+  -->
+  <xacro:macro name="rtk2026_webcam" params="prefix parent xyz rpy mass width height depth">
+    <!-- camera_link использует соглашение робота: X вперёд, Y влево, Z вверх. -->
+    <link name="${prefix}camera_link">
+      <xacro:box_inertial
+        mass="${mass}" length="${depth}" width="${width}" height="${height}"
+        cx="0" cy="0" cz="0"/>
+      <visual>
+        <geometry><box size="${depth} ${width} ${height}"/></geometry>
+        <material name="black"/>
+      </visual>
+      <collision><geometry><box size="${depth} ${width} ${height}"/></geometry></collision>
+    </link>
+    <joint name="${prefix}camera_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prefix}camera_link"/>
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+    </joint>
+
+    <!-- Optical frame по REP-103: Z вперёд, X вправо, Y вниз. -->
+    <link name="${prefix}camera_optical_frame"/>
+    <joint name="${prefix}camera_optical_joint" type="fixed">
+      <parent link="${prefix}camera_link"/>
+      <child link="${prefix}camera_optical_frame"/>
+      <origin xyz="0 0 0" rpy="${-pi/2.0} 0 ${-pi/2.0}"/>
+    </joint>
+  </xacro:macro>
+</robot>

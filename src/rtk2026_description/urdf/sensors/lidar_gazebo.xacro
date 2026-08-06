@@ -1,0 +1,105 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Симуляционная модель двухмерного лидара для Gazebo Harmonic.
+
+    Этот макрос не создаёт link и joint.
+    Геометрия и TF-фреймы лидара создаются в lidar.xacro.
+
+    Макрос только добавляет Gazebo Sensor к существующему lidar_link.
+  -->
+  <xacro:macro
+    name="rtk2026_lidar_gazebo"
+    params="
+      prefix
+      update_rate
+      samples
+      min_angle
+      max_angle
+      min_range
+      max_range
+      range_resolution
+      noise_stddev">
+
+    <!--
+      Sensor привязывается к физическому link лидара.
+
+      После правильного preserveFixedJoint этот link останется
+      отдельной сущностью и в преобразованной SDF-модели.
+    -->
+    <gazebo reference="${prefix}lidar_link">
+
+      <sensor
+        name="${prefix}lidar_sensor"
+        type="gpu_lidar">
+
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <update_rate>${update_rate}</update_rate>
+
+        <topic>scan</topic>
+
+        <gz_frame_id>${prefix}lidar_frame</gz_frame_id>
+
+        <lidar>
+
+          <scan>
+            <horizontal>
+
+              <!-- Количество дальномерных измерений за один оборот. -->
+              <samples>${samples}</samples>
+
+              <!--
+                Множитель разрешения.
+
+                1 означает, что число выходных отсчётов
+                соответствует значению samples.
+              -->
+              <resolution>1</resolution>
+
+              <!-- Начальный угол горизонтального сканирования. -->
+              <min_angle>${min_angle}</min_angle>
+
+              <!-- Конечный угол горизонтального сканирования. -->
+              <max_angle>${max_angle}</max_angle>
+
+            </horizontal>
+          </scan>
+
+          <range>
+
+            <!--
+              Измерения ближе этого расстояния считаются невалидными.
+            -->
+            <min>${min_range}</min>
+
+            <!-- Максимальная измеряемая дальность. -->
+            <max>${max_range}</max>
+
+            <!-- Дискретность измерения дальности в метрах. -->
+            <resolution>${range_resolution}</resolution>
+
+          </range>
+
+          <!--
+            Независимый гауссовский шум дальности.
+
+            Он добавляется к каждому измерению.
+          -->
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>${noise_stddev}</stddev>
+          </noise>
+
+        </lidar>
+
+      </sensor>
+
+    </gazebo>
+
+  </xacro:macro>
+
+</robot>

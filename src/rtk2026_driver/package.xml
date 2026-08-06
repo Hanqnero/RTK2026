@@ -4,15 +4,16 @@
   <name>rtk2026_driver</name>
   <version>0.1.0</version>
   <description>Arduino serial bridge: encoder report publisher, motor command subscriber</description>
-  <maintainer email="maintainer@example.com">RTK2026 Team</maintainer>
+  <maintainer email="kamilisxakof@gmail.com">RTK2026 Team</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
 
   <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
   <depend>rclpy</depend>
-  <depend>rtk2026_interfaces</depend>
-  <depend>std_msgs</depend>
+  <depend>tf2_ros</depend>
+  <exec_depend>python3-serial</exec_depend>
   <test_depend>python3-pytest</test_depend>
   <export>
     <build_type>ament_python</build_type>

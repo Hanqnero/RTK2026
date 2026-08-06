@@ -1,203 +1,54 @@
-networks:
-  sim_net:
-    driver: bridge
-
 services:
-  # ── Gazebo Sim (gz): headless world runtime ──────────────────────────────
-  gazebo:
-    platform: linux/arm64/v8
+  sim:
     build:
+      # Корнем контекста является корень проекта.
+      #
+      # Поэтому Dockerfile имеет доступ к:
+      # src/
+      # docker/start_sim_novnc.sh
       context: ..
+
+      # Путь относительно build context.
       dockerfile: docker/Dockerfile.sim
-    image: rtk2026-sim:latest
-    command: >
-      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
-      ros2 run ros_gz_bridge parameter_bridge /clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock &
-      ros2 run ros_gz_bridge parameter_bridge /scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan &
-      ros2 run ros_gz_bridge parameter_bridge /camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image &
-      ros2 run ros_gz_bridge parameter_bridge /camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo &
-      ros2 run ros_gz_bridge parameter_bridge /world/polygon_5x5_cells/model/rtk2026/joint_state@sensor_msgs/msg/JointState[gz.msgs.Model &
-      ros2 run ros_gz_bridge parameter_bridge /joint_states@sensor_msgs/msg/JointState[gz.msgs.Model &
-      ros2 run ros_gz_bridge parameter_bridge /cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist &
-      ros2 run ros_gz_bridge parameter_bridge /model/rtk2026/joint/joint_0/0/cmd_pos@std_msgs/msg/Float64]gz.msgs.Double &
-      ros2 run ros_gz_bridge parameter_bridge /model/rtk2026/joint/joint_1/0/cmd_pos@std_msgs/msg/Float64]gz.msgs.Double &
-      ros2 run ros_gz_bridge parameter_bridge /model/rtk2026/joint/joint_2/0/cmd_pos@std_msgs/msg/Float64]gz.msgs.Double &
-      ros2 run ros_gz_bridge parameter_bridge /model/rtk2026/joint/joint_3/0/cmd_pos@std_msgs/msg/Float64]gz.msgs.Double &
-      ros2 launch ros_gz_sim gz_sim.launch.py gz_args:='-r -s -v 4 $${GAZEBO_WORLD_FILE}' &
-      GZ_PID=$$! &&
-      sleep 8 &&
-      /scripts/spawn_robot.sh || true &&
-      wait $$GZ_PID"
-    volumes:
-      - ../src/rtk2026_description/urdf:/workspace/urdf:ro
-      - ../worlds:/workspace/worlds:ro
+
+    # Фиксированное имя контейнера.
+    container_name: rtk2026_sim
+
+    # Добавляет минимальный init-процесс.
+    #
+    # Он передаёт сигналы и удаляет завершившиеся
+    # дочерние процессы.
+    init: true
+
     ports:
-      - "6080:6080"
-    environment:
-      - ROS_DOMAIN_ID=0
-      - GAZEBO_WORLD_FILE=/workspace/worlds/polygon_5x5.world
-      - ROBOT_SPAWN_X=${ROBOT_SPAWN_X:-3.45}
-      - ROBOT_SPAWN_Y=${ROBOT_SPAWN_Y:-0.55}
-      - ROBOT_SPAWN_Z=${ROBOT_SPAWN_Z:-0.03}
-      - ROBOT_SPAWN_YAW=${ROBOT_SPAWN_YAW:-3.141592653589793}
-      - LIBGL_ALWAYS_SOFTWARE=1
-      - GAZEBO_MODEL_DATABASE_URI=
-      - GZ_IP=127.0.0.1
-    networks:
-      - sim_net
+      # noVNC доступен только на этом Mac.
+      #
+      # Порт 6080 на macOS перенаправляется
+      # на порт 6080 внутри контейнера.
+      - "127.0.0.1:6080:6080"
 
-  # GUI Gazebo (gz sim -g) в том же network namespace, что и сервер (-s), иначе в Docker
-  # транспорт не находит симуляцию и viewport остаётся чёрным при видимой нижней панели.
-  gazebo_gui:
-    profiles: ["debug-ui"]
-    platform: linux/arm64/v8
-    image: rtk2026-sim:latest
-    command: ["/scripts/start_gazebo_novnc.sh"]
-    network_mode: service:gazebo
-    volumes:
-      - ../worlds:/workspace/worlds:ro
-    depends_on:
-      - gazebo
-    restart: unless-stopped
     environment:
-      - ROS_DOMAIN_ID=0
-      - LIBGL_ALWAYS_SOFTWARE=1
-      - GALLIUM_DRIVER=llvmpipe
-      - QT_X11_NO_MITSHM=1
-      - QT_OPENGL=desktop
-      - MESA_GL_VERSION_OVERRIDE=3.3
-      - MESA_GLSL_VERSION_OVERRIDE=330
-      - NOVNC_PORT=6080
-      - SCREEN_SIZE=1280x720x24
-      # Явная привязка gz-transport к loopback в общем netns с сервером симуляции
-      - GZ_IP=127.0.0.1
+      # X11-дисплей, создаваемый Xvfb.
+      DISPLAY: ":1"
 
-  # Gazebo Sim headless (GUI disabled in start_gazebo.sh).
+      # Отключение MIT-SHM для Qt.
+      QT_X11_NO_MITSHM: "1"
 
-  # ── robot_state_publisher с нашим URDF ───────────────────────────────────
-  robot:
-    platform: linux/arm64/v8
-    image: rtk2026-sim:latest
-    command: >
-      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
-      exec ros2 launch /scripts/robot.launch.py"
-    volumes:
-      - ../src/rtk2026_description/urdf:/workspace/urdf:ro
-    environment:
-      - ROS_DOMAIN_ID=0
-    networks:
-      - sim_net
-    depends_on:
-      - gazebo
+      # Программный рендеринг OpenGL.
+      LIBGL_ALWAYS_SOFTWARE: "1"
 
-  # ── наша одометрия: /joint_states -> /encoder_report -> /odom ───────────
-  mearm_driver:
-    platform: linux/arm64/v8
-    image: rtk2026-sim:latest
-    command: >
-      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
-      source /workspace/install/setup.bash &&
-      exec ros2 run mearm_driver mearm_servo_controller
-      --ros-args -p dry_run:=true
-      -p publish_joint_states:=false
-      -p servo_config_file:=/workspace/install/mearm_driver/share/mearm_driver/config/servo_config.yaml"
-    environment:
-      - ROS_DOMAIN_ID=0
-    networks:
-      - sim_net
-    depends_on:
-      - gazebo
-      - robot
+      # Runtime-каталог графических приложений.
+      XDG_RUNTIME_DIR: "/tmp/runtime-root"
 
-  odometry:
-    platform: linux/arm64/v8
-    image: rtk2026-sim:latest
-    command: >
-      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
-      source /workspace/install/setup.bash &&
-      exec ros2 launch rtk2026_odometry sim_odometry.launch.py"
-    volumes:
-      - ../src/rtk2026_odometry/config/sim_encoder.yaml:/workspace/install/rtk2026_odometry/share/rtk2026_odometry/config/sim_encoder.yaml:ro
-    environment:
-      - ROS_DOMAIN_ID=0
-    networks:
-      - sim_net
-    depends_on:
-      - robot
+    # Увеличенный /dev/shm для Gazebo и RViz.
+    shm_size: "1gb"
 
-  # ── AMCL localization on prepared map (no SLAM mapping) ──────────────────
-  localization:
-    platform: linux/arm64/v8
-    image: rtk2026-sim:latest
-    command: >
-      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
-      source /workspace/install/setup.bash &&
-      exec /scripts/start_localization.sh"
-    volumes:
-      - ./config/amcl.yaml:/workspace/amcl.yaml:ro
-      - ./saved_maps:/workspace/maps:ro
-      - ../src/rtk2026_route_nav/config:/workspace/runtime_config:ro
-    environment:
-      - ROS_DOMAIN_ID=0
-      - GRAPH_FILEPATH=${GRAPH_FILEPATH:-/workspace/runtime_config/graph.geojson}
-      - INITIAL_VERTEX_ID=${INITIAL_VERTEX_ID:-5}
-      - ROBOT_SPAWN_YAW=${ROBOT_SPAWN_YAW:-3.141592653589793}
-      - LOCALIZATION_USE_SIM_TIME=${LOCALIZATION_USE_SIM_TIME:-true}
-    networks:
-      - sim_net
-    depends_on:
-      - odometry
+    # Оставляет stdin открытым.
+    stdin_open: true
 
-  perception:
-    platform: linux/arm64/v8
-    image: rtk2026-sim:latest
-    command: >
-      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
-      source /workspace/install/setup.bash &&
-      exec ros2 launch rtk2026_cv onnx_sign_detector.launch.py"
-    environment:
-      - ROS_DOMAIN_ID=0
-    networks:
-      - sim_net
-    depends_on:
-      - robot
-      - gazebo
+    # Создаёт псевдотерминал.
+    tty: true
 
-  # ── RViz (карта SLAM) в браузере: http://localhost:6082/vnc.html ───────────
-  rviz_novnc:
-    profiles: ["debug-ui"]
-    platform: linux/arm64/v8
-    image: rtk2026-sim:latest
-    command: ["/scripts/start_rviz_novnc.sh"]
-    ports:
-      - "6082:6082"
-    volumes:
-      - ./local_rviz/rtk2026_slam.rviz:/workspace/slam.rviz:ro
-    environment:
-      - ROS_DOMAIN_ID=0
-      - LIBGL_ALWAYS_SOFTWARE=1
-      - QT_X11_NO_MITSHM=1
-      - RVIZ_CONFIG=/workspace/slam.rviz
-      - NOVNC_PORT=6082
-    networks:
-      - sim_net
-    depends_on:
-      - localization
-
-  # ── foxglove bridge ───────────────────────────────────────────────────────
-  foxglove:
-    profiles: ["debug-ui"]
-    platform: linux/arm64/v8
-    image: rtk2026-sim:latest
-    command: >
-      bash -c "source /opt/ros/$${ROS_DISTRO:-jazzy}/setup.bash &&
-      source /workspace/install/setup.bash &&
-      ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765"
-    ports:
-      - "8765:8765"
-    environment:
-      - ROS_DOMAIN_ID=0
-    networks:
-      - sim_net
-    depends_on:
-      - gazebo
+    # Даёт ROS-процессам время завершиться
+    # после получения SIGTERM.
+    stop_grace_period: 20s

@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<robot name="rtk2026_real" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    Точка входа fixed-модели реального робота.
+
+    prefix      — общий префикс TF-фреймов;
+    use_meshes  — STL visual при true, простая геометрия при false;
+    use_webcam  — добавить camera_link и camera_optical_frame.
+
+    Размеры, положения сенсоров и инерции находятся в robot_macro.xacro.
+  -->
+  <xacro:arg name="prefix" default=""/>
+  <xacro:arg name="use_meshes" default="true"/>
+  <xacro:arg name="use_webcam" default="true"/>
+  <xacro:include filename="$(find rtk2026_description)/urdf/robot_macro.xacro"/>
+  <xacro:rtk2026_robot
+    prefix="$(arg prefix)"
+    use_meshes="$(arg use_meshes)"
+    use_webcam="$(arg use_webcam)"/>
+</robot>

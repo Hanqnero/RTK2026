@@ -1,117 +1,182 @@
 """
-Серийный протокол между Raspberry Pi и Arduino.
+! Бинарный протокол обмена между Raspberry Pi и Arduino (пока без никаких байтовых проверок)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Фрейм команды Pi -> Arduino (11 байт):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Байт 0:   0xA5       заголовок, байт 1
-  Байт 1:   0x5A       заголовок, байт 2
-  Байт 2-5: target_linear_mps    float32 LE
-  Байт 6-9: target_angular_rps   float32 LE
-  Байт 10:  checksum   сумма байт 0-9 по модулю 256
+Соответствие Arduino (вот прямо щас такой):
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Фрейм телеметрии Arduino -> Pi (11 байт):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Байт 0:   0x5A       заголовок, байт 1
-  Байт 1:   0xA5       заголовок, байт 2
-  Байт 2:   lc_b0      накопленные тики левого колеса, байт 0 (int32 LE, младший)
-  Байт 3:   lc_b1      накопленные тики левого колеса, байт 1
-  Байт 4:   lc_b2      накопленные тики левого колеса, байт 2
-  Байт 5:   lc_b3      накопленные тики левого колеса, байт 3 (старший)
-  Байт 6:   rc_b0      накопленные тики правого колеса, байт 0 (int32 LE, младший)
-  Байт 7:   rc_b1      накопленные тики правого колеса, байт 1
-  Байт 8:   rc_b2      накопленные тики правого колеса, байт 2
-  Байт 9:   rc_b3      накопленные тики правого колеса, байт 3 (старший)
-  Байт 10:  checksum   сумма байт 0-9 по модулю 256
+.. code-block:: cpp
 
-Тики накапливаются с момента старта Arduino и могут быть отрицательными
-(движение назад). Сброс только при перезапуске Arduino.
+    struct __attribute__((packed)) ControlPacket {
+        float target_linear_mps;
+        float target_angular_rps;
+        uint8_t debug_raw_encoder;
+    };
+
+    struct __attribute__((packed)) TelemetryPacket {
+        float odom_x_m;
+        float odom_y_m;
+        float odom_heading_rad;
+        int32_t raw_left_encoder_delta;
+        int32_t raw_right_encoder_delta;
+        int16_t left_pwm;
+        int16_t right_pwm;
+        float current_linear_mps;
+        float current_angular_rps;
+    };
+
+~ Arduino Mega использует little-endian, float размером 4 байта.
+~ Форматы Python struct также принудительно задаются как little-endian.
 """
+
+from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
-from typing import Optional
 
-# Заголовки пакетов — разные в каждую сторону чтобы не перепутать направление
-CMD_HEADER = b"\xA5\x5A"  # Pi -> Arduino
-TEL_HEADER = b"\x5A\xA5"  # Arduino -> Pi
+"""
+ ? Символ "<" означает:
+ - little-endian (самый младший байт (наименее значащий) записывается по меньшему адресу, а самый старший — по большему)
+ - стандартный размер типов
+ - отсутствие автоматического выравнивания между полями
+ "f" — 32-битный float.
+ "B" — 8-битное беззнаковое целое.
+ ? Итоговый размер:
+   4 + 4 + 1 = 9 байт.
+"""
 
-CMD_SIZE = 11  # 2 (заголовок) + 4 (linear) + 4 (angular) + 1 (checksum)
-TEL_SIZE = 11  # 2 (заголовок) + 4 (left_count) + 4 (right_count) + 1 (checksum)
-
-
-class ProtocolError(Exception):
-    """Base class for serial protocol errors."""
-
-
-class InvalidChecksumError(ProtocolError):
-    """Telemetry frame checksum mismatch — frame is corrupted."""
+COMMAND_STRUCT = struct.Struct("<ffB")
 
 
-@dataclass
-class TelemetryFrame:
-    left_count: int   # накопленные тики левого колеса (int32, со знаком)
-    right_count: int  # накопленные тики правого колеса (int32, со знаком)
+# Поля:
+#   f — odom_x_m;
+#   f — odom_y_m;
+#   f — odom_heading_rad;
+#   i — raw_left_encoder_delta, int32;
+#   i — raw_right_encoder_delta, int32;
+#   h — left_pwm, int16;
+#   h — right_pwm, int16;
+#   f — current_linear_mps;
+#   f — current_angular_rps.
+#
+# Итог:
+#   4 + 4 + 4 + 4 + 4 + 2 + 2 + 4 + 4 = 32 байта.
+TELEMETRY_STRUCT = struct.Struct("<fffiihhff")
 
 
-def _checksum(data: bytes) -> int:
-    """Контрольная сумма: сумма всех байт по модулю 256."""
-    return sum(data) & 0xFF
+COMMAND_PACKET_SIZE = COMMAND_STRUCT.size
+TELEMETRY_PACKET_SIZE = TELEMETRY_STRUCT.size
 
 
-def pack_command(linear_mps: float, angular_rps: float) -> bytes:
+# Эти проверки выполняются при импорте модуля.
+# Если формат случайно изменят и размер перестанет совпадать с Arduino,
+# программа завершится сразу, а не будет молча интерпретировать неправильные данные.
+assert COMMAND_PACKET_SIZE == 9
+assert TELEMETRY_PACKET_SIZE == 32
+
+
+@dataclass(frozen=True, slots=True)
+class TelemetryPacket:
     """
-    Упаковать команду скорости робота в 11-байтовый фрейм.
+    Декодированный пакет телеметрии Arduino.
 
-    linear_mps  — линейная скорость вперёд, м/с.
-    angular_rps — угловая скорость вокруг z, рад/с.
+    frozen=True:
+        После создания объект нельзя изменить. Это предотвращает случайное
+        изменение измерения после разбора serial-пакета.
 
-    Arduino сама преобразует эту команду в целевые скорости колёс
-    по своей кинематике и крутит PI по колёсам.
+    slots=True:
+        Python не создаёт отдельный __dict__ для каждого объекта. Для потока
+        из десятков пакетов в секунду это немного уменьшает накладные расходы.
     """
-    payload = CMD_HEADER + struct.pack("<ff", float(linear_mps), float(angular_rps))
-    return payload + bytes([_checksum(payload)])
+
+    odom_x_m: float
+    odom_y_m: float
+    odom_heading_rad: float
+
+    raw_left_encoder_delta: int
+    raw_right_encoder_delta: int
+
+    left_pwm: int
+    right_pwm: int
+
+    current_linear_mps: float
+    current_angular_rps: float
 
 
-def parse_telemetry(buf: bytearray) -> Optional[TelemetryFrame]:
+def pack_command(
+    linear_mps: float,
+    angular_rps: float,
+    debug_raw_encoder: bool = False,
+) -> bytes:
     """
-    Попытаться извлечь один телеметрический фрейм из буфера.
+    Сформировать ровно один ControlPacket для Arduino.
 
-    Потребляет байты буфера до конца распознанного фрейма включительно.
-    Возвращает None если в буфере ещё нет полного фрейма — это нормальная
-    ситуация при накоплении данных, не ошибка.
+    ~ linear_mps:
+        Требуемая линейная скорость центра робота, м/с.
 
-    Выбрасывает InvalidChecksumError если фрейм найден но контрольная сумма
-    не совпадает — это аномалия (помехи, рассинхронизация).
+        Положительное значение означает движение вперёд при условии,
+        что знаки моторов и энкодеров правильно настроены в прошивке.
+
+    ~ angular_rps:
+        Требуемая угловая скорость, рад/с.
+
+        В ROS положительный angular.z обычно означает вращение против
+        часовой стрелки вокруг положительной вертикальной оси Z.
+
+    ~ debug_raw_encoder:
+        Если True, Arduino будет добавлять сырые дельты энкодеров
+        в TelemetryPacket.
+
+        Одометрия и текущая скорость передаются независимо от этого флага.
+        Для обычной работы SLAM этот флаг не требуется.
+
+    ? output:
+        Ровно 9 байт в формате, который ожидает Arduino.
     """
-    while len(buf) >= TEL_SIZE:
-        idx = buf.find(TEL_HEADER)
 
-        if idx < 0:
-            # заголовок не найден — оставляем последний байт
-            # (он может оказаться началом следующего заголовка)
-            del buf[:-1]
-            return None
+    return COMMAND_STRUCT.pack(
+        float(linear_mps),
+        float(angular_rps),
+        1 if debug_raw_encoder else 0, )
 
-        if idx > 0:
-            # мусор перед заголовком — выбрасываем
-            del buf[:idx]
-            continue
 
-        if len(buf) < TEL_SIZE:
-            # заголовок есть, но фрейм ещё не накопился полностью
-            return None
+def pop_telemetry_packet(buffer: bytearray) -> TelemetryPacket | None:
+    """
+    Извлечь один полный TelemetryPacket из начала накопительного буфера.
 
-        frame = bytes(buf[:TEL_SIZE])
-        expected = _checksum(frame[:-1])
-        if frame[-1] != expected:
-            raise InvalidChecksumError(
-                f"Expected checksum=0x{expected:02X}, got 0x{frame[-1]:02X}"
-            )
+    Serial.read() не обязан возвращать целый пакет. Возможны варианты:
 
-        left_count, right_count = struct.unpack("<ii", frame[2:-1])
-        del buf[:TEL_SIZE]
-        return TelemetryFrame(left_count=left_count, right_count=right_count)
+        первое чтение:  7 байт;
+        второе чтение: 15 байт;
+        третье чтение: 10 байт.
 
-    return None
+    Вместе это 32 байта, то есть один TelemetryPacket.
+
+    Поэтому байты сначала накапливаются в bytearray. Пакет разбирается только
+    тогда, когда в буфере есть не менее 32 байт.
+
+    Важно:
+        Здесь отсутствует поиск начала фрейма. Предполагается, что первый байт
+        буфера всегда является первым байтом TelemetryPacket.
+    """
+
+    if len(buffer) < TELEMETRY_PACKET_SIZE:
+        return None
+
+    # Копируем первые 32 байта в неизменяемый bytes.
+    raw_packet = bytes(buffer[:TELEMETRY_PACKET_SIZE])
+
+    # Удаляем разобранные байты из начала накопительного буфера.
+    del buffer[:TELEMETRY_PACKET_SIZE]
+
+    values = TELEMETRY_STRUCT.unpack(raw_packet)
+
+    return TelemetryPacket(
+        odom_x_m=float(values[0]),
+        odom_y_m=float(values[1]),
+        odom_heading_rad=float(values[2]),
+        raw_left_encoder_delta=int(values[3]),
+        raw_right_encoder_delta=int(values[4]),
+        left_pwm=int(values[5]),
+        right_pwm=int(values[6]),
+        current_linear_mps=float(values[7]),
+        current_angular_rps=float(values[8]),
+    )

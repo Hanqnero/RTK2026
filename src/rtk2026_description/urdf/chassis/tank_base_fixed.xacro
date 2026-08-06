@@ -1,0 +1,147 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    Фиксированная механическая модель реального гусеничного шасси (в смысле модель без прокрутки гусениц)
+  -->
+  <xacro:macro name="rtk2026_tank_base_fixed" params="
+      prefix
+      base_mass base_length base_width base_height base_link_z
+      base_com_x base_com_y base_com_z
+      use_base_mesh base_mesh
+      use_running_gear_mesh running_gear_mesh">
+
+    <!--
+      base_footprint лежит на плоскости пола.
+
+      Этот link не содержит геометрию и инерцию. Он нужен как плоская
+      опорная СК для колесной одометрии, SLAM и навигации:
+
+        odom -> base_footprint -> base_link
+    -->
+    <link name="${prefix}base_footprint"/>
+
+    <!--
+      base_link является CAD-системой координат корпуса.
+
+      base_link_z — измеренная высота начала координат корпуса над полом.
+      Фиксированный joint публикуется robot_state_publisher и завершает
+      статическую часть дерева между плоским основанием и корпусом.
+    -->
+    <joint name="${prefix}base_footprint_joint" type="fixed">
+      <parent link="${prefix}base_footprint"/>
+      <child link="${prefix}base_link"/>
+      <origin xyz="0 0 ${base_link_z}" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Основной корпус робота -->
+    <link name="${prefix}base_link">
+       <!--
+        Пока инерция корпуса аппроксимируется параллелепипедом.
+        Важно: это инерция только шасси и не надо смешивать ее с периферией, что будет уже поверх
+      -->
+      <xacro:box_inertial
+        mass="${base_mass}"
+        length="${base_length}"
+        width="${base_width}"
+        height="${base_height}"
+        cx="${base_com_x}"
+        cy="${base_com_y}"
+        cz="${base_com_z}"/>
+       <!--
+        Если use_base_mesh=true, показываем реальный STL корпуса.
+      -->
+      <xacro:if value="${use_base_mesh}">
+        <visual name="base_mesh_visual">
+          <!--
+            Нулевой origin означает, что координаты STL уже
+            заданы относительно base_link.
+          -->
+          <origin xyz="0 0 0" rpy="0 0 0"/>
+          <geometry><mesh filename="${base_mesh}"/></geometry>
+          <material name="gray"/>
+        </visual>
+      </xacro:if>
+      
+      <!--
+        Если mesh отключён, используем упрощённый box.
+        Это fallback-геометрия для отладки.
+      -->
+      <xacro:unless value="${use_base_mesh}">
+        <visual name="base_box_visual">
+          <origin xyz="0 0 0" rpy="0 0 0"/>
+          <geometry><box size="${base_length} ${base_width} ${base_height}"/></geometry>
+          <material name="gray"/>
+        </visual>
+      </xacro:unless>
+    <!--
+        Collision корпуса всегда упрощённый.
+
+        Это сделано специально, поскольку подробный STL
+        обычно ухудшает устойчивость и скорость Gazebo.
+      -->
+      <collision name="base_box_collision">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><box size="${base_length} ${base_width} ${base_height}"/></geometry>
+      </collision>
+    </link>
+
+    <link name="${prefix}wheel_link">
+      <!--
+        Масса, центр масс и тензор инерции перенесены
+        из предоставленного исходного JetBot
+      -->
+      <inertial>
+        <origin xyz="-0.0039313449320714 8.89642839478193E-07 -0.0796378701576199" rpy="0 0 0"/>
+        <mass value="0.310705244841847"/>
+        <inertia
+          ixx="3.77591275974407E-05"
+          ixy="-7.01690329329116E-11"
+          ixz="-2.38812142575087E-07"
+          iyy="2.92014100130134E-05"
+          iyz="5.80249181819311E-11"
+          izz="3.86036385128316E-05"/>
+      </inertial>
+      <!--
+        Если use_running_gear_mesh=true,
+        используем wheel_link.stl
+      -->
+      <xacro:if value="${use_running_gear_mesh}">
+        <visual name="running_gear_mesh_visual">
+          <!--
+            Нулевое преобразование сохраняет общую CAD-систему
+            координат base_link и wheel_link (они без сдвига СК итак совмещены как надо)
+          -->
+          <origin xyz="0 0 0" rpy="0 0 0"/>
+          <geometry><mesh filename="${running_gear_mesh}"/></geometry>
+          <material name="black"/>
+        </visual>
+        <collision name="running_gear_mesh_collision">
+          <origin xyz="0 0 0" rpy="0 0 0"/>
+          <geometry><mesh filename="${running_gear_mesh}"/></geometry>
+        </collision>
+      </xacro:if>
+
+      <!-- A simple fallback keeps the Xacro usable before the STL is copied. -->
+      <xacro:unless value="${use_running_gear_mesh}">
+        <visual name="running_gear_fallback_visual">
+          <origin xyz="0 0 -0.06" rpy="0 0 0"/>
+          <geometry><box size="${base_length} ${base_width + 0.04} 0.08"/></geometry>
+          <material name="black"/>
+        </visual>
+        <collision name="running_gear_fallback_collision">
+          <origin xyz="0 0 -0.06" rpy="0 0 0"/>
+          <geometry><box size="${base_length} ${base_width + 0.04} 0.08"/></geometry>
+        </collision>
+      </xacro:unless>
+    </link>
+
+    <!--
+      здесь фискируем соединение шасси и гусениц
+    -->
+    <joint name="${prefix}wheel_joint" type="fixed">
+      <parent link="${prefix}base_link"/>
+      <child link="${prefix}wheel_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+</robot>

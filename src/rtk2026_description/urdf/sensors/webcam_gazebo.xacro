@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    Симуляционный camera sensor для уже существующего camera_link.
+
+    Параметры:
+      prefix         — префикс link и топика;
+      backend        — при значении classic добавляется gazebo_ros plugin;
+      width/height   — размер монохромного изображения R8G8B8;
+      update_rate    — частота кадров в герцах;
+      horizontal_fov — горизонтальный угол обзора в радианах.
+
+    Для Gazebo Sim изображение публикуется сначала в Gazebo Transport и
+    требует отдельного ros_gz_bridge. Макрос не вызывается текущей
+    rtk2026_diff_drive_sim.urdf.xacro и оставлен как готовая точка расширения.
+  -->
+  <xacro:macro name="rtk2026_webcam_gazebo" params="prefix backend width height update_rate horizontal_fov">
+    <gazebo reference="${prefix}camera_link">
+      <preserveFixedJoint>true</preserveFixedJoint>
+      <sensor name="${prefix}webcam_sensor" type="camera">
+        <always_on>true</always_on>
+        <visualize>true</visualize>
+        <update_rate>${update_rate}</update_rate>
+        <topic>${prefix}webcam/image_raw</topic>
+        <camera>
+          <horizontal_fov>${horizontal_fov}</horizontal_fov>
+          <image><width>${width}</width><height>${height}</height><format>R8G8B8</format></image>
+          <clip><near>0.05</near><far>50.0</far></clip>
+        </camera>
+        <xacro:if value="${backend == 'classic'}">
+          <plugin name="${prefix}gazebo_ros_camera" filename="libgazebo_ros_camera.so">
+            <ros><namespace>/${prefix}webcam</namespace></ros>
+            <frame_name>${prefix}camera_optical_frame</frame_name>
+          </plugin>
+        </xacro:if>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+</robot>

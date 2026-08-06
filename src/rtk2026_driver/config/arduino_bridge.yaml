@@ -1,26 +1,127 @@
 arduino_bridge:
   ros__parameters:
 
-    # --- Serial порт ---
-    serial_port: "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
+    # ~ Путь к USB Serial Arduino внутри Docker-контейнера.
+    #
+    # В docker-compose устройство хоста можно пробросить так:
+    #
+    # devices:
+    #   - "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0:/dev/arduino"
+    #
+    # После этого bridge открывает короткий стабильный путь /dev/arduino.
+    serial_port: "/dev/arduino"
+
+    # ~ Скорость serial-соединения в бодах.
+    #
+    # Значение должно совпадать с вызовом на Arduino:
+    #
+    # Serial.begin(115200);
     baudrate: 115200
 
-    # --- Handshake ---
-    # Сколько ждать первого фрейма телеметрии от Arduino после открытия порта
-    handshake_timeout_sec: 5.0
-    # Пауза между попытками чтения во время handshake
-    handshake_poll_interval_sec: 0.01
+    # ~ После открытия USB-порта Arduino Mega обычно перезагружается.
+    #
+    # Bridge ждёт одну секунду, прежде чем начинать обычный обмен.
+    # Это ожидание выполняется только один раз при запуске ноды.
+    arduino_reset_wait_sec: 1.0
 
-    # --- Топики ---
-    encoder_report_topic: "encoder_report"
-    cmd_vel_topic: "cmd_vel"
+    # ~ ROS2-топик, из которого bridge получает команды движения.
+    #
+    # Тип сообщения:
+    # geometry_msgs/msg/TwistStamped
+    #
+    # Используемые поля:
+    # twist.linear.x  — линейная скорость, м/с;
+    # twist.angular.z — угловая скорость, рад/с.
+    cmd_vel_topic: "/cmd_vel"
 
-    # --- Частоты и dead-man ---
-    telemetry_poll_period_sec: 0.01
+    # ~ ROS2-топик, в который bridge публикует одометрию,
+    # полученную от Arduino.
+    #
+    # Тип сообщения:
+    # nav_msgs/msg/Odometry
+    odom_topic: "/odom"
+
+    # ~ Система координат, относительно которой Arduino рассчитывает
+    # положение робота x, y и yaw.
+    #
+    # Это родительский frame для TF:
+    # odom -> base_footprint
+    odom_frame: "odom"
+
+    # ~ Система координат основания робота.
+    #
+    # Она записывается в:
+    # odom.child_frame_id
+    #
+    # И используется как дочерний frame преобразования:
+    # odom -> base_footprint
+    base_frame: "base_footprint"
+
+    # ~ Период отправки последней команды на Arduino в секундах.
+    #
+    # 0.02 секунды:
+    # 1 / 0.02 = 50 Гц.
+    #
+    # Даже если новая команда /cmd_vel приходит реже, bridge повторяет
+    # последнее актуальное значение 50 раз в секунду.
     command_send_interval_sec: 0.02
+
+    # ~ Период проверки входного serial-буфера в секундах.
+    #
+    # 0.01 секунды:
+    # 1 / 0.01 = 100 Гц.
+    #
+    # Это не частота расчёта одометрии Arduino.
+    # Bridge просто проверяет порт 100 раз в секунду и забирает
+    # уже поступившие пакеты.
+    telemetry_poll_period_sec: 0.01
+
+    # ~ Максимально допустимый возраст последней команды /cmd_vel.
+    #
+    # Если новая команда не приходила более 0.30 секунды,
+    # bridge продолжает работать, но отправляет Arduino:
+    #
+    # linear_mps  = 0.0
+    # angular_rps = 0.0
+    #
+    # Это программный dead-man на стороне Raspberry Pi.
     drop_stale_cmd_after_sec: 0.30
 
-    # --- Инверсия энкодеров ---
-    # Используется только как runtime override поверх прошивки
-    left_encoder_inverted: false
-    right_encoder_inverted: false
+    # ~ Максимальная линейная скорость, которую bridge разрешает
+    # передать Arduino.
+    #
+    # Единица измерения — метры в секунду.
+    #
+    # Команда ограничивается диапазоном:
+    # [-1.5, 1.5].
+    #
+    # Значение должно совпадать с ограничением в прошивке Arduino.
+    max_linear_mps: 1.5
+
+    # ~ Максимальная угловая скорость.
+    #
+    # Единица измерения — радианы в секунду.
+    #
+    # 1.57079632679 рад/с = pi/2 рад/с = 90 градусов в секунду.
+    #
+    # Команда ограничивается диапазоном:
+    # [-1.57079632679, 1.57079632679].
+    #
+    # Значение должно совпадать с ограничением в прошивке Arduino.
+    max_angular_rps: 1.57079632679
+
+    # ~ Значение третьего поля ControlPacket.
+    #
+    # false:
+    # Arduino может не заполнять диагностические поля сырых
+    # дельт энкодеров.
+    #
+    # При этом основные поля телеметрии продолжают передаваться:
+    # odom_x_m;
+    # odom_y_m;
+    # odom_heading_rad;
+    # current_linear_mps;
+    # current_angular_rps;
+    # left_pwm;
+    # right_pwm.
+    debug_raw_encoder: false

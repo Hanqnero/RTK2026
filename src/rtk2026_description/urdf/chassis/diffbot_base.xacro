@@ -1,0 +1,326 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Упрощённая физическая модель дифференциального робота.
+
+    В модели:
+      - плоский корневой frame base_footprint;
+      - один корпус;
+      - левое ведущее колесо;
+      - правое ведущее колесо;
+      - одна задняя пассивная сферическая опора.
+
+    STL корпуса используется только как visual.
+    Физический collision корпуса остаётся простым box.
+  -->
+  <xacro:macro
+    name="rtk2026_diffbot_base"
+    params="
+      prefix:=''
+      base_mass
+      base_length
+      base_width
+      base_height
+      base_link_z
+      wheel_mass
+      wheel_radius
+      wheel_width
+      wheel_separation
+      wheel_x
+      wheel_effort
+      wheel_velocity
+      caster_mass
+      caster_radius
+      caster_x
+      use_base_mesh:=true
+      base_mesh:=''">
+
+    <!-- BASE FOOTPRINT -->
+
+    <!--
+      base_footprint лежит в плоскости движения робота.
+
+      diff_drive_controller публикует динамический TF:
+        odom -> base_footprint
+
+      robot_state_publisher публикует фиксированный TF:
+        base_footprint -> base_link
+    -->
+    <link name="${prefix}base_footprint"/>
+
+    <joint name="${prefix}base_footprint_joint" type="fixed">
+      <parent link="${prefix}base_footprint"/>
+      <child link="${prefix}base_link"/>
+      <origin
+    xyz="${-wheel_x} 0 ${base_link_z}"
+    rpy="0 0 0"/>
+</joint>
+
+    <!-- BASE LINK -->
+    <link name="${prefix}base_link">
+
+      <!--
+        Инерция корпуса приближённо считается как для прямоугольного блока.
+      -->
+      <xacro:box_inertial
+        mass="${base_mass}"
+        length="${base_length}"
+        width="${base_width}"
+        height="${base_height}"
+        cx="0"
+        cy="0"
+        cz="0"/>
+
+      <!-- STL используется только для отображения. -->
+      <xacro:if value="${use_base_mesh}">
+
+        <visual name="base_mesh_visual">
+          <origin xyz="0 0 0" rpy="0 0 0"/>
+
+          <geometry>
+            <mesh
+              filename="${base_mesh}"
+              scale="1 1 1"/>
+          </geometry>
+        </visual>
+
+      </xacro:if>
+
+      <!--
+        Если STL отключён, отображаем обычный box.
+      -->
+      <xacro:unless value="${use_base_mesh}">
+
+        <visual name="base_box_visual">
+          <geometry>
+            <box size="${base_length} ${base_width} ${base_height}"/>
+          </geometry>
+
+          <material name="gray"/>
+        </visual>
+
+      </xacro:unless>
+
+      <!--
+        Collision
+      -->
+      <collision name="base_collision">
+        <geometry>
+          <box size="${base_length} ${base_width} ${base_height}"/>
+        </geometry>
+      </collision>
+
+    </link>
+
+    <!-- LEFT WHEEL  -->
+    <link name="${prefix}left_wheel_link">
+
+      <!-- Ось инерции колеса совпадает с осью Y робота. -->
+      <xacro:wheel_inertial_y
+        mass="${wheel_mass}"
+        radius="${wheel_radius}"
+        width="${wheel_width}"/>
+
+      <visual name="left_wheel_visual">
+        <!-- В URDF ось cylinder по умолчанию совпадает с Z. -->
+        <origin xyz="0 0 0" rpy="${pi / 2.0} 0 0"/>
+        <geometry>
+          <cylinder
+            radius="${wheel_radius}"
+            length="${wheel_width}"/>
+        </geometry>
+
+        <material name="darkgray"/>
+      </visual>
+
+      <collision>
+        <origin xyz="0 0 0" rpy="${pi / 2.0} 0 0"/>
+        <geometry>
+          <cylinder
+            radius="${wheel_radius}"
+            length="${wheel_width}"/>
+        </geometry>
+      </collision>
+
+    </link>
+
+    <!--
+      Ведущее колесо должно вращаться.
+
+      continuous означает:
+        - сустав может вращаться бесконечно;
+        - положение не ограничено углом;
+        - position будет накапливаться.
+
+      Именно position этого joint будет аналогом энкодера.
+    -->
+    <joint
+      name="${prefix}left_wheel_joint"
+      type="continuous">
+
+      <parent link="${prefix}base_link"/>
+      <child link="${prefix}left_wheel_link"/>
+
+      <!--
+        X > 0: ось ведущих колёс смещена к передней части корпуса.
+        Y > 0: левый борт.
+        Z: нижняя точка колеса находится на уровне земли.
+
+        Joint frame не поворачиваем: положительная ось +Y означает, что
+        положительное положение энкодера соответствует движению вперёд по +X.
+      -->
+      <origin
+  xyz="${wheel_x} ${wheel_separation / 2.0} ${wheel_radius - base_link_z}"
+  rpy="0 0 0"/>
+
+<!--
+  Ось вращения ведущего колеса направлена вдоль Y.
+  Положительное вращение соответствует движению вперёд по X.
+-->
+<axis xyz="0 1 0"/>
+
+      <limit
+        effort="${wheel_effort}"
+        velocity="${wheel_velocity}"/>
+
+      <dynamics
+        damping="0.01"
+        friction="0.0"/>
+
+    </joint>
+
+    <!-- RIGHT WHEEL -->
+
+    <link name="${prefix}right_wheel_link">
+
+      <!-- Ось инерции колеса совпадает с осью Y робота. -->
+      <xacro:wheel_inertial_y
+        mass="${wheel_mass}"
+        radius="${wheel_radius}"
+        width="${wheel_width}"/>
+
+      <visual name="right_wheel_visual">
+        <origin xyz="0 0 0" rpy="${pi / 2.0} 0 0"/>
+        <geometry>
+          <cylinder
+            radius="${wheel_radius}"
+            length="${wheel_width}"/>
+        </geometry>
+
+        <material name="darkgray"/>
+      </visual>
+
+      <collision>
+        <origin xyz="0 0 0" rpy="${pi / 2.0} 0 0"/>
+        <geometry>
+          <cylinder
+            radius="${wheel_radius}"
+            length="${wheel_width}"/>
+        </geometry>
+      </collision>
+
+    </link>
+
+    <joint
+      name="${prefix}right_wheel_joint"
+      type="continuous">
+
+      <parent link="${prefix}base_link"/>
+      <child link="${prefix}right_wheel_link"/>
+
+      <!-- Правый борт находится по отрицательной оси Y. -->
+      <origin
+  xyz="${wheel_x} ${-wheel_separation / 2.0} ${wheel_radius - base_link_z}"
+  rpy="0 0 0"/>
+
+      <!-- Та же +Y ось: оба положительных энкодера означают движение вперёд. -->
+      <axis xyz="0 1 0"/>
+
+      <limit
+        effort="${wheel_effort}"
+        velocity="${wheel_velocity}"/>
+
+      <dynamics
+        damping="0.01"
+        friction="0.0"/>
+
+    </joint>
+
+    <!-- REAR CASTER  -->
+
+    <!--
+      Один опорный шарик образует с двумя колёсами трёхточечную опору.
+
+      Он не участвует:
+        - в управлении;
+        - в энкодерах;
+        - в расчёте одометрии;
+        - в ros2_control.
+    -->
+    <link name="${prefix}rear_caster_link">
+
+      <xacro:sphere_inertial
+        mass="${caster_mass}"
+        radius="${caster_radius}"/>
+
+      <visual name="rear_caster_visual">
+        <geometry>
+          <sphere radius="${caster_radius}"/>
+        </geometry>
+
+        <material name="darkgray"/>
+      </visual>
+
+      <collision>
+        <geometry>
+          <sphere radius="${caster_radius}"/>
+        </geometry>
+      </collision>
+
+    </link>
+
+    <joint
+      name="${prefix}rear_caster_joint"
+      type="fixed">
+
+      <parent link="${prefix}base_link"/>
+      <child link="${prefix}rear_caster_link"/>
+
+      <!--
+        Ставим опору сзади.
+
+        Нижняя точка сферы должна находиться примерно на уровне земли.
+      -->
+      <origin
+        xyz="${-caster_x} 0 ${caster_radius - base_link_z}"
+        rpy="0 0 0"/>
+
+    </joint>
+
+    <!-- GAZEBO CONTACT PARAMETERS -->
+
+    <!-- Высокое трение ведущих колёс -->
+    <gazebo reference="${prefix}left_wheel_link">
+      <mu1>1.0</mu1>
+      <mu2>1.0</mu2>
+    </gazebo>
+
+    <gazebo reference="${prefix}right_wheel_link">
+      <mu1>1.0</mu1>
+      <mu2>1.0</mu2>
+    </gazebo>
+
+    <!--
+      Низкое трение пассивной опоры, чтобы она могла скользить
+      и не мешала повороту робота
+    -->
+    <gazebo reference="${prefix}rear_caster_link">
+      <mu1>0.001</mu1>
+      <mu2>0.001</mu2>
+    </gazebo>
+
+  </xacro:macro>
+
+</robot>

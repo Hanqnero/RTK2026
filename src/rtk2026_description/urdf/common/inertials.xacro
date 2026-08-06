@@ -1,0 +1,91 @@
+<?xml version="1.0"?>
+<!--
+  макросы для расчёта тензоров инерции
+  простых однородных тел
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    Макрос инерции прямоугольного параллелепипеда.
+
+    Соглашение по размерам:
+
+      length — размер вдоль X;
+      width  — размер вдоль Y;
+      height — размер вдоль Z.
+
+    cx, cy, cz — положение центра масс относительно link frame.
+  -->
+  <xacro:macro name="box_inertial" params="mass length width height cx cy cz">
+    <inertial>
+      <origin xyz="${cx} ${cy} ${cz}" rpy="0 0 0"/>
+      <mass value="${mass}"/>
+      <inertia
+        ixx="${mass * (width*width + height*height) / 12.0}"
+        ixy="0" ixz="0"
+        iyy="${mass * (length*length + height*height) / 12.0}"
+        iyz="0"
+        izz="${mass * (length*length + width*width) / 12.0}"/>
+    </inertial>
+  </xacro:macro>
+<!--
+    Макрос инерции однородного шара.
+  -->
+  <xacro:macro name="sphere_inertial" params="mass radius">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="${mass}"/>
+      <inertia
+        ixx="${2.0 * mass * radius * radius / 5.0}"
+        ixy="0" ixz="0"
+        iyy="${2.0 * mass * radius * radius / 5.0}"
+        iyz="0"
+        izz="${2.0 * mass * radius * radius / 5.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!--
+    Макрос инерции однородного цилиндра.
+
+    Ось цилиндра совпадает с локальной осью Z. length — длина цилиндра
+    вдоль этой оси. Через origin можно задать положение и ориентацию
+    инерциальной системы координат относительно link frame.
+  -->
+  <xacro:macro
+    name="cylinder_inertial"
+    params="mass radius length cx cy cz rpy:='0 0 0'">
+    <inertial>
+      <origin xyz="${cx} ${cy} ${cz}" rpy="${rpy}"/>
+      <mass value="${mass}"/>
+      <inertia
+        ixx="${mass * (3.0*radius*radius + length*length) / 12.0}"
+        ixy="0" ixz="0"
+        iyy="${mass * (3.0*radius*radius + length*length) / 12.0}"
+        iyz="0"
+        izz="${mass * radius * radius / 2.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!--
+    Макрос инерции цилиндрического колеса.
+
+    Здесь предполагается, что ось вращения колеса совпадает
+    с осью Y системы координат link.
+
+    Поэтому:
+
+      Iyy — момент относительно оси вращения;
+      Ixx и Izz — поперечные моменты.
+  -->
+  <xacro:macro name="wheel_inertial_y" params="mass radius width">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="${mass}"/>
+      <inertia
+        ixx="${mass * (3.0*radius*radius + width*width) / 12.0}"
+        ixy="0" ixz="0"
+        iyy="${mass * radius * radius / 2.0}"
+        iyz="0"
+        izz="${mass * (3.0*radius*radius + width*width) / 12.0}"/>
+    </inertial>
+  </xacro:macro>
+</robot>

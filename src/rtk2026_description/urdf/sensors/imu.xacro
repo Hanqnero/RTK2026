@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    Геометрическая модель IMU без симуляционного датчика.
+
+    Параметры:
+      prefix   — префикс имён link и joint;
+      parent   — родительское звено;
+      xyz/rpy  — положение IMU относительно parent;
+      use_mesh — использовать STL вместо упрощённого box visual;
+      mesh     — URI STL-модели.
+
+    Макрос создаёт imu_link и фиксированный imu_joint. Для публикации данных
+    в Gazebo нужен отдельный sensor/plugin: этот файл задаёт только массу,
+    collision, visual и TF.
+  -->
+  <xacro:macro name="rtk2026_imu" params="prefix parent xyz rpy use_mesh mesh">
+    <link name="${prefix}imu_link">
+      <inertial>
+        <origin xyz="-0.015992956442504 -0.0186967363878791 0.0008" rpy="0 0 0"/>
+        <mass value="0.00900725791925823"/>
+        <inertia
+          ixx="6.0621502887195E-06" ixy="8.2009503850481E-10" ixz="1.00078505419116E-16"
+          iyy="2.95825733414683E-06" iyz="4.74614002484179E-17"
+          izz="9.01656451992273E-06"/>
+      </inertial>
+      <xacro:if value="${use_mesh}">
+        <visual><geometry><mesh filename="${mesh}"/></geometry><material name="black"/></visual>
+      </xacro:if>
+      <xacro:unless value="${use_mesh}">
+        <visual><geometry><box size="0.04 0.03 0.012"/></geometry><material name="black"/></visual>
+      </xacro:unless>
+      <collision><geometry><box size="0.04 0.03 0.012"/></geometry></collision>
+    </link>
+    <joint name="${prefix}imu_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prefix}imu_link"/>
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+    </joint>
+  </xacro:macro>
+</robot>

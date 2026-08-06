@@ -1,0 +1,21 @@
+:root {
+  --rtk-accent: #275d85;
+}
+
+div.body {
+  max-width: 980px;
+}
+
+div.admonition.attention,
+div.admonition.warning {
+  border-left: 4px solid #bd6b18;
+}
+
+table.docutils td,
+table.docutils th {
+  vertical-align: top;
+}
+
+code.literal {
+  color: var(--rtk-accent);
+}

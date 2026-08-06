@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<robot name="rtk2026_webcam" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    Самостоятельная модель камеры для проверки в robot_state_publisher/RViz.
+
+    parent — имя тестового родительского звена;
+    xyz/rpy — поза camera_link относительно него.
+    Файл создаёт пустой parent и вызывает макрос из sensors/webcam.xacro;
+    симуляционный camera sensor сюда не входит.
+  -->
+  <xacro:arg name="parent" default="base_link"/>
+  <xacro:arg name="xyz" default="0.125 0 0.075"/>
+  <xacro:arg name="rpy" default="0 0 0"/>
+  <xacro:include filename="$(find rtk2026_description)/urdf/common/materials.xacro"/>
+  <xacro:include filename="$(find rtk2026_description)/urdf/common/inertials.xacro"/>
+  <xacro:include filename="$(find rtk2026_description)/urdf/sensors/webcam.xacro"/>
+  <link name="$(arg parent)"/>
+  <xacro:rtk2026_webcam
+    prefix="" parent="$(arg parent)"
+    xyz="$(arg xyz)" rpy="$(arg rpy)"
+    mass="0.035" width="0.060" height="0.025" depth="0.025"/>
+</robot>

@@ -1,5 +1,5 @@
-from setuptools import find_packages, setup
 from glob import glob
+from setuptools import find_packages, setup
 
 package_name = "rtk2026_driver"
 
@@ -18,8 +18,8 @@ setup(
     zip_safe=True,
     entry_points={
         "console_scripts": [
-            # имя команды = rtk2026_driver.arduino_bridge_node:main
-            "arduino_bridge = rtk2026_driver.arduino_bridge_node:main",
+            # Имя команды ведёт на фактический модуль Arduino bridge.
+            "arduino_bridge = rtk2026_driver.arduino_bridge:main",
         ],
     },
 )

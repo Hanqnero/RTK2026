@@ -1,0 +1,95 @@
+controller_manager:
+  ros__parameters:
+
+    # Контроллеры используют часы Gazebo из /clock.
+    use_sim_time: true
+
+    # Частота работы ros2_control.
+    update_rate: 100
+
+    # Публикует position и velocity суставов в /joint_states.
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    # Стандартный контроллер дифференциального привода.
+    diff_drive_controller:
+      type: diff_drive_controller/DiffDriveController
+
+
+diff_drive_controller:
+  ros__parameters:
+
+    use_sim_time: true
+
+    # Имена суставов должны точно совпадать с URDF.
+    left_wheel_names:
+      - left_wheel_joint
+
+    right_wheel_names:
+      - right_wheel_joint
+
+    # Эффективное расстояние между левым и правым бортом.
+    wheel_separation: 0.246
+
+    # Эффективный радиус ведущего колеса или звёздочки.
+    wheel_radius: 0.060
+
+    # Калибровочные множители.
+    wheel_separation_multiplier: 1.0
+    left_wheel_radius_multiplier: 1.0
+    right_wheel_radius_multiplier: 1.0
+
+    # Используем реальные состояния joint position из Gazebo.
+    position_feedback: true
+
+    # Запрещаем вычислять одометрию только по командам.
+    open_loop: false
+
+    # Системы координат.
+    odom_frame_id: odom
+    base_frame_id: base_footprint
+
+    # Пока стандартный контроллер публикует TF odom -> base_footprint.
+    #
+    # Когда подключите собственный узел одометрии,
+    # это нужно будет изменить на false.
+    enable_odom_tf: true
+
+    # Частота публикации стандартной одометрии.
+    publish_rate: 50.0
+
+    # Остановка, если команды перестали поступать.
+    cmd_vel_timeout: 0.5
+
+    publish_limited_velocity: true
+    velocity_rolling_window_size: 10
+
+    pose_covariance_diagonal:
+      - 0.001
+      - 0.001
+      - 0.001
+      - 0.001
+      - 0.001
+      - 0.01
+
+    twist_covariance_diagonal:
+      - 0.001
+      - 0.001
+      - 0.001
+      - 0.001
+      - 0.001
+      - 0.01
+
+    # Ограничения линейной скорости.
+    linear.x.max_velocity: 1.0
+    linear.x.min_velocity: -1.0
+
+    linear.x.max_acceleration: 1.5
+    linear.x.max_deceleration: -1.5
+
+    # Ограничения угловой скорости.
+    angular.z.max_velocity: 3.0
+    angular.z.min_velocity: -3.0
+
+    angular.z.max_acceleration: 4.0
+    angular.z.max_deceleration: -4.0

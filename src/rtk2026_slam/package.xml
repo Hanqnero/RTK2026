@@ -4,8 +4,9 @@
   <name>rtk2026_slam</name>
   <version>0.1.0</version>
   <description>SLAM: slam_toolbox config and launch for 2D lidar</description>
-  <maintainer email="maintainer@example.com">RTK2026 Team</maintainer>
+  <maintainer email="kamilisxakof@gmail.com">RTK2026 Team</maintainer>
   <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
   <depend>slam_toolbox</depend>
   <depend>lifecycle_msgs</depend>
   <depend>launch</depend>
