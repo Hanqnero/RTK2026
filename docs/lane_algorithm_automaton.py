@@ -33,20 +33,17 @@ FAIL = "#A03E29"
 
 #: Переходы автомата: откуда, куда, событие, тип.
 #:
-#: ``sign`` — реакция на дорожный знак. Различие между этими двумя рёбрами
-#: и есть смысл состояния COMMIT: до барьера знак перепланирует маневр,
-#: после барьера не делает ничего.
+#: ``sign`` — реакция на дорожный знак: он только запоминается и применяется
+#: при выборе в следующей вершине. Геометрия текущего участка не меняется,
+#: поэтому это петля, а не переход.
 #: ``fail`` — уход в восстановление.
 TRANSITIONS: tuple[tuple[str, str, str, str], ...] = (
     ("PLAN", "TRACK", "позы построены", "plain"),
-    ("TRACK", "COMMIT", "ℓ ≤ ℓc", "plain"),
-    ("COMMIT", "ADVANCE", "вершина достигнута", "plain"),
+    ("TRACK", "ADVANCE", "вершина достигнута", "plain"),
     ("ADVANCE", "PLAN", "сдвиг состояния", "plain"),
-    ("TRACK", "PLAN", "знак: перепланировать", "sign"),
-    ("COMMIT", "COMMIT", "знак: игнорируется", "sign"),
-    ("PLAN", "RECOVER", "нет маневров (C2)", "fail"),
+    ("TRACK", "TRACK", "знак: запомнить\nдля следующей вершины", "sign"),
+    ("PLAN", "RECOVER", "нет доступных маневров", "fail"),
     ("TRACK", "RECOVER", "отказ Nav2", "fail"),
-    ("COMMIT", "RECOVER", "отказ Nav2", "fail"),
 )
 
 EDGE_STYLE: dict[str, dict[str, str]] = {
@@ -57,7 +54,6 @@ EDGE_STYLE: dict[str, dict[str, str]] = {
 
 #: Заливка состояний, отличающихся ролью. Остальные — по умолчанию.
 NODE_STYLE: dict[str, dict[str, str]] = {
-    "COMMIT": {"fillcolor": "#DCEBEA", "color": ACCENT, "penwidth": "1.8"},
     "RECOVER": {"fillcolor": "#F6ECEA", "color": FAIL},
 }
 
