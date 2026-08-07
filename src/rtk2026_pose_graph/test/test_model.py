@@ -61,7 +61,7 @@ def test_reindex_picks_up_manual_edits() -> None:
     graph = _build_graph()
 
     graph.edges[200] = OrientedEdge(edge_id=200, start_id=3, end_id=1)
-    # До reindex индексы ещё старые - это документированное поведение.
+    # До reindex индексы ещё старые.
     assert graph.outgoing_edge_ids(3) == []
 
     graph.reindex()
@@ -78,7 +78,7 @@ def test_metadata_carries_arbitrary_keys() -> None:
 
     assert edge.meta("corridor_hard_side") == "left"
     assert edge.meta("speed_limit") == 0.4
-    # Неизвестный ключ не ломает граф: модель не знает набора правил заранее.
+    # Неизвестный ключ отдаёт default, а не падает.
     assert edge.meta("is_crosswalk") is None
     assert edge.meta("is_crosswalk", False) is False
 
@@ -107,10 +107,9 @@ def test_reversed_edge_flips_direction_and_polyline() -> None:
     assert back.polyline_xy == ((1.0, 0.0), (0.5, 0.2), (0.0, 0.0))
     assert back.cost == 3.0
     assert back.overridable is False
-    # Аннотации переносятся как есть: разворачивать их смысл - дело владельца
-    # правила, а не модели графа.
+    # Значение аннотации не переворачивается вместе с направлением.
     assert back.meta("corridor_hard_side") == "left"
-    # Копия, а не та же ссылка: правка обратного ребра не портит исходное.
+    # Копия, а не та же ссылка.
     assert back.metadata is not edge.metadata
 
 
@@ -125,8 +124,7 @@ def test_metadata_excluded_from_equality_keeps_elements_hashable() -> None:
     plain = OrientedEdge(edge_id=1, start_id=1, end_id=2)
     annotated = OrientedEdge(edge_id=1, start_id=1, end_id=2, metadata={"a": 1})
 
-    # Тождество задаётся структурой, а не аннотациями - иначе элементы графа
-    # нельзя было бы положить в set.
+    # Тождество задаётся структурой, а не аннотациями.
     assert plain == annotated
     assert len({plain, annotated}) == 1
     assert len({Node(node_id=1, x=0.0, y=0.0, metadata={"a": 1})}) == 1
