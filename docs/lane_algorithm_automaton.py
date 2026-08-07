@@ -38,18 +38,15 @@ FAIL = "#A03E29"
 #: после барьера не делает ничего.
 #: ``fail`` — уход в восстановление.
 TRANSITIONS: tuple[tuple[str, str, str, str], ...] = (
-    ("LOCALIZE", "PLAN", "поза сопоставлена", "plain"),
-    ("LOCALIZE", "LOCALIZE", "не сопоставлена", "plain"),
     ("PLAN", "TRACK", "позы построены", "plain"),
     ("TRACK", "COMMIT", "ℓ ≤ ℓc", "plain"),
     ("COMMIT", "ADVANCE", "вершина достигнута", "plain"),
-    ("ADVANCE", "PLAN", "p := c,  c := v", "plain"),
-    ("TRACK", "PLAN", "знак σ: перепланировать", "sign"),
-    ("COMMIT", "COMMIT", "знак σ: игнорируется", "sign"),
+    ("ADVANCE", "PLAN", "сдвиг состояния", "plain"),
+    ("TRACK", "PLAN", "знак: перепланировать", "sign"),
+    ("COMMIT", "COMMIT", "знак: игнорируется", "sign"),
     ("PLAN", "RECOVER", "нет маневров (C2)", "fail"),
-    ("TRACK", "RECOVER", "сторона не та, отказ Nav2", "fail"),
+    ("TRACK", "RECOVER", "отказ Nav2", "fail"),
     ("COMMIT", "RECOVER", "отказ Nav2", "fail"),
-    ("RECOVER", "LOCALIZE", "сброс цепочки", "plain"),
 )
 
 EDGE_STYLE: dict[str, dict[str, str]] = {
@@ -64,7 +61,7 @@ NODE_STYLE: dict[str, dict[str, str]] = {
     "RECOVER": {"fillcolor": "#F6ECEA", "color": FAIL},
 }
 
-INITIAL_STATE = "LOCALIZE"
+INITIAL_STATE = "PLAN"
 
 
 def build(engine: str = "dot") -> graphviz.Digraph:
