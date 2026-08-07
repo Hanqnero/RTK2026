@@ -19,6 +19,7 @@ from rtk2026_city_nav.maneuver import (
     MANEUVER_ORDER,
     Candidate,
     Maneuver,
+    SignAdvice,
     classify_candidates,
     tangent_at_end,
     tangent_at_start,
@@ -63,6 +64,11 @@ class Decision:
     source: str
     #: Все варианты, что были на выбор. Нужны для диагностики и логов.
     candidates: tuple[Candidate, ...]
+    #: Маневры, вычеркнутые запрещающим знаком.
+    forbidden: frozenset[Maneuver] = frozenset()
+    #: Запрет не оставил ни одного варианта и был проигнорирован. Значит
+    #: знак противоречит графу — это надо видеть в диагностике.
+    prohibition_ignored: bool = False
 
     @property
     def next_state(self) -> RouteState:
@@ -159,10 +165,16 @@ class Planner:
     #: Сколько раз посещена каждая точка решения.
     visits: dict[int, int] = field(default_factory=dict[int, int])
 
-    def decide(self, state: RouteState, *, sign: Maneuver | None = None) -> Decision:
+    def decide(
+        self,
+        state: RouteState,
+        *,
+        advice: SignAdvice | None = None,
+    ) -> Decision:
         """Выбрать маневр в состоянии.
 
-        :param sign: распознанный знак или ``None``.
+        :param advice: что говорят знаки — предписание и запреты. ``None``
+            означает, что знаков не было.
         :raises NoManeuverAvailable: в состоянии нет ни одного маневра.
         """
         available = self.table.candidates(state)
@@ -171,15 +183,29 @@ class Planner:
                 f"нет маневров в состоянии {state.previous} -> {state.current}"
             )
 
+        hint = (advice or SignAdvice()).resolved()
+
         forward = tuple(c for c in available if c.maneuver is not Maneuver.UTURN)
         pool = forward if forward else available
         source = (
             DecisionSource.COVERAGE if forward else DecisionSource.UTURN_FALLBACK
         )
 
+        # Запрет вычёркивает вариант, ничего не предлагая взамен.
+        prohibition_ignored = False
+        if hint.forbid:
+            allowed = tuple(c for c in pool if c.maneuver not in hint.forbid)
+            if allowed:
+                pool = allowed
+            else:
+                # Запрет не оставил ничего: знак противоречит графу. Стоять
+                # на месте хуже, чем проехать, поэтому запрет игнорируется,
+                # но факт попадает в решение и оттуда в диагностику.
+                prohibition_ignored = True
+
         chosen: Candidate | None = None
-        if sign is not None:
-            chosen = next((c for c in pool if c.maneuver is sign), None)
+        if hint.prefer is not None:
+            chosen = next((c for c in pool if c.maneuver is hint.prefer), None)
             if chosen is not None:
                 source = DecisionSource.SIGN
 
@@ -199,6 +225,8 @@ class Planner:
             chain=chain,
             source=source,
             candidates=available,
+            forbidden=hint.forbid,
+            prohibition_ignored=prohibition_ignored,
         )
 
     def commit(self, decision: Decision) -> RouteState:

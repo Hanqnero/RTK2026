@@ -52,6 +52,37 @@ class Candidate:
         return math.degrees(self.turn_rad)
 
 
+@dataclass(frozen=True)
+class SignAdvice:
+    """Что дорожные знаки говорят о выборе маневра.
+
+    Знаки бывают двух родов, и это разные воздействия. Предписывающий
+    указывает маневр, запрещающий лишь вычёркивает вариант, ничего не
+    предлагая взамен — после него выбор идёт обычным порядком из того,
+    что осталось.
+    """
+
+    #: Предписанный маневр либо ``None``.
+    prefer: Maneuver | None = None
+    #: Запрещённые маневры.
+    forbid: frozenset[Maneuver] = frozenset()
+
+    @property
+    def is_empty(self) -> bool:
+        return self.prefer is None and not self.forbid
+
+    def resolved(self) -> SignAdvice:
+        """Снять предписание, если оно же и запрещено.
+
+        Противоречие возможно: два знака могли попасть в кадр вместе либо
+        один из них распознан неверно. Запрет сильнее — нарушить запрет
+        опаснее, чем не выполнить предписание.
+        """
+        if self.prefer is not None and self.prefer in self.forbid:
+            return SignAdvice(prefer=None, forbid=self.forbid)
+        return self
+
+
 def turn_angle(
     arrival_tangent: tuple[float, float],
     departure_tangent: tuple[float, float],
