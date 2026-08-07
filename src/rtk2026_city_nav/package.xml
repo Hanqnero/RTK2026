@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>rtk2026_city_nav</name>
+  <version>0.1.0</version>
+  <description>Движение по городу с соблюдением стороны движения: полосы, маневры, выбор пути по знакам. Работает поверх rtk2026_pose_graph.</description>
+  <maintainer email="kamilisxakof@gmail.com">RTK2026</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>rtk2026_pose_graph</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+
+  <!-- Нужно только ноде; модули с геометрией и выбором маневра
+       не импортируют ничего из ROS и тестируются без него. -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>nav2_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>rtk2026_interfaces</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
