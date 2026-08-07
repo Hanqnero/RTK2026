@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from rtk2026_pose_graph.geometry import point_to_polyline_distance_m
 from rtk2026_pose_graph.model import OrientedEdge, RoadGraph
 
 
@@ -38,7 +39,7 @@ def select_active_edge_from_limiters(
 
     best: tuple[float, ActiveEdgeMatch] | None = None
     for edge in candidates:
-        lateral = _distance_to_polyline(pose_x, pose_y, edge.polyline_xy)
+        lateral = point_to_polyline_distance_m(pose_x, pose_y, edge.polyline_xy)
         alignment = _heading_alignment(edge, yaw_rad)
 
         # Композитный скор: дистанция важнее, alignment — как tie-breaker.
@@ -79,31 +80,17 @@ def _collect_candidate_edges(
             continue
         # Фолбэк: если в графе задано обратное ребро, используем его как
         # виртуально ориентированное start_id -> end_id с перевернутой полилинией.
+        #
+        # Аннотации копируются без изменений, как и было до выноса модели
+        # графа. Для corridor_hard_side это под вопросом: при развороте
+        # направления сторона границы меняется на противоположную, а здесь
+        # переносится как есть. Поведение сохранено намеренно, чтобы вынос
+        # модели не менял работу алгоритма; разобраться стоит при его
+        # переписывании.
         back = graph.edge_toward_neighbor(end_id, start_id)
         if back is not None and len(back.polyline_xy) >= 2:
-            out.append(
-                OrientedEdge(
-                    edge_id=back.edge_id,
-                    start_id=start_id,
-                    end_id=end_id,
-                    polyline_xy=tuple(reversed(back.polyline_xy)),
-                    cost=back.cost,
-                    overridable=back.overridable,
-                    corridor_hard_side=back.corridor_hard_side,
-                )
-            )
+            out.append(back.reversed())
     return out
-
-
-def _distance_to_polyline(px: float, py: float, polyline_xy: tuple[tuple[float, float], ...]) -> float:
-    best = float("inf")
-    for i in range(len(polyline_xy) - 1):
-        ax, ay = polyline_xy[i]
-        bx, by = polyline_xy[i + 1]
-        d = math.sqrt(_point_to_segment_dist_sq(px, py, ax, ay, bx, by))
-        if d < best:
-            best = d
-    return best if math.isfinite(best) else 0.0
 
 
 def _heading_alignment(edge: OrientedEdge, yaw_rad: float) -> float:
@@ -117,28 +104,3 @@ def _heading_alignment(edge: OrientedEdge, yaw_rad: float) -> float:
 def _angle_abs_diff(a: float, b: float) -> float:
     d = (a - b + math.pi) % (2.0 * math.pi) - math.pi
     return abs(d)
-
-
-def _point_to_segment_dist_sq(
-    px: float,
-    py: float,
-    ax: float,
-    ay: float,
-    bx: float,
-    by: float,
-) -> float:
-    abx = bx - ax
-    aby = by - ay
-    ab2 = abx * abx + aby * aby
-    if ab2 < 1e-24:
-        dx = px - ax
-        dy = py - ay
-        return dx * dx + dy * dy
-    apx = px - ax
-    apy = py - ay
-    t = max(0.0, min(1.0, (apx * abx + apy * aby) / ab2))
-    cx = ax + t * abx
-    cy = ay + t * aby
-    dx = px - cx
-    dy = py - cy
-    return dx * dx + dy * dy
