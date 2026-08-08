@@ -223,7 +223,7 @@ class Planner:
             target=chosen.target,
             maneuver=chosen.maneuver,
             chain=chain,
-            source=source,
+            source=source.value,
             candidates=available,
             forbidden=hint.forbid,
             prohibition_ignored=prohibition_ignored,
