@@ -1,0 +1,32 @@
+# Проверки содержимого сенсорных сообщений симуляции.
+
+lidar:
+  topic: /scan
+  expected_rays: 720
+  expected_angle_span: 6.283185307179586
+  # Inf является нормальным ответом «препятствие дальше range_max».
+  min_finite_ratio: 0.05
+  max_nan_ratio: 0.01
+  # При неподвижном роботе scan закономерно одинаков, поэтому порог большой.
+  unchanged_warn_count: 300
+
+imu:
+  topic: /imu/data
+  gyro_saturation: 35.0
+  accel_saturation: 160.0
+  stationary_window: 300
+  stationary_min_samples: 100
+  stationary_linear_threshold: 0.01
+  stationary_angular_threshold: 0.02
+  stationary_bias_warn: 0.02
+  stationary_noise_warn: 0.02
+
+drive:
+  odometry_topic: /wheel/odom
+  command_topic: /cmd_vel
+  command_timeout: 0.5
+  motion_threshold: 0.03
+  direction_velocity_threshold: 0.03
+  direction_window: 100
+  minimum_checks: 20
+  max_mismatch_ratio: 0.10

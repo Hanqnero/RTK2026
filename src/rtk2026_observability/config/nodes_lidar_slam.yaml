@@ -1,0 +1,18 @@
+# Ноды SLAM Toolbox поверх общей tracked-симуляции.
+
+nodes:
+  slam_toolbox:
+    node: /slam_toolbox
+    required: true
+    lifecycle: true
+    expected_state: active
+    lifecycle_max_age: 3.0
+    expected_services:
+      - /slam_toolbox/get_state
+      - /slam_toolbox/pause_new_measurements
+      - /slam_toolbox/serialize_map
+    loggers:
+      - slam_toolbox
+    warn_hold_time: 30.0
+    error_hold_time: 120.0
+

@@ -1,0 +1,10 @@
+# Набор поз не связан с rosbag-экспериментами и хранится отдельно.
+output_file: "/workspace/records/poses/robot_poses.json"
+
+# Сохраняется положение source_frame относительно target_frame.
+# Для режима без глобальной карты target_frame можно заменить на odom.
+target_frame: "map"
+source_frame: "base_footprint"
+
+# Максимальное время ожидания TF при однократной фиксации позы.
+timeout_sec: 5.0

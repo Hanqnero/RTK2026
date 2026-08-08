@@ -1,0 +1,37 @@
+# Topics симуляции при локализации AMCL по готовой карте.
+#
+# В отличие от mapping, Map Server публикует /map один раз с
+# TRANSIENT_LOCAL QoS. AMCL pose и particle cloud также событийные.
+
+topics:
+
+  map:
+    topic: /map
+    type: nav_msgs/msg/OccupancyGrid
+    required: true
+    expected_rate: 0.0
+    max_age: 0.0
+
+    # Map Server в Jazzy оставляет header.stamp нулевым. Для статической
+    # карты это допустимо, поэтому проверяем наличие, но не timestamp.
+    qos: transient_local
+
+  amcl_pose:
+    topic: /amcl_pose
+    type: geometry_msgs/msg/PoseWithCovarianceStamped
+    required: true
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: transient_local
+
+  particle_cloud:
+    topic: /particle_cloud
+    type: nav2_msgs/msg/ParticleCloud
+
+    # Событийный отладочный выход AMCL с BEST_EFFORT QoS.
+    required: false
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: sensor_data

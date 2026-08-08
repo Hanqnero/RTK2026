@@ -1,0 +1,22 @@
+# Topics, обязательные только для SLAM Toolbox.
+
+topics:
+  map:
+    topic: /map
+    type: nav_msgs/msg/OccupancyGrid
+    required: true
+    expected_rate: 0.0
+    max_age: 5.0
+    stamp_field: header.stamp
+    qos: transient_local
+
+  slam_pose:
+    topic: /pose
+    type: geometry_msgs/msg/PoseWithCovarianceStamped
+    # Поза событийная и обновляется после принятого scan matching.
+    required: false
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: system_default
+

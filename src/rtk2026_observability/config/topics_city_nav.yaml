@@ -1,0 +1,40 @@
+# Topics движения по городу.
+#
+# Все они событийные: публикуются на границах участков, а не с частотой.
+# Поэтому expected_rate равен нулю, и проверяется только присутствие в
+# ROS graph и наличие второй стороны обмена.
+
+topics:
+
+  # Позы текущего участка. Появляются один раз на участок, поэтому проверка
+  # частоты и возраста здесь смысла не имеет.
+  city_nav_leg_path:
+    topic: /city_nav/leg_path
+    type: nav_msgs/msg/Path
+    required: false
+    expected_rate: 0.0
+    stamp_field: header.stamp
+    qos: system_default
+
+  # Детекции знаков. Отсутствие publisher означает, что знаки не действуют
+  # и маршрут пойдёт по покрытию: это надо видеть до прогона, а не после.
+  driving_detection:
+    topic: /perception/driving_detection
+    type: rtk2026_interfaces/msg/DrivingDetection
+    required: true
+    graph_only: true
+    minimum_publishers: 1
+    minimum_subscribers: 1
+
+  # Существование сервера действия Nav2. Status публикуется сервером всё
+  # время, пока он есть, а клиент city_nav подписан на него постоянно —
+  # в отличие от feedback, который живёт только на активной цели. Поэтому
+  # обе стороны здесь обязательны, и их отсутствие означает, что участки
+  # отправлять некому.
+  navigate_through_poses_status:
+    topic: /navigate_through_poses/_action/status
+    type: action_msgs/msg/GoalStatusArray
+    required: true
+    graph_only: true
+    minimum_publishers: 1
+    minimum_subscribers: 1

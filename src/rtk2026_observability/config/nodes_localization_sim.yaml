@@ -1,0 +1,26 @@
+# ROS graph для симуляции локализации по готовой карте.
+
+nodes:
+  map_server:
+    node: /map_server
+    required: true
+    lifecycle: true
+    expected_state: active
+    lifecycle_max_age: 3.0
+    expected_services:
+      - /map_server/get_state
+    loggers:
+      - map_server
+
+  amcl:
+    node: /amcl
+    required: true
+    lifecycle: true
+    expected_state: active
+    lifecycle_max_age: 3.0
+    expected_services:
+      - /amcl/get_state
+    loggers:
+      - amcl
+    warn_hold_time: 30.0
+    error_hold_time: 120.0

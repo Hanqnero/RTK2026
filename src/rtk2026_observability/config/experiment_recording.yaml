@@ -1,0 +1,20 @@
+# Каталог записей задаётся конфигурацией, а не Python-кодом.
+output_root: "/workspace/records/experiments"
+
+# Идентификатор создаётся автоматически: <prefix>_<UTC timestamp>.
+directory_prefix: "experiment"
+
+# Стандартный rosbag2 storage для воспроизводимых экспериментов.
+storage_id: "mcap"
+storage_preset_profile: "zstd_fast"
+
+# auto включает ROS simulation time только при наличии топика /clock.
+# Также допустимы значения true и false.
+use_sim_time: "auto"
+
+# Универсальный режим записывает текущий ROS graph независимо от модели,
+# мира, набора сенсоров, локализации и используемого SLAM backend.
+record_all_topics: true
+
+# Список применяется только при record_all_topics: false.
+topics: []

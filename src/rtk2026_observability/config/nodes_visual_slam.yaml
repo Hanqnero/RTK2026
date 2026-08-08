@@ -1,0 +1,12 @@
+# Ноды визуального SLAM RTAB-Map поверх общей tracked-симуляции.
+
+nodes:
+  rtabmap:
+    node: /rtabmap/rtabmap
+    required: true
+    loggers:
+      - rtabmap
+      - rtabmap.rtabmap
+    warn_hold_time: 30.0
+    error_hold_time: 120.0
+

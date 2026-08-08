@@ -1,0 +1,50 @@
+# RGB-D входы и выход карты визуального SLAM RTAB-Map.
+
+topics:
+  color_image:
+    topic: /camera/color/image_raw
+    type: sensor_msgs/msg/Image
+    required: true
+    # Не десериализуем 640x480 изображения в Python-диагностике.
+    # ROS graph подтверждает publisher камеры и subscriber RTAB-Map.
+    graph_only: true
+    minimum_publishers: 1
+    minimum_subscribers: 1
+
+  aligned_depth:
+    topic: /camera/aligned_depth_to_color/image_raw
+    type: sensor_msgs/msg/Image
+    required: true
+    graph_only: true
+    minimum_publishers: 1
+    minimum_subscribers: 1
+
+  color_camera_info:
+    topic: /camera/color/camera_info
+    type: sensor_msgs/msg/CameraInfo
+    required: true
+    graph_only: true
+    minimum_publishers: 1
+    minimum_subscribers: 1
+
+  rtabmap_info:
+    topic: /rtabmap/info
+    type: rtabmap_msgs/msg/Info
+    required: true
+    expected_rate: 2.0
+    tolerance: 0.60
+    window_size: 10
+    max_age: 3.0
+    stamp_field: header.stamp
+    qos: system_default
+
+  map:
+    topic: /map
+    type: nav_msgs/msg/OccupancyGrid
+    required: true
+    expected_rate: 0.0
+    # Карта обновляется только при изменении графа; на стоянке старое
+    # transient-local сообщение остаётся корректным.
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: transient_local
