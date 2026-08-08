@@ -143,10 +143,7 @@ def classify_candidates(
         for target, turn in ordered
     }
 
-    for maneuver in (Maneuver.STRAIGHT, Maneuver.LEFT, Maneuver.RIGHT, Maneuver.UTURN):
-        clashing = [target for target, value in classified.items() if value == maneuver]
-        if len(clashing) > 1:
-            classified.update(_split_by_order(clashing, turns))
+    classified.update(_resolve_straight_clash(classified, turns))
 
     return tuple(
         Candidate(target=target, turn_rad=turn, maneuver=classified[target])
@@ -154,32 +151,51 @@ def classify_candidates(
     )
 
 
-def _split_by_order(
-    targets: list[int],
+def _resolve_straight_clash(
+    classified: dict[int, Maneuver],
     turns: dict[int, float],
 ) -> dict[int, Maneuver]:
-    """Развести кандидатов одного класса по крайним и среднему.
+    """Развести кандидатов, вместе попавших в ``straight``, по знаку угла.
 
-    Больше трёх кандидатов в одном классе развести некуда: у нас всего три
-    содержательных метки. Лишние остаются с меткой ближайшего края, и это
-    поднимет проверку однозначности при загрузке графа.
+    Это и есть косой перекрёсток: два выхода под небольшими углами разных
+    знаков порог назовёт одинаково, а различить их надо. Оба близки к нулю,
+    поэтому назвать один «чуть правее», а другой «чуть левее» — правда.
+
+    Разводится только ``straight``, и только в свободные метки. Коллизия
+    в ``left`` или ``right`` — это два настоящих поворота в одну сторону,
+    и переназвать один из них «прямо» было бы ложью: сработав по знаку
+    «прямо», робот повернул бы. Такая неоднозначность остаётся как есть
+    и поднимается проверкой однозначности при загрузке графа.
+
+    Один проход, без переназначений по кругу: итеративная починка классов
+    зацикливается — исправление ``left`` создаёт коллизию в ``right``,
+    а её исправление возвращает исходную.
     """
-    ranked = sorted(targets, key=lambda target: turns[target])
+    clashing = [t for t, value in classified.items() if value is Maneuver.STRAIGHT]
+    if len(clashing) < 2:
+        return {}
+
+    taken = {value for target, value in classified.items() if target not in clashing}
+
+    negative = sorted((t for t in clashing if turns[t] < 0.0), key=lambda t: turns[t])
+    positive = sorted(
+        (t for t in clashing if turns[t] > 0.0), key=lambda t: turns[t], reverse=True
+    )
 
     out: dict[int, Maneuver] = {}
-    out[ranked[0]] = Maneuver.RIGHT
-    out[ranked[-1]] = Maneuver.LEFT
 
-    middle = ranked[1:-1]
-    if middle:
-        nearest_zero = min(middle, key=lambda target: abs(turns[target]))
-        out[nearest_zero] = Maneuver.STRAIGHT
-        for target in middle:
-            if target not in out:
-                # Развести некуда: пометим краем, ближе к которому угол.
-                out[target] = (
-                    Maneuver.RIGHT if turns[target] < 0.0 else Maneuver.LEFT
-                )
+    # Самый отрицательный - вправо, самый положительный - влево, и только
+    # если эти метки ещё никем не заняты.
+    if negative and Maneuver.RIGHT not in taken:
+        out[negative[0]] = Maneuver.RIGHT
+    if positive and Maneuver.LEFT not in taken:
+        out[positive[0]] = Maneuver.LEFT
+
+    # Ближайший к нулю из оставшихся сохраняет straight, если он один такой.
+    remaining = [t for t in clashing if t not in out]
+    if len(remaining) > 1:
+        # Развести больше некуда: пусть проверка однозначности скажет об этом.
+        return out
 
     return out
 
