@@ -182,12 +182,26 @@ class Latch:
         """Площадь рамки лучшей команды маршрута. Нужна для диагностики."""
         return 0.0 if self._route is None else self._route.box_area_px
 
-    def clear(self) -> None:
-        """Забыть накопленное: выбор сделан, знаки к следующему не относятся."""
+    def clear_route(self) -> None:
+        """Забыть знак маневра: он уже использован в решении.
+
+        Отдельно от :meth:`clear_stop`, потому что потребляются они в разные
+        моменты. Остановка исполняется при прибытии в вершину, а знак
+        маневра нужен позже — когда выбирается следующий участок, — и должен
+        пережить ожидание у знака остановки.
+        """
         self._route = None
+
+    def clear_stop(self) -> None:
+        """Забыть требование остановки: она уже исполнена."""
         self._stop = None
         self._stop_duration_s = 0.0
         self._bus_seen = False
+
+    def clear(self) -> None:
+        """Забыть всё накопленное."""
+        self.clear_route()
+        self.clear_stop()
 
     def _accept(
         self,
