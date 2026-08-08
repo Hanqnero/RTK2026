@@ -1,0 +1,32 @@
+<!--
+  Проход по цепочке присланных поз.
+
+  Путь считается один раз на цепочку и затем выполняется. Перепланирования
+  в цикле нет: позы уже поставлены по геометрии полосы, и повторный расчёт
+  сдвигал бы траекторию с полосы на то, что дешевле по costmap.
+
+  RemovePassedGoals убирает пройденные позы, чтобы при повторной отправке
+  цепочки робот не возвращался к её началу.
+
+  Ветки восстановления нет: отказ возвращается вызывающему, и решение
+  повторять или останавливаться принимает он.
+-->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="NavigateThroughPosesStatic">
+      <RemovePassedGoals
+        input_goals="{goals}"
+        output_goals="{goals}"
+        radius="0.20"/>
+      <ComputePathThroughPoses
+        goals="{goals}"
+        path="{path}"
+        planner_id="GridBased"
+        error_code_id="{compute_path_error_code}"/>
+      <FollowPath
+        path="{path}"
+        controller_id="FollowPath"
+        error_code_id="{follow_path_error_code}"/>
+    </Sequence>
+  </BehaviorTree>
+</root>
