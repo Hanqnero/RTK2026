@@ -1,0 +1,60 @@
+# Серверы стека Nav2.
+#
+# Отдельно от nodes_city_nav.yaml: стек живёт своей жизнью и нужен не только
+# городскому движению. Если он не active, любой отправитель целей будет
+# копить отказы, и причина должна быть видна рядом со следствием.
+#
+# lifecycle_manager сам сервером жизненного цикла не является, поэтому
+# проверяется только его присутствие в ROS graph.
+
+nodes:
+
+  bt_navigator:
+    node: /bt_navigator
+    required: true
+    lifecycle: true
+    expected_state: active
+    lifecycle_max_age: 3.0
+    expected_services:
+      - /bt_navigator/get_state
+    loggers:
+      - bt_navigator
+
+  controller_server:
+    node: /controller_server
+    required: true
+    lifecycle: true
+    expected_state: active
+    lifecycle_max_age: 3.0
+    expected_services:
+      - /controller_server/get_state
+    loggers:
+      - controller_server
+
+  planner_server:
+    node: /planner_server
+    required: true
+    lifecycle: true
+    expected_state: active
+    lifecycle_max_age: 3.0
+    expected_services:
+      - /planner_server/get_state
+    loggers:
+      - planner_server
+
+  behavior_server:
+    node: /behavior_server
+    required: true
+    lifecycle: true
+    expected_state: active
+    lifecycle_max_age: 3.0
+    expected_services:
+      - /behavior_server/get_state
+    loggers:
+      - behavior_server
+
+  lifecycle_manager_navigation:
+    node: /lifecycle_manager_navigation
+    required: true
+    loggers:
+      - lifecycle_manager_navigation

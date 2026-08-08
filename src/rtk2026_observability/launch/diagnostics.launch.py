@@ -22,6 +22,7 @@ def generate_launch_description():
     slam_backend = LaunchConfiguration("slam_backend")
     records_path = LaunchConfiguration("records_path")
     use_city_nav = LaunchConfiguration("use_city_nav")
+    use_nav2 = LaunchConfiguration("use_nav2")
 
     aggregator_config = PathJoinSubstitution(
         [
@@ -119,6 +120,20 @@ def generate_launch_description():
             FindPackageShare("rtk2026_observability"),
             "config",
             "nodes_city_nav.yaml",
+        ]
+    )
+    nav2_topic_monitor_config = PathJoinSubstitution(
+        [
+            FindPackageShare("rtk2026_observability"),
+            "config",
+            "topics_nav2.yaml",
+        ]
+    )
+    nav2_node_monitor_config = PathJoinSubstitution(
+        [
+            FindPackageShare("rtk2026_observability"),
+            "config",
+            "nodes_nav2.yaml",
         ]
     )
 
@@ -431,6 +446,39 @@ def generate_launch_description():
         condition=IfCondition(use_city_nav),
     )
 
+    # ~ Есть ли кому исполнять цели и доходит ли исполнение до базы.
+    nav2_topic_monitor = Node(
+        package="rtk2026_observability",
+        executable="topic_monitor.py",
+        name="nav2_topic_monitor",
+        output="screen",
+        parameters=[
+            {
+                "config_file": nav2_topic_monitor_config,
+                "use_sim_time": False,
+                "diagnostic_updater.period": 1.0,
+            }
+        ],
+        condition=IfCondition(use_nav2),
+    )
+
+    # ~ Lifecycle серверов Nav2: без active стек цели не примет.
+    nav2_node_monitor = Node(
+        package="rtk2026_observability",
+        executable="node_monitor.py",
+        name="nav2_node_monitor",
+        output="screen",
+        parameters=[
+            {
+                "config_file": nav2_node_monitor_config,
+                "use_sim_time": False,
+                "graph_check_period": 1.0,
+                "diagnostic_updater.period": 1.0,
+            }
+        ],
+        condition=IfCondition(use_nav2),
+    )
+
     # ~ Ковариации, согласованность EKF и состояние SLAM/AMCL.
     localization_monitor = Node(
         package="rtk2026_observability",
@@ -509,7 +557,12 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "use_city_nav",
                 default_value="false",
-                description="Диагностировать движение по городу: city_nav и Nav2.",
+                description="Диагностировать ноду движения по городу.",
+            ),
+            DeclareLaunchArgument(
+                "use_nav2",
+                default_value="false",
+                description="Диагностировать стек Nav2: lifecycle, цели, cmd_vel.",
             ),
             cpu_monitor,
             ram_monitor,
@@ -527,6 +580,8 @@ def generate_launch_description():
             sensor_monitor,
             city_nav_topic_monitor,
             city_nav_node_monitor,
+            nav2_topic_monitor,
+            nav2_node_monitor,
             localization_monitor,
             runtime_monitor,
             robot_monitor,

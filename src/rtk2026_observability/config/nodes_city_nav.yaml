@@ -1,9 +1,12 @@
-# Ноды движения по городу.
+# Нода движения по городу.
 #
 # Собственную диагностику city_nav публикует сам задачами CityNav/*: только
 # он знает своё положение в маршруте и почему выбрал маневр. Здесь то, что
-# видно снаружи и одинаково для любой ноды: присутствие в ROS graph,
-# lifecycle стека навигации и свежие WARN/ERROR из /rosout.
+# видно снаружи и одинаково для любой ноды: присутствие в ROS graph и
+# свежие WARN/ERROR из /rosout.
+#
+# Стек, который исполняет цели, проверяется отдельно в nodes_nav2.yaml:
+# он нужен не только городскому движению.
 
 nodes:
 
@@ -12,38 +15,3 @@ nodes:
     required: true
     loggers:
       - city_nav
-
-  # Цели исполняет bt_navigator. Если он не active, city_nav будет копить
-  # отказы участков, и причина должна быть видна рядом со следствием.
-  bt_navigator:
-    node: /bt_navigator
-    required: true
-    lifecycle: true
-    expected_state: active
-    lifecycle_max_age: 3.0
-    expected_services:
-      - /bt_navigator/get_state
-    loggers:
-      - bt_navigator
-
-  controller_server:
-    node: /controller_server
-    required: true
-    lifecycle: true
-    expected_state: active
-    lifecycle_max_age: 3.0
-    expected_services:
-      - /controller_server/get_state
-    loggers:
-      - controller_server
-
-  planner_server:
-    node: /planner_server
-    required: true
-    lifecycle: true
-    expected_state: active
-    lifecycle_max_age: 3.0
-    expected_services:
-      - /planner_server/get_state
-    loggers:
-      - planner_server

@@ -1,0 +1,45 @@
+# Topics стека Nav2.
+#
+# Проверяется то, что отвечает на два вопроса: есть ли кому исполнять цели
+# и доходит ли исполнение до базы.
+
+topics:
+
+  # Существование сервера действия и подписанного на него клиента. Status
+  # публикуется сервером всё время, пока он есть, а клиент подписан
+  # постоянно — в отличие от feedback, который живёт только на активной
+  # цели. Нет publisher — исполнять некому; нет subscriber — цели никто
+  # не отправляет.
+  navigate_through_poses_status:
+    topic: /navigate_through_poses/_action/status
+    type: action_msgs/msg/GoalStatusArray
+    required: true
+    graph_only: true
+    minimum_publishers: 1
+    minimum_subscribers: 1
+
+  # /cmd_vel здесь нет намеренно: он уже проверяется в topics_sim.yaml,
+  # который грузится всегда, а два описания одного topic дали бы две ветви
+  # в дереве диагностики.
+
+  # Локальная костмапа: по ней контроллер обходит препятствия, которых
+  # не было на карте. Если она не обновляется, обхода не будет.
+  local_costmap:
+    topic: /local_costmap/costmap
+    type: nav_msgs/msg/OccupancyGrid
+    required: true
+    expected_rate: 5.0
+    tolerance: 0.4
+    window_size: 20
+    stamp_field: header.stamp
+    qos: transient_local
+
+  # Путь, посчитанный планировщиком на цепочку поз. Событийный: один раз
+  # на участок.
+  plan:
+    topic: /plan
+    type: nav_msgs/msg/Path
+    required: false
+    expected_rate: 0.0
+    stamp_field: header.stamp
+    qos: system_default

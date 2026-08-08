@@ -1,8 +1,7 @@
 # Topics движения по городу.
 #
-# Все они событийные: публикуются на границах участков, а не с частотой.
-# Поэтому expected_rate равен нулю, и проверяется только присутствие в
-# ROS graph и наличие второй стороны обмена.
+# То, что публикует и слушает сам city_nav. Выходы стека Nav2 проверяются
+# отдельно в topics_nav2.yaml.
 
 topics:
 
@@ -21,19 +20,6 @@ topics:
   driving_detection:
     topic: /perception/driving_detection
     type: rtk2026_interfaces/msg/DrivingDetection
-    required: true
-    graph_only: true
-    minimum_publishers: 1
-    minimum_subscribers: 1
-
-  # Существование сервера действия Nav2. Status публикуется сервером всё
-  # время, пока он есть, а клиент city_nav подписан на него постоянно —
-  # в отличие от feedback, который живёт только на активной цели. Поэтому
-  # обе стороны здесь обязательны, и их отсутствие означает, что участки
-  # отправлять некому.
-  navigate_through_poses_status:
-    topic: /navigate_through_poses/_action/status
-    type: action_msgs/msg/GoalStatusArray
     required: true
     graph_only: true
     minimum_publishers: 1
