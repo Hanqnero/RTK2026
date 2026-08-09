@@ -5,16 +5,27 @@
 Nav2 действием ``navigate_through_poses``, поэтому своей ноды-исполнителя
 здесь нет.
 
-Менеджер поднимается с задержкой. Пока робот не заспавнен, нет
-``joint_states`` и ``odom``, а значит разорвано TF ``odom -> base_footprint``:
+Запретные зоны
+--------------
+
+Аргумент ``use_keepout`` включает в костмапах фильтр
+``nav2_costmap_2d::KeepoutFilter``. Маску для него публикует
+``vector_object_server`` из ``rtk2026_vector_objects``, который поднимается
+своим лаунчем. Без него фильтр включать нельзя: он будет ждать несуществующую
+информацию о фильтре и писать об этом в лог, ничего не запрещая.
+
+Менеджер жизненного цикла
+-------------------------
+
+Поднимается с задержкой. Пока робот не заспавнен, нет ``joint_states``
+и ``odom``, а значит разорвано TF ``odom -> base_footprint``:
 ``controller_server`` падает на активации, а ``bt_navigator`` остаётся
-inactive. Задержка ждёт появления TF, а не фиксированное время «на всякий
-случай», поэтому её величина зависит от способа запуска робота и задаётся
-аргументом.
+inactive. Задержка ждёт появления TF, поэтому её величина зависит от способа
+запуска робота и задаётся аргументом.
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, TimerAction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, TimerAction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -29,46 +40,38 @@ LIFECYCLE_NODES = (
     ("nav2_bt_navigator", "bt_navigator"),
 )
 
+#: Фильтр запретных зон, объявленный в config/nav2_params.yaml.
+KEEPOUT_FILTER = "keepout_filter"
 
-def generate_launch_description() -> LaunchDescription:
-    use_sim_time = LaunchConfiguration("use_sim_time")
-    params_file = LaunchConfiguration("params_file")
-    through_poses_bt = LaunchConfiguration("through_poses_bt")
-    to_pose_bt = LaunchConfiguration("to_pose_bt")
-    autostart = LaunchConfiguration("autostart")
-    lifecycle_delay_s = LaunchConfiguration("lifecycle_delay_s")
 
-    default_params = PathJoinSubstitution(
-        [FindPackageShare("rtk2026_nav2"), "config", "nav2_params.yaml"]
-    )
-    default_through_poses_bt = PathJoinSubstitution(
-        [
-            FindPackageShare("rtk2026_nav2"),
-            "behavior_trees",
-            "navigate_through_poses_static.xml",
-        ]
-    )
-    # Для одиночной цели берём штатное дерево Nav2: своего смысла у неё
-    # в городском движении нет, а пинать путь к дистрибутиву незачем.
-    default_to_pose_bt = PathJoinSubstitution(
-        [
-            FindPackageShare("nav2_bt_navigator"),
-            "behavior_trees",
-            "navigate_w_replanning_only_if_goal_is_updated.xml",
-        ]
-    )
+def _params(context) -> dict:
+    """Собрать параметры стека с учётом аргументов.
 
+    Список фильтров решается здесь, а не в YAML, потому что зависит от
+    ``use_keepout``, а этот аргумент известен только в момент запуска.
+    Перезаписывается он у обеих костмап сразу: срезать угол через запретную
+    зону контроллер может ровно так же, как планировщик проложить путь.
+    """
+    use_keepout = LaunchConfiguration("use_keepout").perform(context)
+    filters = [KEEPOUT_FILTER] if use_keepout.lower() in ("true", "1") else []
+
+    return {
+        "use_sim_time": LaunchConfiguration("use_sim_time"),
+        "default_nav_through_poses_bt_xml": LaunchConfiguration("through_poses_bt"),
+        "default_nav_to_pose_bt_xml": LaunchConfiguration("to_pose_bt"),
+        "filters": str(filters),
+    }
+
+
+def _stack(context, *_args, **_kwargs) -> list:
+    """Серверы и менеджер. Собираются после разбора аргументов."""
     # Время и пути к деревьям перезаписываются на всех уровнях, включая
-    # вложенные costmap: подстановка отдельным словарём параметров до них
-    # не доходит, потому что costmap — вложенная нода со своим ключом.
+    # вложенные костмапы: подстановка отдельным словарём параметров до них
+    # не доходит, потому что костмапа — вложенная нода со своим ключом.
     configured_params = RewrittenYaml(
-        source_file=params_file,
+        source_file=LaunchConfiguration("params_file"),
         root_key="",
-        param_rewrites={
-            "use_sim_time": use_sim_time,
-            "default_nav_through_poses_bt_xml": through_poses_bt,
-            "default_nav_to_pose_bt_xml": to_pose_bt,
-        },
+        param_rewrites=_params(context),
         convert_types=True,
     )
 
@@ -84,7 +87,7 @@ def generate_launch_description() -> LaunchDescription:
     ]
 
     manager = TimerAction(
-        period=lifecycle_delay_s,
+        period=LaunchConfiguration("lifecycle_delay_s"),
         actions=[
             Node(
                 package="nav2_lifecycle_manager",
@@ -94,17 +97,23 @@ def generate_launch_description() -> LaunchDescription:
                 parameters=[
                     configured_params,
                     {
-                        "autostart": autostart,
+                        "autostart": LaunchConfiguration("autostart"),
                         # Активация ждёт костмапы и TF, а не отвечает мгновенно.
                         "service_timeout": 60.0,
-                        # Ноль отключает bond: серверы в этом стеке
-                        # переживают короткие пропадания без перезапуска.
+                        # Ноль отключает bond: серверы этого стека переживают
+                        # короткие пропадания без перезапуска.
                         "bond_timeout": 0.0,
                     },
                 ],
             )
         ],
     )
+
+    return [*servers, manager]
+
+
+def generate_launch_description() -> LaunchDescription:
+    share = FindPackageShare("rtk2026_nav2")
 
     return LaunchDescription(
         [
@@ -115,18 +124,44 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "params_file",
-                default_value=default_params,
+                default_value=PathJoinSubstitution(
+                    [share, "config", "nav2_params.yaml"]
+                ),
                 description="Параметры стека Nav2.",
             ),
             DeclareLaunchArgument(
                 "through_poses_bt",
-                default_value=default_through_poses_bt,
+                default_value=PathJoinSubstitution(
+                    [
+                        share,
+                        "behavior_trees",
+                        "navigate_through_poses_static.xml",
+                    ]
+                ),
                 description="Дерево поведения для navigate_through_poses.",
             ),
             DeclareLaunchArgument(
                 "to_pose_bt",
-                default_value=default_to_pose_bt,
+                # Для одиночной цели берём штатное дерево Nav2: своего смысла
+                # у неё в городском движении нет, а прибивать путь
+                # к дистрибутиву незачем.
+                default_value=PathJoinSubstitution(
+                    [
+                        FindPackageShare("nav2_bt_navigator"),
+                        "behavior_trees",
+                        "navigate_w_replanning_only_if_goal_is_updated.xml",
+                    ]
+                ),
                 description="Дерево поведения для navigate_to_pose.",
+            ),
+            DeclareLaunchArgument(
+                "use_keepout",
+                default_value="false",
+                description=(
+                    "Включить фильтр запретных зон в костмапах. Требует "
+                    "запущенного vector_object_server, иначе фильтр будет "
+                    "ждать информацию о фильтре и ничего не запретит."
+                ),
             ),
             DeclareLaunchArgument(
                 "autostart",
@@ -141,7 +176,6 @@ def generate_launch_description() -> LaunchDescription:
                     "В симуляции робот спавнится не сразу."
                 ),
             ),
-            *servers,
-            manager,
+            OpaqueFunction(function=_stack),
         ]
     )

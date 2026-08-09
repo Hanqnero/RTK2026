@@ -1,0 +1,31 @@
+# Topics запретных зон.
+#
+# Обе проверки здесь про одно: связаны ли сервер фигур и фильтр в костмапах.
+# Разрыв в этой связи тихий — маска публикуется, фильтр её не читает, зоны
+# не запрещены, и узнаётся это только когда робот в них заедет. Поэтому
+# minimum_subscribers обязателен, а не только publishers.
+
+topics:
+
+  # Маска запретных зон. Публикуется с update_frequency сервера фигур.
+  # Подписчик — KeepoutFilter в костмапах.
+  vector_object_mask:
+    topic: /vo_map
+    type: nav_msgs/msg/OccupancyGrid
+    required: true
+    expected_rate: 1.0
+    tolerance: 0.5
+    window_size: 10
+    stamp_field: header.stamp
+    qos: transient_local
+
+  # Информация о фильтре: по ней KeepoutFilter узнаёт, где маска и как
+  # трактовать её значения. Публикуется один раз как transient_local,
+  # поэтому проверяется только связь в ROS graph.
+  costmap_filter_info:
+    topic: /vo_costmap_filter_info
+    type: nav2_msgs/msg/CostmapFilterInfo
+    required: true
+    graph_only: true
+    minimum_publishers: 1
+    minimum_subscribers: 1

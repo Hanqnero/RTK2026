@@ -23,6 +23,7 @@ def generate_launch_description():
     records_path = LaunchConfiguration("records_path")
     use_city_nav = LaunchConfiguration("use_city_nav")
     use_nav2 = LaunchConfiguration("use_nav2")
+    use_vector_objects = LaunchConfiguration("use_vector_objects")
 
     aggregator_config = PathJoinSubstitution(
         [
@@ -134,6 +135,20 @@ def generate_launch_description():
             FindPackageShare("rtk2026_observability"),
             "config",
             "nodes_nav2.yaml",
+        ]
+    )
+    vector_topic_monitor_config = PathJoinSubstitution(
+        [
+            FindPackageShare("rtk2026_observability"),
+            "config",
+            "topics_vector_objects.yaml",
+        ]
+    )
+    vector_node_monitor_config = PathJoinSubstitution(
+        [
+            FindPackageShare("rtk2026_observability"),
+            "config",
+            "nodes_vector_objects.yaml",
         ]
     )
 
@@ -479,6 +494,39 @@ def generate_launch_description():
         condition=IfCondition(use_nav2),
     )
 
+    # ~ Связь сервера фигур с фильтром в костмапах: маска и информация о ней.
+    vector_topic_monitor = Node(
+        package="rtk2026_observability",
+        executable="topic_monitor.py",
+        name="vector_objects_topic_monitor",
+        output="screen",
+        parameters=[
+            {
+                "config_file": vector_topic_monitor_config,
+                "use_sim_time": False,
+                "diagnostic_updater.period": 1.0,
+            }
+        ],
+        condition=IfCondition(use_vector_objects),
+    )
+
+    # ~ Lifecycle серверов запретных зон: без active маска не публикуется.
+    vector_node_monitor = Node(
+        package="rtk2026_observability",
+        executable="node_monitor.py",
+        name="vector_objects_node_monitor",
+        output="screen",
+        parameters=[
+            {
+                "config_file": vector_node_monitor_config,
+                "use_sim_time": False,
+                "graph_check_period": 1.0,
+                "diagnostic_updater.period": 1.0,
+            }
+        ],
+        condition=IfCondition(use_vector_objects),
+    )
+
     # ~ Ковариации, согласованность EKF и состояние SLAM/AMCL.
     localization_monitor = Node(
         package="rtk2026_observability",
@@ -564,6 +612,11 @@ def generate_launch_description():
                 default_value="false",
                 description="Диагностировать стек Nav2: lifecycle, цели, cmd_vel.",
             ),
+            DeclareLaunchArgument(
+                "use_vector_objects",
+                default_value="false",
+                description="Диагностировать запретные зоны: маска и фильтр.",
+            ),
             cpu_monitor,
             ram_monitor,
             hd_monitor,
@@ -582,6 +635,8 @@ def generate_launch_description():
             city_nav_node_monitor,
             nav2_topic_monitor,
             nav2_node_monitor,
+            vector_topic_monitor,
+            vector_node_monitor,
             localization_monitor,
             runtime_monitor,
             robot_monitor,

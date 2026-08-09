@@ -1,0 +1,43 @@
+# Ноды запретных зон.
+#
+# Оба сервера — lifecycle: пока они не active, маска не публикуется и
+# запретные зоны не действуют, хотя фильтр в костмапах включён.
+
+nodes:
+
+  vector_object_server:
+    node: /vector_object_server
+    required: true
+    lifecycle: true
+    expected_state: active
+    lifecycle_max_age: 3.0
+    expected_services:
+      - /vector_object_server/get_state
+      - /vector_object_server/add_shapes
+    loggers:
+      - vector_object_server
+
+  costmap_filter_info_server:
+    node: /costmap_filter_info_server
+    required: true
+    lifecycle: true
+    expected_state: active
+    lifecycle_max_age: 3.0
+    expected_services:
+      - /costmap_filter_info_server/get_state
+    loggers:
+      - costmap_filter_info_server
+
+  lifecycle_manager_vector:
+    node: /lifecycle_manager_vector
+    required: true
+    loggers:
+      - lifecycle_manager_vector
+
+  # Инструмент разметки зон кликами в RViz. Нужен при подготовке карты,
+  # а не в прогоне, поэтому необязателен.
+  keepout_click_tool:
+    node: /keepout_click_tool
+    required: false
+    loggers:
+      - keepout_click_tool
