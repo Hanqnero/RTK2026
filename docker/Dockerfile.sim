@@ -39,17 +39,27 @@ ARG ROS_SNAPSHOT=2026-06-18
 # репозиторий.
 #
 # Имя файла не угадывается, а ищется по содержимому: у ros2-apt-source оно
-# менялось между версиями. Пустой список — ошибка сборки, иначе фиксация
-# молча не состоялась бы.
-RUN set -o pipefail && \
-    sources=$(grep -rlE 'packages\.ros\.org/ros2' /etc/apt/sources.list.d/) && \
-    test -n "${sources}" && \
+# менялось между версиями.
+#
+# Поиск идёт с -R, а не -r: файл в sources.list.d лежит симлинком, а -r
+# по симлинкам внутри каталога не переходит и не находит ничего.
+#
+# Ничего не нашлось — сборка падает, показав, что в каталоге на самом деле:
+# фиксация, не состоявшаяся молча, хуже отказа.
+RUN sources=$(grep -RlE 'packages\.ros\.org/ros2' \
+        /etc/apt/sources.list.d/ /etc/apt/sources.list 2>/dev/null || true) && \
+    if [ -z "${sources}" ]; then \
+        echo "источник ROS не найден, фиксация невозможна" >&2; \
+        ls -la /etc/apt/sources.list.d/ >&2; \
+        grep -RH . /etc/apt/sources.list.d/ 2>/dev/null | head -40 >&2; \
+        exit 1; \
+    fi && \
     for file in ${sources}; do \
-        sed -i \
-            "s|https\?://packages\.ros\.org/ros2/ubuntu|http://snapshots.ros.org/jazzy/${ROS_SNAPSHOT}/ubuntu|g" \
-            "${file}"; \
+        sed -E "s|https?://packages\.ros\.org/ros2/ubuntu|http://snapshots.ros.org/jazzy/${ROS_SNAPSHOT}/ubuntu|g" \
+            "${file}" > "${file}.pinned" && \
+        mv "${file}.pinned" "${file}"; \
     done && \
-    grep -rh 'snapshots\.ros\.org' /etc/apt/sources.list.d/ && \
+    grep -RH 'snapshots\.ros\.org' /etc/apt/sources.list.d/ && \
     echo "репозиторий ROS зафиксирован на снимке ${ROS_SNAPSHOT}"
 
 # Пакеты, уже стоявшие в базовом образе, к снимку не приводятся. Внутри
