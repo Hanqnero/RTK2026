@@ -66,6 +66,10 @@ class SignAdvice:
     prefer: Maneuver | None = None
     #: Запрещённые маневры.
     forbid: frozenset[Maneuver] = frozenset()
+    #: Совет получен не от живой детекции, а из памяти о прошлых проездах.
+    #: Едет робот от этого так же, но в диагностике различать обязательно:
+    #: действие по запомненному знаку и по увиденному — разной надёжности.
+    from_memory: bool = False
 
     @property
     def is_empty(self) -> bool:
@@ -79,8 +83,16 @@ class SignAdvice:
         опаснее, чем не выполнить предписание.
         """
         if self.prefer is not None and self.prefer in self.forbid:
-            return SignAdvice(prefer=None, forbid=self.forbid)
+            return SignAdvice(
+                prefer=None, forbid=self.forbid, from_memory=self.from_memory
+            )
         return self
+
+    def remembered(self) -> SignAdvice:
+        """Тот же совет, помеченный как взятый из памяти."""
+        return SignAdvice(
+            prefer=self.prefer, forbid=self.forbid, from_memory=True
+        )
 
 
 def turn_angle(

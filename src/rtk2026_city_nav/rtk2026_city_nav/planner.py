@@ -44,6 +44,8 @@ class DecisionSource(str, Enum):
 
     #: Распознан знак, и такой маневр доступен.
     SIGN = "sign"
+    #: Знака сейчас не видно, но он был замечен здесь на прошлом проезде.
+    REMEMBERED_SIGN = "remembered_sign"
     #: Знака не было либо для него нет маневра: выбор по покрытию.
     COVERAGE = "coverage"
     #: Кроме разворота выбирать было нечего.
@@ -207,7 +209,11 @@ class Planner:
         if hint.prefer is not None:
             chosen = next((c for c in pool if c.maneuver is hint.prefer), None)
             if chosen is not None:
-                source = DecisionSource.SIGN
+                source = (
+                    DecisionSource.REMEMBERED_SIGN
+                    if hint.from_memory
+                    else DecisionSource.SIGN
+                )
 
         if chosen is None:
             chosen = min(pool, key=self._coverage_key)

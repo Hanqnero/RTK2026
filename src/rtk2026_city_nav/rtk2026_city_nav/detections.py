@@ -53,6 +53,24 @@ BUS_STOP = "bus_stop"
 DEFAULT_MIN_CONFIDENCE = 0.25
 
 
+def advice_for(command: str) -> SignAdvice:
+    """Что значит команда знака для выбора маневра.
+
+    Неизвестная команда даёт пустой совет: ехать своим порядком безопаснее,
+    чем угадывать смысл нераспознанного знака.
+
+    Отдельной функцией, а не методом накопителя, потому что толковать
+    команду приходится в двух местах — по живой детекции и по запомненной,
+    — и смысл команды должен быть один.
+    """
+    forbidden = PROHIBIT.get(command)
+
+    return SignAdvice(
+        prefer=PRESCRIBE.get(command),
+        forbid=frozenset({forbidden}) if forbidden is not None else frozenset(),
+    ).resolved()
+
+
 @dataclass(frozen=True)
 class StopRequest:
     """Требование остановиться."""
@@ -144,21 +162,10 @@ class Latch:
         return True
 
     def advice(self) -> SignAdvice:
-        """Что накопленные знаки говорят о выборе маневра.
-
-        Неизвестная команда даёт пустой совет: ехать своим порядком
-        безопаснее, чем угадывать смысл нераспознанного знака.
-        """
+        """Что накопленные знаки говорят о выборе маневра."""
         if self._route is None:
             return SignAdvice()
-
-        command = self._route.command
-        forbidden = PROHIBIT.get(command)
-
-        return SignAdvice(
-            prefer=PRESCRIBE.get(command),
-            forbid=frozenset({forbidden}) if forbidden is not None else frozenset(),
-        ).resolved()
+        return advice_for(self._route.command)
 
     def stop_request(self) -> StopRequest | None:
         """Требование остановиться, если знак остановки был.

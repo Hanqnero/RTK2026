@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import collections
 import math
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,7 @@ from rtk2026_city_nav.detections import STOP_SIGN, Latch
 from rtk2026_city_nav.lane import resample_along_chain
 from rtk2026_city_nav.maneuver import Maneuver
 from rtk2026_city_nav.planner import DecisionSource, ManeuverTable, Planner, RouteState
+from rtk2026_city_nav.sign_cache import SignCache
 from rtk2026_city_nav.topology import build_topology
 from rtk2026_pose_graph import load_geojson_path
 from rtk2026_pose_graph.model import Node, OrientedEdge, RoadGraph
@@ -53,7 +55,13 @@ FAILED = "failed"
 LANE_OFFSET_M = 0.2
 
 
-def _controller(graph: RoadGraph, start: RouteState, **overrides) -> Controller:
+def _controller(
+    graph: RoadGraph,
+    start: RouteState,
+    *,
+    cache: SignCache | None = None,
+    **overrides,
+) -> Controller:
     params = {"lane_offset_m": LANE_OFFSET_M, "pose_step_m": 0.4}
     params.update(overrides)
     return Controller(
@@ -61,6 +69,7 @@ def _controller(graph: RoadGraph, start: RouteState, **overrides) -> Controller:
         config=ControllerConfig(**params),
         route=start,
         latch=Latch(min_box_area_px=BOX_AREA_PX),
+        cache=cache,
     )
 
 
@@ -81,6 +90,9 @@ class Run:
         self.pose_counts: list[int] = []
         self.waits: list[str] = []
         self.halts: list[str] = []
+        #: Что сделать, когда начался участок с такими концами. Так детекции
+        #: попадают в накопитель в движении, то есть когда их и видно.
+        self.on_leg: dict[tuple[int, int], Callable[[], None]] = {}
 
     def step(self) -> None:
         """Шаг: разобрать накопленные события, затем продвинуть автомат."""
@@ -131,6 +143,10 @@ class Run:
                 )
                 self.pose_counts.append(len(command.poses))
                 self.pending.append(self.reply)
+
+                hook = self.on_leg.get((decision.state.current, decision.target))
+                if hook is not None:
+                    hook()
             elif isinstance(command, Wait):
                 self.waits.append(command.reason)
             elif isinstance(command, Halt):
@@ -377,6 +393,124 @@ def test_retries_are_spent_before_the_robot_stops() -> None:
     assert run.halts == ["nav2"], f"остановок {run.halts}, ожидалась одна"
     assert controller.state is ControllerState.RECOVER
     assert controller.recover_count == 1
+
+
+# -- Память о знаках в сквозном прогоне -----------------------------------
+
+
+def _decision_after(run: Run, leg: tuple[int, int], occurrence: int):
+    """Решение, принятое сразу после указанного вхождения участка.
+
+    Участок ``(A, B)`` заканчивается прибытием в ``B``, и следующий участок —
+    это и есть выбор в состоянии ``(A, B)``. Так проверяется именно то, что
+    память сработала в нужном состоянии.
+    """
+    hits = [i for i, item in enumerate(run.legs) if item[:2] == leg]
+    assert len(hits) > occurrence, (
+        f"участок {leg} прошли {len(hits)} раз, нужно хотя бы {occurrence + 1}"
+    )
+    index = hits[occurrence]
+    assert index + 1 < len(run.legs), "после участка выбора ещё не было"
+    return run.legs[index + 1]
+
+
+def test_a_sign_learned_on_one_pass_drives_the_next_pass_from_memory() -> None:
+    """Проехав раз, робот перестаёт зависеть от того, попал ли знак в кадр."""
+    cache = SignCache(graph_fingerprint="проверка")
+    controller = _controller(_cross(), RouteState(previous=0, current=30), cache=cache)
+    run = Run(controller)
+
+    # Знак виден только на первом проезде участка 10 -> 0.
+    seen = {"count": 0}
+
+    def show_sign() -> None:
+        seen["count"] += 1
+        if seen["count"] == 1:
+            controller.latch.observe_route("left_only", box_area_px=BOX_AREA_PX)
+
+    run.on_leg[(10, 0)] = show_sign
+    run.drive(40)
+    assert seen["count"] >= 2, "участок 10 -> 0 не повторился"
+
+    first = _decision_after(run, (10, 0), 0)
+    second = _decision_after(run, (10, 0), 1)
+
+    assert first[2] is Maneuver.LEFT
+    assert first[3] == DecisionSource.SIGN.value
+
+    # Второй раз знака не видно, а маневр тот же и взят из памяти.
+    assert second[2] is Maneuver.LEFT
+    assert second[3] == DecisionSource.REMEMBERED_SIGN.value
+    assert second[1] == first[1], "по памяти поехали в другую вершину"
+    assert cache.hits >= 1
+    assert cache.conflicts == 0
+
+
+def test_without_memory_the_same_run_forgets_the_sign() -> None:
+    """Режим без памяти нужен, чтобы видеть перцепцию саму по себе."""
+    controller = _controller(_cross(), RouteState(previous=0, current=30), cache=None)
+    run = Run(controller)
+
+    seen = {"count": 0}
+
+    def show_sign() -> None:
+        seen["count"] += 1
+        if seen["count"] == 1:
+            controller.latch.observe_route("left_only", box_area_px=BOX_AREA_PX)
+
+    run.on_leg[(10, 0)] = show_sign
+    run.drive(40)
+
+    first = _decision_after(run, (10, 0), 0)
+    second = _decision_after(run, (10, 0), 1)
+
+    assert first[3] == DecisionSource.SIGN.value
+    assert second[3] != DecisionSource.REMEMBERED_SIGN.value
+
+
+def test_a_stop_learned_once_is_obeyed_on_later_passes() -> None:
+    """Пропущенная остановка — нарушение, поэтому запомненная исполняется."""
+    cache = SignCache(graph_fingerprint="проверка")
+    controller = _controller(_cross(), RouteState(previous=0, current=30), cache=cache)
+    run = Run(controller)
+
+    seen = {"count": 0}
+
+    def show_stop() -> None:
+        seen["count"] += 1
+        if seen["count"] == 1:
+            controller.latch.observe_stop(
+                STOP_SIGN, duration_s=2.0, box_area_px=BOX_AREA_PX
+            )
+
+    run.on_leg[(10, 0)] = show_stop
+    run.drive(40)
+
+    assert seen["count"] >= 2
+    # Остановок больше, чем проездов со знаком: значит стояли и по памяти.
+    assert len(run.waits) >= 2
+    assert set(run.waits) == {STOP_SIGN}
+    assert cache.hits >= 1
+
+
+def test_memory_keeps_approaches_to_one_vertex_apart() -> None:
+    """Знак с одного подъезда не должен действовать с другого."""
+    cache = SignCache(graph_fingerprint="проверка")
+    controller = _controller(_cross(), RouteState(previous=0, current=30), cache=cache)
+    run = Run(controller)
+
+    def show_sign() -> None:
+        controller.latch.observe_route("left_only", box_area_px=BOX_AREA_PX)
+
+    run.on_leg[(10, 0)] = show_sign
+    run.drive(40)
+
+    # Запомнилось только состояние (10, 0); прочие подъезды к 0 свободны.
+    assert not cache.route[(10, 0)].free
+    for approach in (20, 30, 40):
+        entry = cache.route.get((approach, 0))
+        assert entry is not None, f"состояние ({approach}, 0) не изучено"
+        assert entry.free, f"знак с подъезда 10 просочился на подъезд {approach}"
 
 
 def test_resume_after_a_stop_puts_the_robot_back_on_the_route() -> None:

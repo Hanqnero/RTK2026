@@ -56,6 +56,15 @@ SPEC: dict[str, tuple[Parameter.Type, str]] = {
         "0 — не откалиброван, ехать нельзя",
     ),
     "min_confidence": (_REAL, "Порог уверенности детекции"),
+    "use_sign_cache": (
+        _FLAG,
+        "Учитывать знаки, выученные на прошлых проездах. Выключено — знаки "
+        "читаются каждый проезд заново",
+    ),
+    "sign_cache_path": (
+        _TEXT,
+        "Файл памяти о знаках. Пусто — память живёт только до конца прогона",
+    ),
     "nav2_action_name": (_TEXT, "Имя действия Nav2"),
     "nav2_server_timeout_s": (_REAL, "Ожидание сервера действия"),
     "diagnostic_period_s": (_REAL, "Период публикации /diagnostics"),

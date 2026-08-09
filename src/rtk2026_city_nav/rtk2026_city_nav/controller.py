@@ -8,7 +8,9 @@
 ---------
 
 ``PLAN``
-    Пара вершин известна, надо выбрать маневр и построить позы.
+    Пара вершин известна, надо выбрать маневр и построить позы. Здесь же
+    закрывается окно наблюдения знаков: всё, что можно было увидеть на
+    подъезде и на вершине, уже накоплено, и запись памяти фиксируется.
 
 ``TRACK``
     Позы отданы исполнителю, робот едет. Детекции знаков только копятся:
@@ -34,6 +36,7 @@ from enum import Enum
 from rtk2026_city_nav.detections import Latch, StopRequest
 from rtk2026_city_nav.lane import LanePose, RIGHT_HAND_TRAFFIC, resample_along_chain
 from rtk2026_city_nav.planner import Decision, NoManeuverAvailable, Planner, RouteState
+from rtk2026_city_nav.sign_cache import SignCache
 from rtk2026_pose_graph.geometry import polyline_length_m
 
 
@@ -150,6 +153,10 @@ class Controller:
     config: ControllerConfig
     route: RouteState
     latch: Latch
+    #: Память о знаках либо ``None``, если знаки читаются каждый проезд
+    #: заново. Выключаемая, потому что запуск без памяти — отдельный режим
+    #: проверки: он показывает, что видит перцепция сама по себе.
+    cache: SignCache | None = None
 
     state: ControllerState = ControllerState.PLAN
     #: Текущий участок, пока он не закончен.
@@ -204,7 +211,12 @@ class Controller:
         # Остановка исполняется здесь, у вершины, и на этом потребляется.
         # Знак маневра не трогаем: он нужен предстоящему выбору и должен
         # пережить ожидание.
+        #
+        # Ключ памяти — состояние после сдвига: стоп-линия стоит на подъезде
+        # к вершине, до которой доехали, а не к той, откуда выехали.
         stop = self.latch.stop_request()
+        if self.cache is not None:
+            stop = self.cache.resolve_stop(self.route, stop)
         self.latch.clear_stop()
 
         if stop is not None:
@@ -263,8 +275,15 @@ class Controller:
         """Выбрать маневр и построить позы."""
         started_s = now_s
 
+        # Здесь закрывается окно наблюдения этого состояния: всё, что могли
+        # увидеть по дороге и на вершине, уже накоплено, больше узнать нечего.
+        if self.cache is None:
+            advice = self.latch.advice()
+        else:
+            advice = self.cache.resolve_route(self.route, self.latch.route_command)
+
         try:
-            decision = self.planner.decide(self.route, advice=self.latch.advice())
+            decision = self.planner.decide(self.route, advice=advice)
         except NoManeuverAvailable as error:
             self.recover_count += 1
             self.reason = str(error)
