@@ -29,17 +29,35 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean
 # http://snapshots.ros.org/jazzy/ — дата должна быть не раньше той, на
 # которой собран базовый образ, иначе apt получит запрос на понижение
 # версий уже установленных пакетов.
-ARG ROS_SNAPSHOT=2026-07-01
+ARG ROS_SNAPSHOT=2026-06-18
 
-RUN source /opt/ros/jazzy/setup.bash && \
-    keyring=$(grep -ohE 'signed-by=[^]]*' /etc/apt/sources.list.d/ros2*.list \
-        | head -n1 | cut -d= -f2) && \
-    : "${keyring:=/usr/share/keyrings/ros-archive-keyring.gpg}" && \
-    printf '%s\n' \
-        "deb [signed-by=${keyring}] http://snapshots.ros.org/jazzy/${ROS_SNAPSHOT}/ubuntu noble main" \
-        > /etc/apt/sources.list.d/ros2.list && \
-    rm -f /etc/apt/sources.list.d/ros2-latest.list && \
+# Подменяется только адрес репозитория в том файле, который положил базовый
+# образ. Не создаётся свой: официальный образ ставит источник пакетом
+# ros2-apt-source в формате deb822, где ключ встроен в сам файл и лежит
+# симлинком из /usr/share/ros-apt-source. Свой файл рядом не отключил бы
+# исходный, и пин оказался бы мнимым — apt продолжил бы брать живой
+# репозиторий.
+#
+# Имя файла не угадывается, а ищется по содержимому: у ros2-apt-source оно
+# менялось между версиями. Пустой список — ошибка сборки, иначе фиксация
+# молча не состоялась бы.
+RUN set -o pipefail && \
+    sources=$(grep -rlE 'packages\.ros\.org/ros2' /etc/apt/sources.list.d/) && \
+    test -n "${sources}" && \
+    for file in ${sources}; do \
+        sed -i \
+            "s|https\?://packages\.ros\.org/ros2/ubuntu|http://snapshots.ros.org/jazzy/${ROS_SNAPSHOT}/ubuntu|g" \
+            "${file}"; \
+    done && \
+    grep -rh 'snapshots\.ros\.org' /etc/apt/sources.list.d/ && \
     echo "репозиторий ROS зафиксирован на снимке ${ROS_SNAPSHOT}"
+
+# Пакеты, уже стоявшие в базовом образе, к снимку не приводятся. Внутри
+# одного дистрибутива ROS патч-версии ABI-совместимы, а привести их значило
+# бы переустановить весь ros-base с разрешением понижения — и получить отказ
+# сборки, если базовый образ окажется новее снимка и принесёт пакет, которого
+# в снимке ещё нет. Всё, на поведение чего мы опираемся, ставится ниже
+# и приходит из снимка.
 
 
 # GUI и инструменты сборки. Раньше здесь стоял ros-jazzy-desktop-full, то

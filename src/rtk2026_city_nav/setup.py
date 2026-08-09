@@ -11,7 +11,13 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
         (f"share/{package_name}", ["package.xml"]),
-        (f"share/{package_name}/config", glob("config/*.yaml")),
+        # Граф ставится наравне с параметрами: на него по умолчанию
+        # ссылается лаунч, и без geojson в маске путь указывал бы
+        # на файл, которого в установке нет.
+        (
+            f"share/{package_name}/config",
+            glob("config/*.yaml") + glob("config/*.geojson"),
+        ),
         (f"share/{package_name}/launch", glob("launch/*.launch.py")),
     ],
     install_requires=["setuptools"],
