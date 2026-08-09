@@ -54,14 +54,13 @@ from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import NavigateThroughPoses
 from nav_msgs.msg import Goals
 from nav_msgs.msg import Path as PathMsg
-from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.action import ActionClient
 from rclpy.action.client import ClientGoalHandle
 from rclpy.node import Node
-from rclpy.parameter import Parameter
 from rtk2026_interfaces.msg import DrivingDetection
 from std_srvs.srv import Trigger
 
+from rtk2026_city_nav import parameters
 from rtk2026_city_nav.controller import (
     Command,
     Controller,
@@ -201,69 +200,13 @@ class CityNavNode(Node):
 
     # -- Параметры ---------------------------------------------------------
 
-    def _declare(self, name: str, kind: Parameter.Type, description: str) -> None:
-        """Объявить параметр типом, без значения по умолчанию.
-
-        Значения живут в ``config/city_nav.yaml``, пути к файлам приходят
-        из лаунча. Отсутствие параметра — отказ при запуске: молчаливое
-        число не в ту сторону хуже, чем незапустившаяся нода.
-
-        Описание видно в ``ros2 param describe``, поэтому смысл параметра
-        не приходится искать по исходникам.
-        """
-        self.declare_parameter(name, kind, ParameterDescriptor(description=description))
-
     def _declare_parameters(self) -> None:
-        text, real, whole, flag = (
-            Parameter.Type.STRING,
-            Parameter.Type.DOUBLE,
-            Parameter.Type.INTEGER,
-            Parameter.Type.BOOL,
-        )
+        """Объявить все параметры пакета.
 
-        self._declare("graph_path", text, "GeoJSON разметочной линии")
-        self._declare(
-            "poses_path",
-            text,
-            "Файл поз; берутся только записи с пометкой manual. "
-            "Пусто — все позы считаются на ходу",
-        )
-        self._declare("frame_id", text, "Система координат целей Nav2")
-
-        self._declare("lane_offset_m", real, "Смещение центра полосы от линии")
-        self._declare("pose_step_m", real, "Шаг поз; 0 — только точки полилинии")
-        self._declare("traffic_side", whole, "1 правостороннее, -1 левостороннее")
-        self._declare("miter_limit", real, "Предел выноса позы в изломе")
-        self._declare(
-            "straight_tolerance_deg", real, "Полураствор классов прямо и разворот"
-        )
-
-        self._declare("max_retries", whole, "Повторов участка до остановки")
-        self._declare("default_stop_duration_s", real, "Остановка, если знак не задал")
-        self._declare("control_period_s", real, "Период автомата исполнителя")
-        self._declare(
-            "halt_on_validation_error", flag, "Не ехать при ошибках проверки графа"
-        )
-
-        self._declare(
-            "start_previous_vertex", whole, "Откуда приехал; отрицательное — не задано"
-        )
-        self._declare(
-            "start_current_vertex", whole, "Где находится; отрицательное — не задано"
-        )
-
-        self._declare("detection_topic", text, "Топик детекций знаков")
-        self._declare(
-            "min_box_area_px",
-            real,
-            "Порог принадлежности знака к ближайшей точке решения; "
-            "0 — не откалиброван, ехать нельзя",
-        )
-        self._declare("min_confidence", real, "Порог уверенности детекции")
-
-        self._declare("nav2_action_name", text, "Имя действия Nav2")
-        self._declare("nav2_server_timeout_s", real, "Ожидание сервера действия")
-        self._declare("diagnostic_period_s", real, "Период публикации /diagnostics")
+        Таблица имён и типов одна на пакет, см. :mod:`parameters`: ноде нужны
+        все, инструментам проверки — подмножества, и разойтись они не могут.
+        """
+        parameters.declare(self, *parameters.SPEC)
 
     def _startup_obstacle(self) -> str:
         """Что мешает начать движение. Пусто, если ничего."""

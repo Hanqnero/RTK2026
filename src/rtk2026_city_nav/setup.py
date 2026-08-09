@@ -23,6 +23,10 @@ setup(
     entry_points={
         "console_scripts": [
             f"city_nav_node = {package_name}.node:main",
+            # Проверки до выезда. ROS им не нужен, поэтому запускаются и там,
+            # где стек не поднят.
+            f"city_nav_check = {package_name}.cli:main_check",
+            f"city_nav_poses = {package_name}.cli:main_poses",
         ],
     },
 )
