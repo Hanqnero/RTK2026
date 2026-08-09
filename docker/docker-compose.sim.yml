@@ -12,11 +12,6 @@ services:
       # Путь относительно build context.
       dockerfile: docker/Dockerfile.sim
 
-      args:
-        # Дата снимка репозитория ROS. Фиксирует версии всех ros-jazzy-*
-        # сразу, поэтому сборка воспроизводима. Меняется только когда
-        # осознанно обновляем стек; см. комментарий в Dockerfile.
-        ROS_SNAPSHOT: "2026-06-18"
 
     # Фиксированное имя контейнера.
     container_name: rtk2026_sim
