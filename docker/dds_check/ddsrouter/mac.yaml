@@ -1,0 +1,87 @@
+# DDS Router на ноутбуке: сторона визуализации.
+#
+# Живёт в том же контейнере, что RViz и noVNC. Это принципиально: тогда
+# виртуализированную сеть Docker Desktop пересекает ровно одно исходящее
+# TCP-соединение, а между Router и RViz внутри контейнера работает обычный
+# локальный DDS без каких-либо особенностей.
+#
+# Mac - TCP-клиент. Исходящее соединение Docker Desktop выполняет штатно,
+# а входящие соединения к контейнеру за NAT недоступны.
+
+version: v5.0
+
+participants:
+
+  # Локальный граф контейнера. Единственный его обитатель - RViz.
+  - name: mac_local
+    kind: local
+    domain: 0
+
+  # Соединение с Pi.
+  #
+  # ip: адрес Raspberry Pi в локальной сети, тот же, что в pi.yaml.
+  - name: pi_link
+    kind: wan
+    connection-addresses:
+      - ip: 192.168.1.50
+        port: 11666
+        transport: tcp
+
+specs:
+
+  # Те же соображения, что и на стороне Pi: при true ломается
+  # TRANSIENT_LOCAL, то есть /tf_static и карта.
+  remove-unused-entities: false
+
+  # RViz - это набор подписок, поэтому reader-триггер здесь естественен.
+  discovery-trigger: reader
+
+# QoS маршрутизируемых топиков
+# ---------------------------
+#
+# Router не пробрасывает сообщения насквозь: он создаёт собственные endpoints
+# и согласуется с настоящими участниками по обычным правилам DDS. По умолчанию
+# эти endpoints reliable + volatile, поэтому топики с другим QoS молча
+# не проходят - соединение установлено, топик виден, данных нет.
+#
+# Задеть это может ровно то, ради чего схема и строится:
+#
+#   /scan       best-effort лидар не согласуется с reliable-endpoint Router;
+#   /tf_static  подключившийся позже RViz не получает удержанное значение;
+#   /map        то же самое, карта не появляется вовсе.
+#
+# durability: true соответствует TRANSIENT_LOCAL, reliability: false -
+# BEST_EFFORT. Имена записываются в DDS-нотации: топик ROS /scan это rt/scan.
+#
+# Секция не ограничивает маршрутизацию: топики, здесь не перечисленные,
+# передаются с QoS по умолчанию. Ограничение задаётся allowlist.
+#
+# Списки на обеих сторонах обязаны совпадать.
+topics:
+
+  # Удерживаемые топики: значение публикуется однократно и должно дойти
+  # до подписчика, запущенного позже.
+  - name: "rt/tf_static"
+    qos:
+      durability: true
+      reliability: true
+
+  - name: "rt/map"
+    qos:
+      durability: true
+      reliability: true
+
+  - name: "rt/check/latched"
+    qos:
+      durability: true
+      reliability: true
+
+  # Датчики: потеря отдельного сообщения допустима, повторная передача
+  # только увеличила бы задержку.
+  - name: "rt/scan"
+    qos:
+      reliability: false
+
+  - name: "rt/check/sensor"
+    qos:
+      reliability: false

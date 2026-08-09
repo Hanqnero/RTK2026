@@ -48,9 +48,13 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument(
                 "graph_path",
                 default_value=PathJoinSubstitution(
-                    [FindPackageShare("rtk2026_route_nav"), "config", "graph.geojson"]
+                    [share, "config", "graph.geojson"]
                 ),
-                description="GeoJSON разметочной линии.",
+                description=(
+                    "GeoJSON разметочной линии. По умолчанию берётся из config "
+                    "этого пакета: туда кладут файл, сохранённый панелью "
+                    "Nav2 Route Tool."
+                ),
             ),
             DeclareLaunchArgument(
                 "poses_path",

@@ -1,0 +1,98 @@
+# syntax=docker/dockerfile:1.7
+
+# Образ визуализации: DDS Router, RViz и noVNC в одном контейнере.
+#
+# Router здесь не отдельный сервис намеренно. Он делит сетевое пространство
+# с RViz, поэтому между ними работает обычный локальный DDS, а наружу уходит
+# ровно одно TCP-соединение. Именно так это и должно выглядеть на ноутбуке
+# рядом с настоящей Raspberry Pi.
+
+# Базовый образ плюс два набора пакетов: Router из репозитория Vulcanexus
+# и RViz из обычного репозитория ROS. Готовая desktop-сборка тоже подошла бы,
+# но она заметно больше, а нужны из неё лишь RViz и его зависимости.
+ARG VULCANEXUS_TAG=jazzy
+FROM eprosima/vulcanexus:${VULCANEXUS_TAG}
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    \
+    # Ретранслятор DDS.
+    vulcanexus-jazzy-ddsrouter \
+    \
+    # Визуализация.
+    ros-jazzy-rviz2 \
+    # Виртуальный X11: аппаратного дисплея у контейнера нет.
+    xvfb \
+    x11vnc \
+    novnc \
+    websockify \
+    # Без оконного менеджера окна RViz не имеют рамок и не перемещаются.
+    fluxbox \
+    # xdpyinfo для проверки готовности Xvfb.
+    x11-utils \
+    # xwd снимает кадр с виртуального экрана, netpbm переводит его в PNG.
+    #
+    # Иначе убедиться, что RViz действительно нарисовал карту и скан, а не
+    # молча показывает пустую сцену, можно только глазами в браузере.
+    # Со снимком проверка становится частью скрипта:
+    #
+    #   docker exec rtk2026_viz sh -c \
+    #       'xwd -root -display :1 | xwdtopnm | pnmtopng' > rviz.png
+    x11-apps \
+    netpbm \
+    # Программный OpenGL: Docker Desktop на macOS не пробрасывает GPU.
+    libgl1-mesa-dri \
+    libglx-mesa0 \
+    dbus-x11
+
+# Обе части обязаны присутствовать: без Router нет связи, без RViz нечего
+# показывать. Проверяем на сборке, а не при запуске.
+RUN source /opt/vulcanexus/*/setup.bash && \
+    for tool in ddsrouter rviz2; do \
+        command -v "$tool" >/dev/null || { echo "$tool не установился" >&2; exit 1; }; \
+    done
+
+ENV DISPLAY=:1
+ENV QT_X11_NO_MITSHM=1
+ENV LIBGL_ALWAYS_SOFTWARE=1
+ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+RUN mkdir -p /tmp/runtime-root && chmod 700 /tmp/runtime-root
+
+# RMW фиксируется явно и одинаково на обеих сторонах связи.
+ENV RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+ENV ROS_DOMAIN_ID=0
+ENV ROS_LOCALHOST_ONLY=0
+
+WORKDIR /check
+
+COPY ddsrouter /check/ddsrouter
+COPY rviz /check/rviz
+
+# Приёмник кладётся и в этот образ, чтобы числовую проверку можно было
+# запускать изнутри того же контейнера, что RViz и Router:
+#
+#   docker exec rtk2026_viz python3 /check/listener.py
+#
+# Отдельный контейнер, разделяющий сетевое пространство с viz, для этого
+# тоже годится, но он не переживает переподключение сети: при
+# docker network disconnect/connect у контейнера-донора присоединившийся
+# процесс завершается. Проверка обрыва связи - как раз тот случай, ради
+# которого приёмник и нужен, поэтому он должен жить рядом с RViz.
+# talker.py идёт вместе с ним: приёмник берёт из него определения топиков
+# и QoS, чтобы описание проверяемых каналов не расходилось между сторонами.
+COPY listener.py talker.py /check/
+
+COPY start_viz.sh /usr/local/bin/start_viz
+RUN chmod +x /usr/local/bin/start_viz
+
+EXPOSE 6080
+
+ENTRYPOINT ["/usr/local/bin/start_viz"]

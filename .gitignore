@@ -15,3 +15,7 @@ docker/config/local_planner_points_v3_dump.json
 
 # OS / editor noise
 .DS_Store
+
+# Файл поз и память о знаках: их пишет прогон, версии им не нужны.
+runtime/*
+!runtime/.gitkeep

@@ -1,0 +1,74 @@
+# Проверка транспорта: сторона Raspberry Pi.
+#
+#   docker compose -f docker-compose.pi.yml run --rm shell
+#   docker compose -f docker-compose.pi.yml up router
+#   docker compose -f docker-compose.pi.yml run --rm talker
+#   docker compose -f docker-compose.pi.yml run --rm listener
+#
+# На Linux network_mode: host даёт контейнеру настоящий сетевой namespace
+# хоста, поэтому DDS здесь ведёт себя так же, как при установке ROS
+# непосредственно на Pi. Именно этого не даёт Docker Desktop на macOS,
+# ради чего и понадобился Router.
+#
+# ipc: host обязателен вместе с network_mode: host.
+#
+# Fast DDS определяет "один хост" по сетевому окружению и для участников
+# на одном хосте выбирает shared memory. Общий сетевой namespace делает
+# контейнеры одним хостом, но /dev/shm у каждого контейнера свой, поэтому
+# согласованный транспорт физически не существует. Отказ тихий: участники
+# видят друг друга, endpoints создаются, данные не идут. ipc: host даёт
+# им общий /dev/shm и снимает расхождение.
+
+x-common: &common
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      VULCANEXUS_TAG: ${VULCANEXUS_TAG:-jazzy}
+  image: rtk2026-dds-check
+  network_mode: host
+  ipc: host
+  environment:
+    ROLE: pi
+    # Адрес, который Router объявляет ноутбуку. Обязан совпадать с тем,
+    # который ноутбук набирает, то есть с его PI_ADDRESS: Fast DDS
+    # сопоставляет объявленный локатор с открытым TCP-соединением, и при
+    # несовпадении данные не идут, хотя соединение установлено, а топики
+    # на той стороне видны.
+    #
+    # Значение подставляется на запуске, а не зашивается в образ, поэтому
+    # при смене сети пересобирать ничего не нужно.
+    PI_ADDRESS: ${PI_ADDRESS:?задайте адрес Raspberry Pi в локальной сети, например export PI_ADDRESS=192.168.1.50}
+    RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    ROS_DOMAIN_ID: "0"
+    ROS_LOCALHOST_ONLY: "0"
+  init: true
+
+services:
+
+  # Ретранслятор. Держится запущенным всё время проверки.
+  router:
+    <<: *common
+    container_name: rtk2026_dds_router_pi
+    command: router
+
+  # Передатчик проверочных топиков.
+  talker:
+    <<: *common
+    command: talker
+    stdin_open: true
+    tty: true
+
+  # Приёмник: считает потери, разброс и обрывы.
+  listener:
+    <<: *common
+    command: listener
+    stdin_open: true
+    tty: true
+
+  # Оболочка для ros2 multicast и ручных команд.
+  shell:
+    <<: *common
+    command: shell
+    stdin_open: true
+    tty: true

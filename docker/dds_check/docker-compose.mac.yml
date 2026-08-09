@@ -1,0 +1,85 @@
+# Проверка транспорта: сторона ноутбука.
+#
+#   export PI_ADDRESS=192.168.1.50
+#   docker compose -f docker-compose.mac.yml run --rm shell
+#   docker compose -f docker-compose.mac.yml up router
+#   docker compose -f docker-compose.mac.yml run --rm listener
+#
+# network_mode здесь НЕ host. Контейнеру нужно только исходящее TCP-соединение
+# до Raspberry Pi, а его Docker Desktop выполняет штатно через NAT. Попытка
+# использовать host-режим ничего не добавит: на macOS он работает на L4
+# и настоящего доступа к интерфейсам хоста не даёт.
+
+x-common: &common
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      VULCANEXUS_TAG: ${VULCANEXUS_TAG:-jazzy}
+  image: rtk2026-dds-check
+  environment:
+    ROLE: mac
+    PI_ADDRESS: ${PI_ADDRESS:?задайте адрес Raspberry Pi, например export PI_ADDRESS=192.168.1.50}
+    RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    ROS_DOMAIN_ID: "0"
+    ROS_LOCALHOST_ONLY: "0"
+  init: true
+
+services:
+
+  router:
+    <<: *common
+    container_name: rtk2026_dds_router_mac
+    command: router
+
+  talker:
+    <<: *common
+    command: talker
+    stdin_open: true
+    tty: true
+
+  listener:
+    <<: *common
+    command: listener
+    stdin_open: true
+    tty: true
+
+  shell:
+    <<: *common
+    command: shell
+    stdin_open: true
+    tty: true
+
+  # Те же роли, но с host-режимом Docker Desktop.
+  #
+  # Нужны на первом этапе проверки: если через host-режим обычный DDS
+  # заработает между машинами напрямую, DDS Router не нужен вовсе.
+  # На macOS host-режим работает на L4 и настоящего доступа к интерфейсам
+  # не даёт, поэтому рассчитывать на это нельзя - но проверить дёшево.
+  #
+  # ipc: host идёт вместе с network_mode: host. Общий сетевой namespace без
+  # общего /dev/shm заставляет Fast DDS выбрать shared memory, которой между
+  # контейнерами нет, и обмен молча прекращается.
+  shell-host:
+    <<: *common
+    network_mode: host
+    ipc: host
+    command: shell
+    stdin_open: true
+    tty: true
+
+  listener-host:
+    <<: *common
+    network_mode: host
+    ipc: host
+    command: listener
+    stdin_open: true
+    tty: true
+
+  talker-host:
+    <<: *common
+    network_mode: host
+    ipc: host
+    command: talker
+    stdin_open: true
+    tty: true

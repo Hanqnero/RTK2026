@@ -1,72 +1,89 @@
-# Нативный ARM64-образ ROS 2 Jazzy для Apple Silicon.
+# syntax=docker/dockerfile:1.7
+
+# Нативный ARM64-образ ROS 2 Jazzy подходит как для Apple Silicon,
+# так и для 64-битной Raspberry Pi.
 #
 # В отличие от osrf/ros:jazzy-desktop-full,
 # официальный ros:jazzy-ros-base-noble имеет ARM64-вариант.
-FROM ros:jazzy-ros-base-noble
+FROM ros:jazzy-ros-base-noble AS ros_snapshot
 
-
-# Используется только во время сборки.
-# Не сохраняется в окружении готового контейнера.
 ARG DEBIAN_FRONTEND=noninteractive
 
-
-# Все RUN-команды будут выполняться через Bash.
-#
-# pipefail заставляет сборку завершиться ошибкой,
-# если упала любая команда внутри конвейера.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# Стандартный docker-clean удаляет скачанные deb сразу после apt.
+# Для BuildKit cache mount отключаем только эту очистку; кэш всё равно
+# хранится вне итогового image и может переиспользоваться следующей сборкой.
+RUN rm -f /etc/apt/apt.conf.d/docker-clean
 
-# Устанавливаем desktop-компоненты ROS, Gazebo,
-# SLAM, контроллеры, инструменты сборки и noVNC.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+
+# Дата снимка репозитория ROS. Фиксирует версии всех ros-jazzy-* сразу:
+# снимок никогда не меняется, поэтому две сборки с разницей в месяц дают
+# один и тот же Nav2, тот же slam_toolbox и ту же панель Route Tool.
+#
+# Без этого поведение стека зависело бы от дня сборки, а мы опираемся на
+# вещи, которые между версиями Nav2 менялись: фильтр запретных зон,
+# enable_stamped_cmd_vel, Route Server и его панель.
+#
+# Обновление: сменить дату и пересобрать. Существующие снимки видно на
+# http://snapshots.ros.org/jazzy/ — дата должна быть не раньше той, на
+# которой собран базовый образ, иначе apt получит запрос на понижение
+# версий уже установленных пакетов.
+ARG ROS_SNAPSHOT=2026-07-01
+
+RUN source /opt/ros/jazzy/setup.bash && \
+    keyring=$(grep -ohE 'signed-by=[^]]*' /etc/apt/sources.list.d/ros2*.list \
+        | head -n1 | cut -d= -f2) && \
+    : "${keyring:=/usr/share/keyrings/ros-archive-keyring.gpg}" && \
+    printf '%s\n' \
+        "deb [signed-by=${keyring}] http://snapshots.ros.org/jazzy/${ROS_SNAPSHOT}/ubuntu noble main" \
+        > /etc/apt/sources.list.d/ros2.list && \
+    rm -f /etc/apt/sources.list.d/ros2-latest.list && \
+    echo "репозиторий ROS зафиксирован на снимке ${ROS_SNAPSHOT}"
+
+
+# GUI и инструменты сборки. Раньше здесь стоял ros-jazzy-desktop-full, то
+# есть desktop + perception + simulation: метапакет тащил ровно то, что
+# стадии ниже ставят адресно, и обесценивал стадийность.
+FROM ros_snapshot AS ros_gui
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     \
-    # Полный desktop-набор ROS 2:
-    # RViz, robot_state_publisher, стандартные GUI-инструменты
-    # и другие desktop-пакеты.
-    ros-jazzy-desktop-full \
+    # Визуализация карты, графа, костмап и пути.
+    ros-jazzy-rviz2 \
     \
-    # Интеграция ROS 2 с современным Gazebo.
-    ros-jazzy-ros-gz \
+    # Описание робота: TF из URDF и раскрытие xacro.
+    ros-jazzy-robot-state-publisher \
+    ros-jazzy-joint-state-publisher \
+    ros-jazzy-xacro \
     \
-    # Подключение ros2_control к Gazebo.
-    ros-jazzy-gz-ros2-control \
-    \
-    # Готовые ROS 2 контроллеры:
-    # diff_drive_controller, joint_state_broadcaster и другие.
-    ros-jazzy-ros2-controllers \
-    \
-    # Построение карты по LaserScan и TF.
-    ros-jazzy-slam-toolbox \
+    # Работа с TF из командной строки: нужна tf_time_monitor и разбору TF.
+    ros-jazzy-tf2-ros \
+    ros-jazzy-tf2-tools \
     \
     # Клавиатурное управление через /cmd_vel.
     ros-jazzy-teleop-twist-keyboard \
     \
-    # Система сборки ROS workspace.
+    # Сборка пакетов рабочего пространства.
+    build-essential \
+    cmake \
     python3-colcon-common-extensions \
-    \
-    # Разрешение зависимостей из package.xml.
     python3-rosdep \
     \
-    # Python-библиотека pyserial для rtk2026_driver.
+    # pyserial для rtk2026_driver.
     python3-serial \
     \
-    # Виртуальный X11-сервер.
+    # Виртуальный X11-сервер и передача экрана в браузер.
     xvfb \
-    \
-    # Передача X11-экрана по VNC.
     x11vnc \
-    \
-    # Браузерный VNC-клиент.
     novnc \
-    \
-    # WebSocket-прокси между браузером и VNC.
     websockify \
-    \
-    # Лёгкий оконный менеджер.
     fluxbox \
-    \
-    # Содержит xdpyinfo для проверки Xvfb.
     x11-utils \
     \
     # Программный OpenGL через Mesa.
@@ -75,89 +92,235 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mesa-utils \
     \
     # D-Bus для Linux GUI-приложений.
-    dbus-x11 \
-    \
-    # Удаляем APT-индексы, чтобы уменьшить image.
-    && rm -rf /var/lib/apt/lists/*
+    dbus-x11
 
+
+# Симуляция. Отдельно от GUI: Gazebo меняется реже RViz-инструментов
+# и заметно тяжелее.
+FROM ros_gui AS ros_sim
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    \
+    # Интеграция ROS 2 с современным Gazebo.
+    ros-jazzy-ros-gz \
+    \
+    # Подключение ros2_control к Gazebo.
+    ros-jazzy-gz-ros2-control \
+    \
+    # diff_drive_controller, joint_state_broadcaster и другие.
+    ros-jazzy-ros2-controllers
+
+
+# Навигация: стек, по которому едет робот, плюс построение карты.
+FROM ros_sim AS ros_navigation
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    \
+    # 2D lidar SLAM и EKF odometry.
+    ros-jazzy-slam-toolbox \
+    ros-jazzy-robot-localization \
+    \
+    # Полный Nav2. Содержит planner, controller, BT, behaviors,
+    # costmap filters и map_server, из которого берётся
+    # vector_object_server для запретных зон.
+    ros-jazzy-navigation2 \
+    ros-jazzy-nav2-bringup \
+    \
+    # Route Server: чтение графа из GeoJSON.
+    ros-jazzy-nav2-route \
+    \
+    # Панели RViz Nav2, среди них Route Tool — редактор графа.
+    ros-jazzy-nav2-rviz-plugins
+
+
+# Perception и диагностика: меняются чаще навигации.
+FROM ros_navigation AS ros_perception
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    \
+    # RGB-D visual SLAM.
+    ros-jazzy-rtabmap-ros \
+    \
+    # ROS/OpenCV bridge и типы компьютерного зрения. python3-opencv
+    # и python3-numpy приходят с cv-bridge; названы явно, потому что
+    # rtk2026_cv импортирует их напрямую.
+    ros-jazzy-cv-bridge \
+    ros-jazzy-image-transport \
+    ros-jazzy-image-view \
+    ros-jazzy-vision-msgs \
+    python3-opencv \
+    python3-numpy \
+    python3-yaml \
+    \
+    # Диагностика: агрегатор, публикация статусов и просмотр.
+    # diagnostic-updater назван явно: его импортируют и мониторы
+    # observability, и нода движения по городу.
+    ros-jazzy-diagnostics \
+    ros-jazzy-diagnostic-updater \
+    ros-jazzy-rqt-runtime-monitor \
+    ros-jazzy-rqt-robot-monitor \
+    ros-jazzy-plotjuggler-ros \
+    \
+    # Запись воспроизводимых экспериментов в MCAP.
+    ros-jazzy-rosbag2-storage-mcap
+
+
+# Финальная стадия: зависимости пакетов и сборка кода RTK2026.
+FROM ros_perception AS sim_workspace
 
 # Виртуальный X11-дисплей.
 ENV DISPLAY=:1
 
-# Не использовать MIT-SHM в Qt.
+# Отдельный X11-дисплей для PlotJuggler и RQt, второй noVNC на 6081.
+ENV DIAGNOSTICS_DISPLAY=:2
+
 ENV QT_X11_NO_MITSHM=1
 
-# Использовать программный OpenGL.
-#
-# На первом этапе это наиболее предсказуемый вариант
-# для Linux-контейнера внутри Docker Desktop на macOS.
+# Программный OpenGL: наиболее предсказуемый вариант для контейнера
+# внутри Docker Desktop на macOS.
 ENV LIBGL_ALWAYS_SOFTWARE=1
 
-# Runtime-каталог для Qt и других GUI-приложений.
 ENV XDG_RUNTIME_DIR=/tmp/runtime-root
 
-
-# Корень ROS workspace.
 WORKDIR /workspace
 
 
-# Копируем исходники из корня проекта.
-#
-# Build context в compose равен "..",
-# поэтому src находится относительно корня проекта.
-COPY src/ /workspace/src/
-
-
-# Подключаем системный ROS.
-#
-# Инициализируем rosdep, если это ещё не сделано.
-#
-# Затем устанавливаем зависимости package.xml
-# и собираем четыре пользовательских пакета.
-RUN source /opt/ros/jazzy/setup.bash && \
-    \
-    if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
+# Обновление базы rosdep не зависит от исходного кода проекта. Выносим его
+# до COPY, чтобы правка кода не сбрасывала этот сетевой шаг. Повторы
+# защищают первую сборку от временных SSL timeout.
+RUN if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
         rosdep init; \
     fi && \
     \
-    rosdep update && \
-    \
-    # После предыдущего RUN APT-индексы удалены,
-    # поэтому перед rosdep install загружаем их снова.
-    apt-get update && \
-    \
+    rosdep_updated=0 && \
+    for attempt in 1 2 3; do \
+        if rosdep update --rosdistro jazzy; then \
+            rosdep_updated=1; \
+            break; \
+        fi; \
+        echo "rosdep update: попытка ${attempt} завершилась ошибкой" >&2; \
+        sleep $((attempt * 5)); \
+    done && \
+    test "${rosdep_updated}" = "1"
+
+
+# Для установки зависимостей достаточно package.xml. Слой пересобирается
+# только при изменении состава зависимостей, а не после каждой правки кода.
+#
+# Список ведётся руками намеренно: COPY по маске уравнял бы этот слой
+# с копированием всего src и лишил бы смысла.
+COPY src/rtk2026_interfaces/package.xml \
+    /tmp/rosdep/src/rtk2026_interfaces/package.xml
+COPY src/rtk2026_pose_graph/package.xml \
+    /tmp/rosdep/src/rtk2026_pose_graph/package.xml
+COPY src/rtk2026_city_nav/package.xml \
+    /tmp/rosdep/src/rtk2026_city_nav/package.xml
+COPY src/rtk2026_nav2/package.xml \
+    /tmp/rosdep/src/rtk2026_nav2/package.xml
+COPY src/rtk2026_vector_objects/package.xml \
+    /tmp/rosdep/src/rtk2026_vector_objects/package.xml
+COPY src/rtk2026_description/package.xml \
+    /tmp/rosdep/src/rtk2026_description/package.xml
+COPY src/rtk2026_driver/package.xml \
+    /tmp/rosdep/src/rtk2026_driver/package.xml
+COPY src/rtk2026_slam/package.xml \
+    /tmp/rosdep/src/rtk2026_slam/package.xml
+COPY src/rtk2026_localization/package.xml \
+    /tmp/rosdep/src/rtk2026_localization/package.xml
+COPY src/rtk2026_observability/package.xml \
+    /tmp/rosdep/src/rtk2026_observability/package.xml
+COPY src/rtk2026_tracked_sim/package.xml \
+    /tmp/rosdep/src/rtk2026_tracked_sim/package.xml
+COPY src/rtk2026_cv/package.xml \
+    /tmp/rosdep/src/rtk2026_cv/package.xml
+COPY src/rtk2026_bringup/package.xml \
+    /tmp/rosdep/src/rtk2026_bringup/package.xml
+
+# rtk2026_interfaces из skip-keys убран: он лежит в этом же рабочем
+# пространстве, и rosdep находит его сам. В skip-keys он маскировал бы то,
+# что пакет не собирается, а именно это и ломало rtk2026_cv раньше.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get -o Acquire::Retries=3 update && \
     rosdep install \
-        --from-paths src \
+        --from-paths /tmp/rosdep/src \
         --ignore-src \
         --rosdistro jazzy \
-        --skip-keys=sllidar_ros2 \
+        --skip-keys="sllidar_ros2 ament_python" \
         -r \
         -y && \
-    \
+    rm -rf /tmp/rosdep
+
+
+# Исходники. Build context в compose равен корню проекта.
+COPY src/ /workspace/src/
+
+# Карты нужны Map Server. YAML хранит относительное имя PGM, поэтому
+# копируется весь каталог.
+COPY maps/ /workspace/maps/
+
+# Gazebo worlds передаются лаунчу абсолютным путём.
+COPY worlds/ /workspace/worlds/
+
+
+# Собираются все пакеты, нужные движению по городу в симуляции.
+#
+# rtk2026_interfaces обязателен: без него нет типа DrivingDetection, и
+# rtk2026_cv с rtk2026_city_nav падают на импорте. Раньше его в списке
+# не было, хотя rtk2026_cv от него зависит.
+#
+# rtk2026_graph и rtk2026_route_nav не собираются: их заменили
+# rtk2026_city_nav и rtk2026_nav2.
+RUN source /opt/ros/jazzy/setup.bash && \
     colcon build \
         --symlink-install \
         --packages-select \
+            rtk2026_interfaces \
+            rtk2026_pose_graph \
+            rtk2026_city_nav \
+            rtk2026_nav2 \
+            rtk2026_vector_objects \
             rtk2026_description \
             rtk2026_driver \
             rtk2026_slam \
-            rtk2026_bringup && \
-    \
-    rm -rf /var/lib/apt/lists/*
+            rtk2026_localization \
+            rtk2026_observability \
+            rtk2026_tracked_sim \
+            rtk2026_cv \
+            rtk2026_bringup
 
-
-# Копируем entrypoint-скрипт и сразу делаем его исполняемым.
 COPY --chmod=755 \
     docker/start_sim_novnc.sh \
     /usr/local/bin/start_sim_novnc
 
 
-# Порт веб-интерфейса noVNC внутри контейнера.
-EXPOSE 6080
+# 6080 — Gazebo и RViz; 6081 — диагностика и графики.
+EXPOSE 6080 6081
 
+RUN printf '%s\n' \
+    'set +u' \
+    'source /opt/ros/jazzy/setup.bash' \
+    'source /workspace/install/setup.bash' \
+    'set -u' \
+    >> /root/.bashrc
 
-# Скрипт поднимает Xvfb, VNC и затем запускает команду из CMD.
+# Entrypoint поднимает Xvfb, Fluxbox, x11vnc и noVNC.
 ENTRYPOINT ["/usr/local/bin/start_sim_novnc"]
 
-# Команда запуска симуляции по умолчанию.
-# Имя launch-файла должно точно совпадать с файлом в launch/.
-CMD ["ros2", "launch", "rtk2026_bringup", "sim_slam_launch.py"]
+# Контейнер остаётся запущенным, ROS launch автоматически не стартует.
+CMD ["sleep", "infinity"]

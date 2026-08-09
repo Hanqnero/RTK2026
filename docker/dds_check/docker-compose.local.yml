@@ -1,0 +1,174 @@
+# Локальная репетиция всей схемы на одном ноутбуке, без Raspberry Pi.
+#
+# Что этот тест проверяет
+# -----------------------
+#
+# Конфигурацию DDS Router, установление TCP-соединения, прохождение топиков
+# с разными QoS, late-joiner для TRANSIENT_LOCAL и работу RViz через маршрут.
+# То есть всё, что можно сломать опечаткой, ловится здесь.
+#
+# Чего он НЕ проверяет
+# --------------------
+#
+# Настоящую сеть между двумя машинами: задержку, потери на Wi-Fi, поведение
+# при обрыве физической связи, а также особенности виртуализации сети
+# Docker Desktop при выходе наружу. Это покажет только Raspberry Pi.
+#
+# Почему две изолированные сети
+# -----------------------------
+#
+# Если поставить оба контейнера в одну сеть, они найдут друг друга обычным
+# DDS напрямую, и Router окажется вообще ни при чём: тест будет зелёным,
+# ничего не проверив. Разные bridge-сети делают прямое обнаружение
+# невозможным, и остаётся ровно один путь - исходящее TCP-соединение
+# на опубликованный порт, как и с настоящей Raspberry Pi.
+#
+# Почему рядом с network_mode всегда стоит ipc
+# --------------------------------------------
+#
+# Fast DDS решает, что два участника находятся на одном хосте, по сетевому
+# окружению, и тогда выбирает для них shared memory. network_mode:
+# "service:X" делает контейнеры одним хостом с точки зрения этой проверки,
+# но /dev/shm у каждого контейнера свой, и согласованного транспорта
+# физически не существует.
+#
+# Отказ при этом тихий и обманчивый: участники видят друг друга, endpoints
+# создаются, TCP-соединение между Router-ами устанавливается - а данные
+# не идут ни по одному топику. Выглядит как неверный конфиг Router, хотя
+# ломается локальное плечо до него.
+#
+# Поэтому донор объявляется ipc: shareable, а присоединяющийся -
+# ipc: "service:X", ровно там же, где стоит network_mode.
+
+networks:
+  # Сеть "робота". Аналог локальной сети Raspberry Pi.
+  robot_net:
+    driver: bridge
+  # Сеть "ноутбука". Между сетями нет ни маршрута, ни multicast.
+  viz_net:
+    driver: bridge
+
+services:
+
+  # Сторона робота: DDS Router в роли TCP-сервера.
+  #
+  # Порт публикуется на хост, поэтому вторая сторона достучится до него
+  # через host.docker.internal - ровно как ноутбук достучится до Pi по её
+  # адресу в локальной сети.
+  robot_router:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VULCANEXUS_TAG: ${VULCANEXUS_TAG:-jazzy}
+    image: rtk2026-dds-check
+    container_name: rtk2026_robot_router
+    networks: [robot_net]
+    ipc: shareable
+    ports:
+      - "127.0.0.1:11666:11666"
+    environment:
+      ROLE: pi
+      # Адрес в listening-addresses - это адрес, который Router ОБЪЯВЛЯЕТ
+      # удалённой стороне, а не адрес привязки: слушает он на всех
+      # интерфейсах независимо от этого значения.
+      #
+      # Он обязан совпадать с тем, который клиент реально набирает.
+      # Fast DDS сопоставляет объявленный локатор с уже открытым TCP-
+      # соединением; при несовпадении сопоставления не происходит, и данные
+      # не идут, хотя соединение установлено, а топики видны на той стороне.
+      #
+      # Поэтому здесь host.docker.internal, а не 0.0.0.0 и не адрес
+      # контейнера: клиент из своей изолированной сети приходит через шлюз
+      # хоста на опубликованный порт. На настоящей Raspberry Pi по той же
+      # причине указывается её адрес в локальной сети - тот самый, который
+      # набирает ноутбук.
+      PI_ADDRESS: host.docker.internal
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_DOMAIN_ID: "0"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    init: true
+    command: router
+
+  # Имитатор робота. Делит сетевое пространство с Router, поэтому между ними
+  # работает обычный локальный DDS без всяких особенностей.
+  robot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VULCANEXUS_TAG: ${VULCANEXUS_TAG:-jazzy}
+    image: rtk2026-dds-check
+    container_name: rtk2026_robot
+    network_mode: "service:robot_router"
+    ipc: "service:robot_router"
+    depends_on: [robot_router]
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_DOMAIN_ID: "0"
+    init: true
+    command: ["python3", "/check/fake_robot.py"]
+
+  # Сторона ноутбука: DDS Router в роли TCP-клиента плюс RViz и noVNC
+  # в одном контейнере.
+  viz:
+    build:
+      context: .
+      dockerfile: Dockerfile.viz
+      args:
+        VULCANEXUS_TAG: ${VULCANEXUS_TAG:-jazzy}
+    image: rtk2026-dds-check-viz
+    container_name: rtk2026_viz
+    networks: [viz_net]
+    ipc: shareable
+    ports:
+      - "127.0.0.1:6080:6080"
+    environment:
+      # Единственный путь наружу: исходящее TCP на опубликованный порт хоста.
+      PI_ADDRESS: host.docker.internal
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_DOMAIN_ID: "0"
+    extra_hosts:
+      # На Docker Desktop имя резолвится само, но на Docker Engine под Linux
+      # его нужно задать явно.
+      - "host.docker.internal:host-gateway"
+    depends_on: [robot_router]
+    init: true
+
+  # Числовая проверка со стороны ноутбука: потери, разброс, late-joiner.
+  # Делит сетевое пространство с viz, поэтому ходит через тот же Router.
+  viz_listener:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VULCANEXUS_TAG: ${VULCANEXUS_TAG:-jazzy}
+    image: rtk2026-dds-check
+    network_mode: "service:viz"
+    ipc: "service:viz"
+    depends_on: [viz]
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_DOMAIN_ID: "0"
+    init: true
+    command: listener
+    profiles: ["tools"]
+
+  # Передатчик числовой проверки на стороне робота.
+  robot_talker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VULCANEXUS_TAG: ${VULCANEXUS_TAG:-jazzy}
+    image: rtk2026-dds-check
+    network_mode: "service:robot_router"
+    ipc: "service:robot_router"
+    depends_on: [robot_router]
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_DOMAIN_ID: "0"
+    init: true
+    command: talker
+    profiles: ["tools"]
