@@ -16,6 +16,9 @@
 :class:`~rtk2026_city_nav.manual_poses.ManualPoses`
     Позы, правленные руками, вместо расчётных.
 
+:class:`~rtk2026_city_nav.graph_view.GraphView`
+    Граф в RViz: точки решений и проходные вершины разным цветом.
+
 :mod:`rtk2026_city_nav.diagnostics`
     Задачи ``/diagnostics``, каждая от того, что описывает.
 
@@ -69,6 +72,7 @@ from rtk2026_city_nav.diagnostics import (
     RouteTask,
     SignMemoryTask,
 )
+from rtk2026_city_nav.graph_view import GraphView
 from rtk2026_city_nav.manual_poses import ManualPoses
 from rtk2026_city_nav.nav2_client import Nav2Goals
 from rtk2026_city_nav.planner import ManeuverTable, Planner, RouteState
@@ -159,6 +163,10 @@ class CityNavNode(Node):
         self._resume_service = self.create_service(
             Trigger, "~/resume", self._on_resume_request
         )
+
+        # Граф не меняется в движении, поэтому публикуется один раз.
+        self._graph_view = GraphView(self, frame_id=str(self._value("frame_id")))
+        self._graph_view.publish(self._topology)
 
         # Порог принадлежности отличает знак ближайшей точки решения от знака
         # следующей. Без него далёкий знак приписался бы не туда, поэтому при
