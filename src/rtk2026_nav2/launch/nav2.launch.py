@@ -40,29 +40,6 @@ LIFECYCLE_NODES = (
     ("nav2_bt_navigator", "bt_navigator"),
 )
 
-#: Фильтр запретных зон, объявленный в config/nav2_params.yaml.
-KEEPOUT_FILTER = "keepout_filter"
-
-
-def _params(context) -> dict:
-    """Собрать параметры стека с учётом аргументов.
-
-    Список фильтров решается здесь, а не в YAML, потому что зависит от
-    ``use_keepout``, а этот аргумент известен только в момент запуска.
-    Перезаписывается он у обеих костмап сразу: срезать угол через запретную
-    зону контроллер может ровно так же, как планировщик проложить путь.
-    """
-    use_keepout = LaunchConfiguration("use_keepout").perform(context)
-    filters = [KEEPOUT_FILTER] if use_keepout.lower() in ("true", "1") else []
-
-    return {
-        "use_sim_time": LaunchConfiguration("use_sim_time"),
-        "default_nav_through_poses_bt_xml": LaunchConfiguration("through_poses_bt"),
-        "default_nav_to_pose_bt_xml": LaunchConfiguration("to_pose_bt"),
-        "filters": str(filters),
-    }
-
-
 def _stack(context, *_args, **_kwargs) -> list:
     """Серверы и менеджер. Собираются после разбора аргументов."""
     # Время и пути к деревьям перезаписываются на всех уровнях, включая
@@ -71,9 +48,21 @@ def _stack(context, *_args, **_kwargs) -> list:
     configured_params = RewrittenYaml(
         source_file=LaunchConfiguration("params_file"),
         root_key="",
-        param_rewrites=_params(context),
+        param_rewrites={
+            "use_sim_time": LaunchConfiguration("use_sim_time"),
+            "default_nav_through_poses_bt_xml": LaunchConfiguration("through_poses_bt"),
+            "default_nav_to_pose_bt_xml": LaunchConfiguration("to_pose_bt"),
+        },
         convert_types=True,
     )
+
+    # Фильтр запретных зон добавляется файлом поверх основного: ключ filters
+    # должен либо отсутствовать, либо быть непустым, а значением его не
+    # выключить — см. config/keepout_filter.yaml.
+    use_keepout = LaunchConfiguration("use_keepout").perform(context).lower()
+    params: list = [configured_params]
+    if use_keepout in ("true", "1"):
+        params.append(LaunchConfiguration("keepout_params_file"))
 
     servers = [
         Node(
@@ -81,7 +70,7 @@ def _stack(context, *_args, **_kwargs) -> list:
             executable=executable,
             name=executable,
             output="screen",
-            parameters=[configured_params],
+            parameters=params,
         )
         for package, executable in LIFECYCLE_NODES
     ]
@@ -153,6 +142,13 @@ def generate_launch_description() -> LaunchDescription:
                     ]
                 ),
                 description="Дерево поведения для navigate_to_pose.",
+            ),
+            DeclareLaunchArgument(
+                "keepout_params_file",
+                default_value=PathJoinSubstitution(
+                    [share, "config", "keepout_filter.yaml"]
+                ),
+                description="Наложение с фильтром запретных зон.",
             ),
             DeclareLaunchArgument(
                 "use_keepout",

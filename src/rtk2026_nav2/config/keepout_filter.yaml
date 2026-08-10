@@ -1,0 +1,33 @@
+# Фильтр запретных зон, накладывается поверх nav2_params.yaml.
+#
+# Отдельным файлом, а не ключом в основном: ключ filters должен либо
+# отсутствовать, либо содержать хотя бы одно имя. Пустой список в YAML —
+# это тип, который ROS 2 вывести не может, параметр остаётся без значения,
+# и костмапа падает при его чтении. Удалять ключи RewrittenYaml не умеет,
+# поэтому включение фильтра — это добавление файла, а не правка значения.
+#
+# Требует запущенного сервера маски: без неё фильтр ждёт информацию
+# о фильтре и ничего не запрещает.
+#
+# Фильтр стоит в обеих костмапах. Глобальная не даст проложить путь через
+# запретную зону, но контроллер, срезая между позами, всё равно мог бы её
+# задеть. Маска приходит в map, локальная костмапа живёт в odom — фильтр
+# приводит её к своей системе координат сам.
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      filters: ["keepout_filter"]
+      keepout_filter:
+        plugin: "nav2_costmap_2d::KeepoutFilter"
+        enabled: true
+        filter_info_topic: "/vo_costmap_filter_info"
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      filters: ["keepout_filter"]
+      keepout_filter:
+        plugin: "nav2_costmap_2d::KeepoutFilter"
+        enabled: true
+        filter_info_topic: "/vo_costmap_filter_info"

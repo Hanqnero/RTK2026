@@ -142,15 +142,6 @@ global_costmap:
         cost_scaling_factor: 4.0
         inflation_radius: 0.02
 
-      # Запретные зоны, заданные геометрическими фигурами на карте:
-      # их публикует vector_object_server из rtk2026_vector_objects, а
-      # читает этот фильтр. Список фильтров подставляет лаунч по аргументу
-      # use_keepout, поэтому стек запускается и без сервера фигур.
-      filters: []
-      keepout_filter:
-        plugin: "nav2_costmap_2d::KeepoutFilter"
-        enabled: true
-        filter_info_topic: "/vo_costmap_filter_info"
 
 local_costmap:
   local_costmap:
@@ -199,15 +190,6 @@ local_costmap:
         cost_scaling_factor: 4.0
         inflation_radius: 0.02
 
-      # Фильтр нужен и здесь: глобальная костмапа удержит от прокладки пути
-      # через запретную зону, но контроллер, срезая между позами, всё равно
-      # мог бы её задеть. Маска приходит в map, локальная костмапа живёт
-      # в odom — фильтр приводит её к своей системе координат сам.
-      filters: []
-      keepout_filter:
-        plugin: "nav2_costmap_2d::KeepoutFilter"
-        enabled: true
-        filter_info_topic: "/vo_costmap_filter_info"
 
 behavior_server:
   ros__parameters:
