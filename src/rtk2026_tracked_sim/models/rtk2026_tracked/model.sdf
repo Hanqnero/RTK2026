@@ -1,0 +1,541 @@
+<?xml version="1.0"?>
+
+<sdf version="1.9">
+  <model name="rtk2026_tracked" canonical_link="base_footprint">
+
+    <!--
+      Отдельная гусеничная версия имеет следующие размеры:
+        корпус                  300 x 180 x 113 мм;
+        расстояние между бортами          210 мм;
+        ширина одного борта                30 мм;
+        радиус переднего и заднего носка   60 мм.
+
+      Полная ширина с гусеницами равна 240 мм, полная длина опорного
+      контура — 360 мм. Закруглённый передний контакт позволяет проверять
+      заезд на балки высотой 25 мм.
+    -->
+
+    <!--
+      Физический корневой link совпадает с ROS-frame base_footprint.
+      Корпус смещён так же, как в rtk2026_diff_drive_sim.urdf.xacro:
+      на 60 мм назад от оси привода и на 80 мм вверх от плоскости движения.
+    -->
+    <link name="base_footprint">
+      <inertial>
+        <pose>-0.060 0 0.080 0 0 0</pose>
+        <mass>1.600</mass>
+        <inertia>
+          <ixx>0.0060225</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0137025</iyy>
+          <iyz>0</iyz>
+          <izz>0.0163200</izz>
+        </inertia>
+      </inertial>
+
+      <collision name="base_collision">
+        <pose>-0.060 0 0.080 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.300 0.180 0.113</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="base_visual">
+        <pose>-0.060 0 0.080 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.300 0.180 0.113</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.45 0.48 0.52 1</ambient>
+          <diffuse>0.45 0.48 0.52 1</diffuse>
+        </material>
+      </visual>
+
+      <!--
+        IMU по центру у внутренней стороны днища.
+        Шум совпадает с колёсной симуляционной моделью.
+      -->
+      <sensor name="imu_sensor" type="imu">
+        <pose>-0.060 0 0.0285 0 0 0</pose>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <update_rate>100</update_rate>
+        <topic>/imu/data</topic>
+        <gz_frame_id>imu_link</gz_frame_id>
+        <imu>
+          <angular_velocity>
+            <x>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.002</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.002</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.002</stddev>
+              </noise>
+            </z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.02</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.02</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.02</stddev>
+              </noise>
+            </z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+
+      <!-- Лидар сверху в геометрическом центре корпуса. -->
+      <sensor name="lidar_sensor" type="gpu_lidar">
+        <pose>-0.060 0 0.1565 0 0 0</pose>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <update_rate>10</update_rate>
+        <topic>/scan</topic>
+        <gz_frame_id>lidar_frame</gz_frame_id>
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>720</samples>
+              <resolution>1</resolution>
+              <min_angle>-3.141592653589793</min_angle>
+              <max_angle>3.141592653589793</max_angle>
+            </horizontal>
+          </scan>
+          <range>
+            <min>0.12</min>
+            <max>12.0</max>
+            <resolution>0.01</resolution>
+          </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0</mean>
+            <stddev>0.005</stddev>
+          </noise>
+        </lidar>
+      </sensor>
+
+      <!--
+        Intel RealSense D435i: синхронные цвет и aligned depth.
+
+        Базовый topic /camera разворачивается Gazebo в /camera/image,
+        /camera/depth_image, /camera/camera_info и /camera/points.
+        sim_slam_launch.py приводит их к стандартным ROS-топикам D435i.
+      -->
+      <sensor name="camera_rgbd_sensor" type="rgbd_camera">
+        <pose>0.1006 0.0325 0.080 0 0 0</pose>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <update_rate>30</update_rate>
+        <topic>/camera</topic>
+        <gz_frame_id>camera_color_optical_frame</gz_frame_id>
+        <camera>
+          <horizontal_fov>1.2112585</horizontal_fov>
+          <image>
+            <width>640</width>
+            <height>480</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.10</near>
+            <far>10.0</far>
+          </clip>
+        </camera>
+      </sensor>
+
+      <!-- Встроенная IMU D435i не подменяет основную /imu/data робота. -->
+      <sensor name="camera_imu_sensor" type="imu">
+        <!--
+          Поза совпадает с camera_gyro_optical_frame официального URDF.
+          Поворот важен: в optical frame X направлен вправо, Y вниз,
+          Z вперёд. Без него данные имели бы оси base_footprint при
+          ошибочном frame_id camera_gyro_optical_frame.
+        -->
+        <pose>
+          0.08886 0.01198 0.0851
+          -1.5707963267948966 0 -1.5707963267948966
+        </pose>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <update_rate>200</update_rate>
+        <topic>/camera/imu/sample</topic>
+        <gz_frame_id>camera_gyro_optical_frame</gz_frame_id>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.000563</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.000563</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.000563</stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.00186</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.00186</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.00186</stddev></noise></z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+    </link>
+
+    <!--
+      Коллизия каждого борта — центральная полоса и два круглых носка.
+      Значения mu и mu2 взяты как стартовая настройка по примеру Gazebo.
+      Они моделируют сцепление, но не реальные грунтозацепы.
+    -->
+    <link name="left_track">
+      <pose>-0.060 0.1065 0.060 0 0 0</pose>
+      <inertial>
+        <mass>0.155</mass>
+        <inertia>
+          <ixx>0.000197625</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.001860000</iyy>
+          <iyz>0</iyz>
+          <izz>0.001685625</izz>
+        </inertia>
+      </inertial>
+
+      <collision name="left_track_center_collision">
+        <pose>0 0 -0.020 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.240 0.033 0.080</size>
+          </box>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.7</mu>
+              <mu2>150</mu2>
+              <fdir1>0 1 0</fdir1>
+            </ode>
+          </friction>
+        </surface>
+        <max_contacts>20</max_contacts>
+      </collision>
+
+      <collision name="left_track_front_collision">
+        <pose>0.120 0 0 1.5707963267948966 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.060</radius>
+            <length>0.030</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.7</mu>
+              <mu2>150</mu2>
+              <fdir1>0 1 0</fdir1>
+            </ode>
+          </friction>
+        </surface>
+        <max_contacts>20</max_contacts>
+      </collision>
+
+      <collision name="left_track_rear_collision">
+        <pose>-0.120 0 0 1.5707963267948966 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.060</radius>
+            <length>0.030</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.7</mu>
+              <mu2>150</mu2>
+              <fdir1>0 1 0</fdir1>
+            </ode>
+          </friction>
+        </surface>
+        <max_contacts>20</max_contacts>
+      </collision>
+
+      <visual name="left_track_center_visual">
+        <pose>0 0 -0.020 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.240 0.033 0.080</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.03 0.03 0.03 1</ambient>
+          <diffuse>0.05 0.05 0.05 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="left_track_front_visual">
+        <pose>0.120 0 0 1.5707963267948966 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.060</radius>
+            <length>0.030</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.03 0.03 0.03 1</ambient>
+          <diffuse>0.05 0.05 0.05 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="left_track_rear_visual">
+        <pose>-0.120 0 0 1.5707963267948966 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.060</radius>
+            <length>0.030</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.03 0.03 0.03 1</ambient>
+          <diffuse>0.05 0.05 0.05 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <joint name="left_track_joint" type="fixed">
+      <parent>base_footprint</parent>
+      <child>left_track</child>
+    </joint>
+
+    <link name="right_track">
+      <pose>-0.060 -0.1065 0.060 0 0 0</pose>
+      <inertial>
+        <mass>0.155</mass>
+        <inertia>
+          <ixx>0.000197625</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.001860000</iyy>
+          <iyz>0</iyz>
+          <izz>0.001685625</izz>
+        </inertia>
+      </inertial>
+
+      <collision name="right_track_center_collision">
+        <pose>0 0 -0.020 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.240 0.033 0.080</size>
+          </box>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.7</mu>
+              <mu2>150</mu2>
+              <fdir1>0 1 0</fdir1>
+            </ode>
+          </friction>
+        </surface>
+        <max_contacts>20</max_contacts>
+      </collision>
+
+      <collision name="right_track_front_collision">
+        <pose>0.120 0 0 1.5707963267948966 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.060</radius>
+            <length>0.030</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.7</mu>
+              <mu2>150</mu2>
+              <fdir1>0 1 0</fdir1>
+            </ode>
+          </friction>
+        </surface>
+        <max_contacts>20</max_contacts>
+      </collision>
+
+      <collision name="right_track_rear_collision">
+        <pose>-0.120 0 0 1.5707963267948966 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.060</radius>
+            <length>0.030</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.7</mu>
+              <mu2>150</mu2>
+              <fdir1>0 1 0</fdir1>
+            </ode>
+          </friction>
+        </surface>
+        <max_contacts>20</max_contacts>
+      </collision>
+
+      <visual name="right_track_center_visual">
+        <pose>0 0 -0.020 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.240 0.033 0.080</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.03 0.03 0.03 1</ambient>
+          <diffuse>0.05 0.05 0.05 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="right_track_front_visual">
+        <pose>0.120 0 0 1.5707963267948966 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.060</radius>
+            <length>0.030</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.03 0.03 0.03 1</ambient>
+          <diffuse>0.05 0.05 0.05 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="right_track_rear_visual">
+        <pose>-0.120 0 0 1.5707963267948966 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.060</radius>
+            <length>0.030</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.03 0.03 0.03 1</ambient>
+          <diffuse>0.05 0.05 0.05 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <joint name="right_track_joint" type="fixed">
+      <parent>base_footprint</parent>
+      <child>right_track</child>
+    </joint>
+
+    <!--
+      TrackController задаёт касательную скорость контактной поверхности.
+      Геометрия визуально не прокручивается: это ограничение данной модели,
+      а не отсутствие команды движения.
+    -->
+    <plugin
+      filename="gz-sim-track-controller-system"
+      name="gz::sim::systems::TrackController">
+      <link>left_track</link>
+      <min_velocity>-1.0</min_velocity>
+      <max_velocity>1.0</max_velocity>
+      <odometry_publish_frequency>50</odometry_publish_frequency>
+    </plugin>
+
+    <plugin
+      filename="gz-sim-track-controller-system"
+      name="gz::sim::systems::TrackController">
+      <link>right_track</link>
+      <min_velocity>-1.0</min_velocity>
+      <max_velocity>1.0</max_velocity>
+      <odometry_publish_frequency>50</odometry_publish_frequency>
+    </plugin>
+
+    <!--
+      TrackedVehicle переводит Twist в скорости левого и правого бортов.
+
+      tracks_separation измеряется между средними плоскостями гусениц.
+      При ширине борта 30 мм значение 210 мм даёт полный габарит 240 мм.
+
+      Скорости бортов задаются в м/с. Отдельный радиус ведущего колеса
+      TrackedVehicle не использует: модель интегрирует заданные скорости
+      контактных поверхностей, а не углы вращающихся joints.
+
+      steering_efficiency=0.5 — только стартовая модель потерь при повороте
+      скольжением; значение нужно уточнить сравнением /wheel/odom и
+      /ground_truth/odom.
+    -->
+    <plugin
+      filename="gz-sim-tracked-vehicle-system"
+      name="gz::sim::systems::TrackedVehicle">
+      <left_track>
+        <link>left_track</link>
+      </left_track>
+      <right_track>
+        <link>right_track</link>
+      </right_track>
+
+      <tracks_separation>0.210</tracks_separation>
+      <steering_efficiency>0.5</steering_efficiency>
+
+      <!--
+        Общие имена позволяют sim_slam_launch.py не зависеть от внутреннего
+        имени модели и сохраняют тот же ROS API, что у diff_drive_controller.
+      -->
+      <topic>/cmd_vel</topic>
+      <odom_topic>/wheel/odom</odom_topic>
+      <tf_topic>/model/rtk2026_tracked/tf</tf_topic>
+      <frame_id>odom</frame_id>
+      <child_frame_id>base_footprint</child_frame_id>
+      <odom_publish_frequency>50</odom_publish_frequency>
+
+      <linear_velocity>
+        <min_velocity>-0.4</min_velocity>
+        <max_velocity>0.4</max_velocity>
+        <min_acceleration>-0.6</min_acceleration>
+        <max_acceleration>0.6</max_acceleration>
+      </linear_velocity>
+
+      <angular_velocity>
+        <min_velocity>-1.5</min_velocity>
+        <max_velocity>1.5</max_velocity>
+        <min_acceleration>-2.0</min_acceleration>
+        <max_acceleration>2.0</max_acceleration>
+      </angular_velocity>
+    </plugin>
+
+    <!--
+      Поза из физического движка не участвует в EKF или SLAM.
+      Она нужна для проверки преодоления балок и калибровки одометрии.
+    -->
+    <plugin
+      filename="gz-sim-odometry-publisher-system"
+      name="gz::sim::systems::OdometryPublisher">
+      <odom_frame>ground_truth</odom_frame>
+      <robot_base_frame>base_footprint</robot_base_frame>
+      <odom_topic>/ground_truth/odom</odom_topic>
+      <tf_topic>/ground_truth/tf</tf_topic>
+      <odom_publish_frequency>50</odom_publish_frequency>
+      <dimensions>3</dimensions>
+      <gaussian_noise>0</gaussian_noise>
+    </plugin>
+  </model>
+</sdf>
