@@ -126,7 +126,12 @@ def test_five_arms_break_determinism() -> None:
     report = validate(topology, table)
 
     assert Check.DETERMINISM in _checks(report)
-    assert not report.ok
+
+    # Предупреждение, а не отказ: по покрытию робот поедет верно, произвольным
+    # окажется только выбор по знаку — а знак в такой вершине неразличим.
+    finding = next(f for f in report.findings if f.check is Check.DETERMINISM)
+    assert finding.severity is Severity.WARNING
+    assert report.ok
 
 
 def test_dead_end_vertex_you_cannot_leave_is_an_error() -> None:
