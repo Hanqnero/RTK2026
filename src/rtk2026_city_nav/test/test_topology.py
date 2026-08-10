@@ -140,8 +140,58 @@ def test_kind_geometry_excludes_branching_vertex_from_decisions() -> None:
     topology = build_topology(graph)
 
     assert 2 not in topology.decision_points
-    # Через ветвящуюся вершину цепочку провести нельзя: путь обрывается.
-    assert topology.chains == ()
+    assert topology.decision_points == frozenset({1, 3, 4})
+
+
+def test_a_branching_passthrough_serves_every_route_through_it() -> None:
+    """Одна геометрическая вершина обслуживает все маршруты сразу.
+
+    Ради этого разметку и задают руками: вершина в изломе нужна нескольким
+    путям, а останавливаться у неё робот не должен. Обойти её в одну
+    сторону значило бы оставить один маршрут из трёх.
+    """
+    graph = _t_junction()
+    graph.nodes[2] = Node(
+        node_id=2, x=1.0, y=0.0, metadata={KIND_KEY: KIND_PASSTHROUGH}
+    )
+
+    topology = build_topology(graph)
+
+    # Все пары точек решений в обе стороны, каждая через вершину 2.
+    assert {(c.start, c.end) for c in topology.chains} == {
+        (1, 3), (3, 1), (1, 4), (4, 1), (3, 4), (4, 3),
+    }
+    assert all(c.interior == (2,) for c in topology.chains)
+
+    # Геометрия склеена по ходу движения, а не как попало.
+    forward = topology.chains_between(1, 3)[0]
+    assert forward.polyline_xy == ((0.0, 0.0), (1.0, 0.0), (2.0, 0.0))
+    assert topology.chains_between(3, 1)[0].polyline_xy == forward.polyline_xy[::-1]
+
+
+def test_a_chain_never_returns_to_its_own_start() -> None:
+    """Иначе перебор путей ходил бы по циклам без конца."""
+    # Треугольник: все три вершины ветвятся, но объявлены геометрическими,
+    # кроме одной. Из неё выйти и вернуться в неё же нельзя.
+    graph = _graph(
+        nodes={1: (0.0, 0.0), 2: (1.0, 0.0), 3: (0.5, 1.0)},
+        edges=[(10, 1, 2), (11, 2, 3), (12, 3, 1)],
+    )
+    for node_id in (2, 3):
+        graph.nodes[node_id] = Node(
+            node_id=node_id,
+            x=graph.nodes[node_id].x,
+            y=graph.nodes[node_id].y,
+            metadata={KIND_KEY: KIND_PASSTHROUGH},
+        )
+    graph.nodes[1] = Node(
+        node_id=1, x=0.0, y=0.0, metadata={KIND_KEY: KIND_DECISION}
+    )
+
+    topology = build_topology(graph)
+
+    assert topology.decision_points == frozenset({1})
+    assert all(c.start != c.end for c in topology.chains)
 
 
 def test_chain_reversed_flips_ends_and_polyline() -> None:
