@@ -166,7 +166,7 @@ class CityNavNode(Node):
 
         # Граф не меняется в движении, поэтому публикуется один раз.
         self._graph_view = GraphView(self, frame_id=str(self._value("frame_id")))
-        self._graph_view.publish(self._topology)
+        self._graph_view.publish(self._graph, self._topology.decision_points)
 
         # Порог принадлежности отличает знак ближайшей точки решения от знака
         # следующей. Без него далёкий знак приписался бы не туда, поэтому при
