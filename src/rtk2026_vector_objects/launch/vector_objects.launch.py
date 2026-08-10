@@ -32,6 +32,7 @@ def generate_launch_description() -> LaunchDescription:
     params_file = LaunchConfiguration("params_file")
     add_shapes_service = LaunchConfiguration("add_shapes_service")
     frame_id = LaunchConfiguration("frame_id")
+    zones_path = LaunchConfiguration("zones_path")
 
     configured_params = ParameterFile(
         RewrittenYaml(
@@ -64,6 +65,15 @@ def generate_launch_description() -> LaunchDescription:
                 "frame_id",
                 default_value="map",
                 description="Frame, в котором коммитятся полигоны по умолчанию.",
+            ),
+            DeclareLaunchArgument(
+                "zones_path",
+                default_value="",
+                description=(
+                    "Файл размеченных зон. Пусто — зоны живут до перезапуска. "
+                    "Зоны привязаны к системе координат карты, поэтому файл "
+                    "хранят рядом с ней."
+                ),
             ),
             Node(
                 package="nav2_map_server",
@@ -98,6 +108,7 @@ def generate_launch_description() -> LaunchDescription:
                 parameters=[
                     {"add_shapes_service": add_shapes_service},
                     {"frame_id": frame_id},
+                    {"zones_path": zones_path},
                 ],
             ),
         ]
