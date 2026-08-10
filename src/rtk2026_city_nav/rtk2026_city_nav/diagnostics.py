@@ -249,6 +249,15 @@ class DetectionTask(DiagnosticTask):
 
     def run(self, status):
         latch = self._latch
+
+        if latch.min_box_area_px <= 0.0:
+            status.add("Порог принадлежности, пикс2", "не задан")
+            status.summary(
+                DiagnosticStatus.OK,
+                "знаки не учитываются: маршрут по покрытию",
+            )
+            return status
+
         publishers = self._node.count_publishers(self._topic)
 
         status.add("Topic", self._topic)

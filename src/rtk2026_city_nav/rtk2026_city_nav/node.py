@@ -160,10 +160,22 @@ class CityNavNode(Node):
             Trigger, "~/resume", self._on_resume_request
         )
 
+        # Порог принадлежности отличает знак ближайшей точки решения от знака
+        # следующей. Без него далёкий знак приписался бы не туда, поэтому при
+        # нуле детекции не читаются вовсе, и маршрут идёт по покрытию.
         detection_topic = str(self._value("detection_topic"))
-        self._detections = self.create_subscription(
-            DrivingDetection, detection_topic, self._on_detection, 10
+        self._detections = (
+            self.create_subscription(
+                DrivingDetection, detection_topic, self._on_detection, 10
+            )
+            if self._latch.min_box_area_px > 0.0
+            else None
         )
+        if self._detections is None:
+            logger.warn(
+                "min_box_area_px не задан: знаки не учитываются, "
+                "маршрут пойдёт по покрытию"
+            )
 
         self._updater = Updater(self, period=float(self._value("diagnostic_period_s")))
         self._updater.setHardwareID("rtk2026_city_nav")
@@ -209,12 +221,6 @@ class CityNavNode(Node):
             return (
                 f"из состояния {self._start.previous} -> {self._start.current} "
                 "нет ни одного маневра: это должны быть смежные точки решений"
-            )
-
-        if float(self._value("min_box_area_px")) <= 0.0:
-            return (
-                "min_box_area_px не задан: без порога принадлежности далёкий "
-                "знак будет отнесён к текущей точке решения"
             )
 
         if self._report.errors and bool(self._value("halt_on_validation_error")):
