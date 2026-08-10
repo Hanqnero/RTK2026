@@ -169,6 +169,12 @@ def _check_determinism(table: ManeuverTable) -> list[Finding]:
     for state in table.states:
         by_maneuver: dict[Maneuver, list[int]] = {}
         for candidate in table.candidates(state):
+            # Возврат туда, откуда приехали, планировщик отбрасывает, поэтому
+            # в выбор он не попадает и столкнуться ни с чем не может. Считать
+            # его здесь значило бы сообщать о неоднозначностях, которых в
+            # движении не бывает, и прятать за ними настоящие.
+            if candidate.target == state.previous:
+                continue
             by_maneuver.setdefault(candidate.maneuver, []).append(candidate.target)
 
         for maneuver, targets in sorted(by_maneuver.items()):
