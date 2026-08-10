@@ -1,0 +1,103 @@
+amcl:
+  ros__parameters:
+
+    # Фреймы соответствуют общей схеме RTK2026:
+    # map -> odom принадлежит AMCL;
+    # odom -> base_footprint принадлежит EKF.
+    global_frame_id: map
+    odom_frame_id: odom
+    base_frame_id: base_footprint
+
+    scan_topic: /scan
+    map_topic: /map
+
+    # AMCL должен быть единственным издателем map -> odom в режиме
+    # локализации. Одновременно запускать slam_toolbox нельзя.
+    tf_broadcast: true
+    transform_tolerance: 0.5
+
+    # Дифференциальная кинематическая модель.
+    robot_model_type: nav2_amcl::DifferentialMotionModel
+
+    # Начальная модель ошибок одометрии.
+    # Значения требуют калибровки по повторяемым заездам; увеличение alpha
+    # расширяет распределение частиц при соответствующем движении.
+    alpha1: 0.2
+    alpha2: 0.2
+    alpha3: 0.2
+    alpha4: 0.2
+    alpha5: 0.2
+
+    # KLD-sampling меняет число частиц между этими границами.
+    min_particles: 500
+    max_particles: 2000
+    pf_err: 0.05
+    pf_z: 0.99
+    resample_interval: 1
+
+    # Обновлять particle filter после небольшого движения: мир имеет размер
+    # порядка нескольких метров, а лидар публикует примерно 10 Гц.
+    update_min_d: 0.05
+    update_min_a: 0.05
+
+    # Likelihood field сравнивает лучи с полем расстояний карты.
+    #
+    # Масштабы модели держим мельче размеров обстановки, иначе поле
+    # правдоподобия становится почти плоским: близкие позы получают близкие
+    # оценки, и фильтр не отличает их друг от друга.
+    laser_model_type: likelihood_field
+
+    # Больше лучей — острее оценка. В обстановке с повторяющимися элементами
+    # это главное, что отличает похожие позы.
+    max_beams: 120
+
+    laser_min_range: 0.12
+
+    # Дальше границ карты сравнивать не с чем: луч всё равно вернёт максимум.
+    laser_max_range: 5.0
+
+    # Радиус размытия поля расстояний. Должен быть меньше расстояния между
+    # соседними элементами обстановки, иначе они сливаются в один отклик.
+    laser_likelihood_max_dist: 0.4
+
+    # Ожидаемый разброс попадания. Соизмерим с разрешением карты, а не
+    # с размером робота.
+    sigma_hit: 0.08
+
+    lambda_short: 0.1
+
+    # Вес попадания против случайной составляющей. Чем острее модель, тем
+    # сильнее наблюдение сужает распределение.
+    z_hit: 0.8
+    z_short: 0.05
+    z_max: 0.05
+    z_rand: 0.1
+
+    # Beam skipping на первом этапе выключен: сначала проверяем корректность
+    # карты, LaserScan и TF без дополнительной эвристики.
+    do_beamskip: false
+    beam_skip_distance: 0.5
+    beam_skip_threshold: 0.3
+    beam_skip_error_threshold: 0.9
+
+    # Нулевая recovery probability означает отсутствие случайной инъекции
+    # частиц. После базовых тестов её можно включить для kidnapped robot.
+    recovery_alpha_slow: 0.0
+    recovery_alpha_fast: 0.0
+
+    save_pose_rate: 0.5
+    first_map_only: true
+
+    # По умолчанию оператор обязан задать 2D Pose Estimate в RViz или
+    # опубликовать /initialpose. Это безопаснее, чем молча считать (0, 0, 0).
+    set_initial_pose: false
+    always_reset_initial_pose: false
+
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0
+
+    introspection_mode: disabled
+    random_seed: -1

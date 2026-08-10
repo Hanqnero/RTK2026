@@ -1,14 +1,33 @@
 <?xml version="1.0"?>
-<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+
 <package format="3">
   <name>rtk2026_localization</name>
   <version>0.1.0</version>
-  <description>EKF localization: fuse odom (and IMU when available)</description>
-  <maintainer email="maintainer@example.com">RTK2026 Team</maintainer>
+
+  <description>
+    Local odometry filtering with robot_localization and particle
+    localization with Nav2 AMCL for RTK2026.
+  </description>
+
+  <maintainer email="kamilisxakof@gmail.com">
+    RTK2026 Team
+  </maintainer>
+
   <license>Apache-2.0</license>
-  <depend>robot_localization</depend>
-  <depend>launch</depend>
-  <depend>launch_ros</depend>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <!-- Локальный фильтр непрерывной одометрии. -->
+  <exec_depend>robot_localization</exec_depend>
+
+  <!-- Particle localization по известной OccupancyGrid. -->
+  <exec_depend>nav2_amcl</exec_depend>
+  <exec_depend>nav2_map_server</exec_depend>
+  <exec_depend>nav2_lifecycle_manager</exec_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>

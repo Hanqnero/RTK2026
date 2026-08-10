@@ -1,0 +1,91 @@
+ekf_filter_node:
+  ros__parameters:
+
+    # Частота predict/correct и публикации /odometry/filtered.
+    frequency: 50.0
+
+    # После 0.2 секунды без измерения выполняется только predict.
+    # Запас подходит и для симуляционных 50 Гц, и для firmware около 10 Гц.
+    sensor_timeout: 0.2
+
+    # Все Z/roll/pitch-состояния фиксируются для плоского робота.
+    two_d_mode: true
+
+    transform_time_offset: 0.0
+    transform_timeout: 0.0
+
+    # Сводка проблем конфигурации и сенсоров публикуется в /diagnostics.
+    print_diagnostics: true
+
+    # Матричный debug сильно снижает производительность и постоянно не нужен.
+    debug: false
+
+    publish_acceleration: false
+
+    # EKF является единственным издателем odom -> base_footprint.
+    publish_tf: true
+
+    # map -> odom публикует выбранный глобальный backend:
+# slam_toolbox, RTAB-Map или AMCL.
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_footprint
+    world_frame: odom
+
+    # Единственный рабочий источник поступательной скорости — колёсная
+    # одометрия. Для diff_drive её вычисляет штатный diff_drive_controller по
+    # position state двух motor joints. На реальном роботе тот же ROS API
+    # публикует Arduino bridge по физическим энкодерам.
+    #
+    # /ground_truth/odom намеренно не подключён к EKF: он остаётся только
+    # эталоном для оценки и калибровки.
+    odom0: /wheel/odom
+
+    # Порядок 15 флагов:
+    # x, y, z,
+    # roll, pitch, yaw,
+    # vx, vy, vz,
+    # vroll, vpitch, vyaw,
+    # ax, ay, az.
+    #
+    # На первом этапе используем:
+    #   vx   — измеренную скорость вперёд;
+    #   vy=0 — кинематическое ограничение дифференциального робота;
+    # Угловую скорость по колёсам не используем после подключения IMU:
+    # она сильнее зависит от wheel_separation и проскальзывания при повороте.
+    #
+    # Pose из /wheel/odom также не объединяем одновременно с её twist:
+    # обе величины получены из одних и тех же энкодерных отсчётов.
+    odom0_config:
+      [false, false, false,
+       false, false, false,
+       true,  true,  false,
+       false, false, false,
+       false, false, false]
+
+    odom0_differential: false
+    odom0_relative: false
+    odom0_queue_size: 10
+
+    # Команда /cmd_vel не используется как измерение или ускорение модели.
+    use_control: false
+
+    # Симуляционная IMU публикуется относительно imu_link.
+    imu0: /imu/data
+
+    # Из IMU используем только angular_velocity.z.
+    # Orientation yaw намеренно выключен: будущий BMI270 без магнитометра не
+    # даёт независимый абсолютный курс, а акселерометр не нужен 2D EKF сейчас.
+    imu0_config:
+      [false, false, false,
+       false, false, false,
+       false, false, false,
+       false, false, true,
+       false, false, false]
+
+    imu0_differential: false
+    imu0_relative: false
+    imu0_queue_size: 20
+
+    # Флаг не влияет, пока linear acceleration не включено в imu0_config.
+    imu0_remove_gravitational_acceleration: false

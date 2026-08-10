@@ -17,7 +17,6 @@ from collections.abc import Callable
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import NavigateThroughPoses
-from nav_msgs.msg import Goals
 from nav_msgs.msg import Path as PathMsg
 from rclpy.action import ActionClient
 from rclpy.action.client import ClientGoalHandle
@@ -67,13 +66,8 @@ class Nav2Goals:
             self._on_failed("nav2_unavailable")
             return
 
-        goals = Goals()
-        goals.header.frame_id = self._frame_id
-        goals.header.stamp = self._node.get_clock().now().to_msg()
-        goals.goals = list(stamped)
-
         goal = NavigateThroughPoses.Goal()
-        goal.poses = goals
+        goal.poses = list(stamped)
 
         self._client.send_goal_async(goal).add_done_callback(self._on_response)
 

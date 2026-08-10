@@ -19,6 +19,7 @@ setup(
             glob("config/*.yaml") + glob("config/*.geojson"),
         ),
         (f"share/{package_name}/launch", glob("launch/*.launch.py")),
+        (f"share/{package_name}/rviz", glob("rviz/*.rviz")),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
