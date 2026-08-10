@@ -224,7 +224,7 @@
         <pose>0 0 -0.020 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.240 0.033 0.080</size>
+            <size>0.190 0.033 0.080</size>
           </box>
         </geometry>
         <surface>
@@ -240,7 +240,7 @@
       </collision>
 
       <collision name="left_track_front_collision">
-        <pose>0.120 0 0 1.5707963267948966 0 0</pose>
+        <pose>0.095 0 0 1.5707963267948966 0 0</pose>
         <geometry>
           <cylinder>
             <radius>0.060</radius>
@@ -260,7 +260,7 @@
       </collision>
 
       <collision name="left_track_rear_collision">
-        <pose>-0.120 0 0 1.5707963267948966 0 0</pose>
+        <pose>-0.095 0 0 1.5707963267948966 0 0</pose>
         <geometry>
           <cylinder>
             <radius>0.060</radius>
@@ -283,7 +283,7 @@
         <pose>0 0 -0.020 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.240 0.033 0.080</size>
+            <size>0.190 0.033 0.080</size>
           </box>
         </geometry>
         <material>
@@ -293,7 +293,7 @@
       </visual>
 
       <visual name="left_track_front_visual">
-        <pose>0.120 0 0 1.5707963267948966 0 0</pose>
+        <pose>0.095 0 0 1.5707963267948966 0 0</pose>
         <geometry>
           <cylinder>
             <radius>0.060</radius>
@@ -307,7 +307,7 @@
       </visual>
 
       <visual name="left_track_rear_visual">
-        <pose>-0.120 0 0 1.5707963267948966 0 0</pose>
+        <pose>-0.095 0 0 1.5707963267948966 0 0</pose>
         <geometry>
           <cylinder>
             <radius>0.060</radius>
@@ -344,7 +344,7 @@
         <pose>0 0 -0.020 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.240 0.033 0.080</size>
+            <size>0.190 0.033 0.080</size>
           </box>
         </geometry>
         <surface>
@@ -360,7 +360,7 @@
       </collision>
 
       <collision name="right_track_front_collision">
-        <pose>0.120 0 0 1.5707963267948966 0 0</pose>
+        <pose>0.095 0 0 1.5707963267948966 0 0</pose>
         <geometry>
           <cylinder>
             <radius>0.060</radius>
@@ -380,7 +380,7 @@
       </collision>
 
       <collision name="right_track_rear_collision">
-        <pose>-0.120 0 0 1.5707963267948966 0 0</pose>
+        <pose>-0.095 0 0 1.5707963267948966 0 0</pose>
         <geometry>
           <cylinder>
             <radius>0.060</radius>
@@ -403,7 +403,7 @@
         <pose>0 0 -0.020 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.240 0.033 0.080</size>
+            <size>0.190 0.033 0.080</size>
           </box>
         </geometry>
         <material>
@@ -413,7 +413,7 @@
       </visual>
 
       <visual name="right_track_front_visual">
-        <pose>0.120 0 0 1.5707963267948966 0 0</pose>
+        <pose>0.095 0 0 1.5707963267948966 0 0</pose>
         <geometry>
           <cylinder>
             <radius>0.060</radius>
@@ -427,7 +427,7 @@
       </visual>
 
       <visual name="right_track_rear_visual">
-        <pose>-0.120 0 0 1.5707963267948966 0 0</pose>
+        <pose>-0.095 0 0 1.5707963267948966 0 0</pose>
         <geometry>
           <cylinder>
             <radius>0.060</radius>

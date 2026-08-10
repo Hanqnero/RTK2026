@@ -18,10 +18,15 @@
   -->
   <xacro:property name="base_length" value="0.300"/>
   <!--
-    Полный поперечный габарит равен 240 мм:
+    Полный поперечный габарит равен 246 мм:
       корпус 180 мм;
-      две гусеницы по 30 мм;
-      средние плоскости гусениц разнесены на 210 мм.
+      две гусеницы по 33 мм;
+      средние плоскости гусениц разнесены на 213 мм.
+
+    Продольный габарит 310 мм задают не корпус, а колёса гусениц:
+      корпус 300 мм, от -0.210 до +0.090 от оси привода;
+      колёса от -0.215 до +0.095.
+    В footprint для Nav2 идёт наружный, то есть 310 мм.
   -->
   <xacro:property name="base_width" value="0.180"/>
   <xacro:property name="base_height" value="0.113"/>
@@ -31,7 +36,7 @@
   <xacro:property name="track_separation" value="0.213"/>
   <xacro:property name="track_width" value="0.033"/>
   <xacro:property name="track_radius" value="0.060"/>
-  <xacro:property name="track_end_x" value="0.120"/>
+  <xacro:property name="track_end_x" value="0.095"/>
 
   <link name="base_footprint"/>
 
@@ -61,7 +66,7 @@
       <visual name="center_visual">
         <origin xyz="0 0 -0.020" rpy="0 0 0"/>
         <geometry>
-          <box size="0.240 ${track_width} 0.080"/>
+          <box size="${2.0 * track_end_x} ${track_width} 0.080"/>
         </geometry>
         <material name="${side}_track_black">
           <color rgba="0.04 0.04 0.04 1"/>
