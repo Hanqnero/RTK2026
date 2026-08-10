@@ -30,6 +30,10 @@ from rtk2026_city_nav.topology import Chain, Topology
 #: Порог классов «прямо» и «разворот» по умолчанию.
 DEFAULT_STRAIGHT_TOLERANCE_RAD = math.radians(30.0)
 
+#: Предел крутизны маневра по умолчанию. Выход, повёрнутый круче, в выбор
+#: не идёт: на перекрёстке это не поворот, а возврат назад другим путём.
+DEFAULT_MAX_TURN_RAD = math.radians(90.0)
+
 
 @dataclass(frozen=True)
 class RouteState:
@@ -48,7 +52,7 @@ class DecisionSource(str, Enum):
     REMEMBERED_SIGN = "remembered_sign"
     #: Знака не было либо для него нет маневра: выбор по покрытию.
     COVERAGE = "coverage"
-    #: Кроме разворота выбирать было нечего.
+    #: Доступного не нашлось, поехали по недоступному: тупик.
     UTURN_FALLBACK = "uturn_fallback"
 
 
@@ -80,6 +84,38 @@ class Decision:
 
 class NoManeuverAvailable(RuntimeError):
     """В состоянии нет ни одного маневра: тупик, не предусмотренный графом."""
+
+
+def reachable(
+    candidates: tuple[Candidate, ...],
+    state: RouteState,
+    *,
+    max_turn_rad: float = DEFAULT_MAX_TURN_RAD,
+) -> tuple[Candidate, ...]:
+    """Выходы, доступные для выбора в этом состоянии.
+
+    Недоступны два рода выходов.
+
+    Возврат туда, откуда приехали: робот не должен кататься туда-обратно по
+    одной цепочке. Отбирается по номеру вершины, а не по метке разворота:
+    метка считается от хорды до цели, и предыдущая вершина бывает не строго
+    позади, а сбоку.
+
+    Маневр круче ``max_turn_rad``: на перекрёстке это не поворот, а возврат
+    назад другим путём.
+
+    Той же функцией пользуется проверка графа, поэтому доступность в выборе
+    и в проверке одна и та же.
+
+    :returns: пусто, если доступного нет. Так выглядит тупик; вызывающий сам
+        решает, разрешить ли недоступное.
+    """
+    return tuple(
+        candidate
+        for candidate in candidates
+        if candidate.target != state.previous
+        and abs(candidate.turn_rad) <= max_turn_rad
+    )
 
 
 class ManeuverTable:
@@ -171,6 +207,8 @@ class Planner:
     table: ManeuverTable
     #: Сколько раз посещена каждая точка решения.
     visits: dict[int, int] = field(default_factory=dict[int, int])
+    #: Предел крутизны маневра; круче в выбор не идёт.
+    max_turn_rad: float = DEFAULT_MAX_TURN_RAD
 
     def decide(
         self,
@@ -192,12 +230,7 @@ class Planner:
 
         hint = (advice or SignAdvice()).resolved()
 
-        # Возврат отбрасывается по номеру вершины, а не по метке разворота:
-        # метка считается от хорды до цели, и вершина, из которой приехали,
-        # может оказаться не строго позади, а сбоку. Тогда возврат по той же
-        # цепочке выглядел бы обычным поворотом и попал бы в выбор, а робот
-        # застрял бы, катаясь туда-обратно.
-        forward = tuple(c for c in available if c.target != state.previous)
+        forward = reachable(available, state, max_turn_rad=self.max_turn_rad)
         pool = forward if forward else available
         source = (
             DecisionSource.COVERAGE if forward else DecisionSource.UTURN_FALLBACK

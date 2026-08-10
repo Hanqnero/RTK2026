@@ -15,7 +15,12 @@ from dataclasses import dataclass
 from enum import Enum
 
 from rtk2026_city_nav.maneuver import Maneuver
-from rtk2026_city_nav.planner import ManeuverTable, RouteState
+from rtk2026_city_nav.planner import (
+    DEFAULT_MAX_TURN_RAD,
+    ManeuverTable,
+    RouteState,
+    reachable,
+)
 from rtk2026_city_nav.topology import Topology
 
 
@@ -105,21 +110,23 @@ def validate(
     table: ManeuverTable,
     *,
     start: RouteState | None = None,
+    max_turn_rad: float = DEFAULT_MAX_TURN_RAD,
 ) -> Report:
     """Прогнать все проверки.
 
     :param start: начальное состояние. Без него проверка достижимости
         пропускается: не от чего считать.
+    :param max_turn_rad: предел крутизны маневра, тот же, что у выбора.
     """
     findings: list[Finding] = []
 
     findings.extend(_check_chain_uniqueness(topology))
-    findings.extend(_check_determinism(table))
+    findings.extend(_check_determinism(table, max_turn_rad))
     findings.extend(_check_dead_ends(topology, table))
-    findings.extend(_check_forward_liveness(table))
+    findings.extend(_check_forward_liveness(table, max_turn_rad))
 
     if start is not None:
-        findings.extend(_check_reachability(table, start))
+        findings.extend(_check_reachability(table, start, max_turn_rad))
 
     return Report(findings=tuple(findings))
 
@@ -151,7 +158,7 @@ def _check_chain_uniqueness(topology: Topology) -> list[Finding]:
     ]
 
 
-def _check_determinism(table: ManeuverTable) -> list[Finding]:
+def _check_determinism(table: ManeuverTable, max_turn_rad: float) -> list[Finding]:
     """Одному маневру в состоянии — не больше одного выхода.
 
     Нарушается, когда несколько цепочек уходят из вершины по одному и тому
@@ -168,13 +175,9 @@ def _check_determinism(table: ManeuverTable) -> list[Finding]:
 
     for state in table.states:
         by_maneuver: dict[Maneuver, list[int]] = {}
-        for candidate in table.candidates(state):
-            # Возврат туда, откуда приехали, планировщик отбрасывает, поэтому
-            # в выбор он не попадает и столкнуться ни с чем не может. Считать
-            # его здесь значило бы сообщать о неоднозначностях, которых в
-            # движении не бывает, и прятать за ними настоящие.
-            if candidate.target == state.previous:
-                continue
+        for candidate in reachable(
+            table.candidates(state), state, max_turn_rad=max_turn_rad
+        ):
             by_maneuver.setdefault(candidate.maneuver, []).append(candidate.target)
 
         for maneuver, targets in sorted(by_maneuver.items()):
@@ -219,7 +222,7 @@ def _check_dead_ends(topology: Topology, table: ManeuverTable) -> list[Finding]:
     return findings
 
 
-def _check_forward_liveness(table: ManeuverTable) -> list[Finding]:
+def _check_forward_liveness(table: ManeuverTable, max_turn_rad: float) -> list[Finding]:
     """Из каждого состояния должен быть маневр, отличный от разворота.
 
     Где его нет — настоящий тупиковый отросток. Ехать оттуда можно только
@@ -229,9 +232,9 @@ def _check_forward_liveness(table: ManeuverTable) -> list[Finding]:
     findings: list[Finding] = []
 
     for state in table.states:
-        forward = [
-            c for c in table.candidates(state) if c.maneuver is not Maneuver.UTURN
-        ]
+        forward = reachable(
+            table.candidates(state), state, max_turn_rad=max_turn_rad
+        )
         if not forward:
             findings.append(
                 Finding(
@@ -248,7 +251,9 @@ def _check_forward_liveness(table: ManeuverTable) -> list[Finding]:
     return findings
 
 
-def _check_reachability(table: ManeuverTable, start: RouteState) -> list[Finding]:
+def _check_reachability(
+    table: ManeuverTable, start: RouteState, max_turn_rad: float
+) -> list[Finding]:
     """Все состояния должны быть достижимы из начального.
 
     Иначе исследование запирает себя в подобласти: счётчики посещений
@@ -269,7 +274,12 @@ def _check_reachability(table: ManeuverTable, start: RouteState) -> list[Finding
     frontier = [start]
     while frontier:
         state = frontier.pop()
-        for candidate in table.candidates(state):
+        available = table.candidates(state)
+        # Из тупика выбор идёт по недоступному, иначе ехать было бы некуда.
+        # Обход повторяет это, чтобы не объявлять недостижимым то, куда
+        # робот доедет.
+        pool = reachable(available, state, max_turn_rad=max_turn_rad) or available
+        for candidate in pool:
             following = RouteState(previous=state.current, current=candidate.target)
             if following not in reached:
                 reached.add(following)

@@ -9,6 +9,7 @@ from rtk2026_city_nav.planner import (
     NoManeuverAvailable,
     Planner,
     RouteState,
+    reachable,
 )
 from rtk2026_city_nav.topology import KIND_DECISION, KIND_KEY, build_topology
 from rtk2026_pose_graph.model import Node, OrientedEdge, RoadGraph
@@ -320,3 +321,90 @@ def test_prohibition_leaving_nothing_is_ignored_but_reported() -> None:
 
     assert decision.maneuver == forward[0]
     assert decision.prohibition_ignored is True
+
+
+# -- Доступность выходов ---------------------------------------------------
+
+
+def _fan() -> RoadGraph:
+    """Вершина 0 с выходами под -135, -45, 0, +45, +135 от прибытия с юга."""
+    nodes = {
+        0: (0.0, 0.0),
+        1: (0.0, -1.0),          # юг, откуда приезжаем
+        2: (-1.0, -1.0),         # -135
+        3: (-1.0, 1.0),          # +135... считаем от курса на север
+        4: (1.0, 1.0),
+        5: (1.0, -1.0),
+        6: (0.0, 1.0),           # прямо
+    }
+    return RoadGraph(
+        nodes={n: Node(node_id=n, x=xy[0], y=xy[1]) for n, xy in nodes.items()},
+        edges={
+            eid: OrientedEdge(
+                edge_id=eid, start_id=0, end_id=other,
+                polyline_xy=(nodes[0], nodes[other]),
+            )
+            for eid, other in enumerate((1, 2, 3, 4, 5, 6), start=10)
+        },
+    )
+
+
+def test_reachable_drops_the_vertex_we_came_from() -> None:
+    table = ManeuverTable(build_topology(_fan()))
+    state = RouteState(previous=1, current=0)
+
+    targets = {c.target for c in reachable(table.candidates(state), state)}
+
+    assert 1 not in targets
+
+
+def test_reachable_drops_turns_sharper_than_the_limit() -> None:
+    """Круче предела — это уже не поворот, а возврат назад другим путём."""
+    table = ManeuverTable(build_topology(_fan()))
+    state = RouteState(previous=1, current=0)
+
+    kept = reachable(table.candidates(state), state)
+    dropped = {
+        c.target for c in table.candidates(state) if c not in kept and c.target != 1
+    }
+
+    assert all(abs(c.turn_deg) <= 90.0 + 1e-9 for c in kept)
+    assert dropped, "у веера обязаны быть выходы круче предела"
+    assert all(
+        abs(c.turn_deg) > 90.0
+        for c in table.candidates(state)
+        if c.target in dropped
+    )
+
+
+def test_a_wider_limit_keeps_more_exits() -> None:
+    table = ManeuverTable(build_topology(_fan()))
+    state = RouteState(previous=1, current=0)
+
+    narrow = reachable(table.candidates(state), state, max_turn_rad=math.radians(45.0))
+    wide = reachable(table.candidates(state), state, max_turn_rad=math.radians(150.0))
+
+    assert {c.target for c in narrow} < {c.target for c in wide}
+
+
+def test_at_a_dead_end_the_choice_falls_back_to_what_is_left() -> None:
+    """Иначе из тупика ехать было бы некуда."""
+    nodes = {0: (0.0, 0.0), 1: (0.0, 1.0)}
+    graph = RoadGraph(
+        nodes={n: Node(node_id=n, x=xy[0], y=xy[1]) for n, xy in nodes.items()},
+        edges={
+            10: OrientedEdge(
+                edge_id=10, start_id=0, end_id=1,
+                polyline_xy=(nodes[0], nodes[1]),
+            )
+        },
+    )
+    table = ManeuverTable(build_topology(graph))
+    state = RouteState(previous=0, current=1)
+
+    assert reachable(table.candidates(state), state) == ()
+
+    decision = Planner(table).decide(state)
+
+    assert decision.target == 0
+    assert decision.source == DecisionSource.UTURN_FALLBACK.value
