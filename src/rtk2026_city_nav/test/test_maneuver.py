@@ -8,7 +8,7 @@ from rtk2026_city_nav.maneuver import (
     classify,
     classify_candidates,
     tangent_at_end,
-    tangent_at_start,
+    chord_direction,
     turn_angle,
 )
 
@@ -151,21 +151,48 @@ def test_maneuver_order_is_total_and_covers_all_classes() -> None:
     assert len(MANEUVER_ORDER) == len(Maneuver)
 
 
-def test_tangents_taken_at_the_vertex_not_across_the_chain() -> None:
-    """Изогнутая цепочка: прямая между концами не параллельна ни одному концу."""
+def test_arrival_direction_is_the_last_segment_not_the_chord() -> None:
+    """Курс прибытия — то, чем робот подъехал.
+
+    Изогнутая цепочка: прямая между её концами роботу не параллельна,
+    поэтому направление прибытия по ней брать нельзя.
+    """
     bent = ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0))
 
-    assert tangent_at_start(bent) == pytest.approx(EAST)
     assert tangent_at_end(bent) == pytest.approx(NORTH)
+    # Хорда этой же цепочки смотрит на северо-восток, то есть ни туда ни сюда.
+    assert chord_direction(bent[0], bent[-1]) == pytest.approx(
+        (0.5 ** 0.5, 0.5 ** 0.5)
+    )
 
 
-def test_tangents_skip_degenerate_segments() -> None:
+def test_arrival_direction_skips_degenerate_segments() -> None:
     with_repeats = ((0.0, 0.0), (0.0, 0.0), (1.0, 0.0), (1.0, 0.0))
 
-    assert tangent_at_start(with_repeats) == pytest.approx(EAST)
     assert tangent_at_end(with_repeats) == pytest.approx(EAST)
 
 
-def test_tangents_of_degenerate_polyline_are_none() -> None:
-    assert tangent_at_start(((1.0, 1.0),)) is None
+def test_direction_of_a_degenerate_pair_is_none() -> None:
     assert tangent_at_end(((1.0, 1.0), (1.0, 1.0))) is None
+    assert chord_direction((1.0, 1.0), (1.0, 1.0)) is None
+
+
+def test_departure_chord_separates_exits_that_share_their_first_edge() -> None:
+    """Ради этого отбытие и считается хордой, а не первым сегментом.
+
+    Три цепочки уходят из вершины одним ребром на восток и расходятся
+    дальше. По первому сегменту они неразличимы, по хорде — расходятся
+    на левый, прямой и правый.
+    """
+    here = (0.0, 0.0)
+    arrival = EAST
+
+    for target, expected in (
+        ((1.0, 1.0), +45.0),
+        ((1.0, 0.0), 0.0),
+        ((1.0, -1.0), -45.0),
+    ):
+        departure = chord_direction(here, target)
+        assert departure is not None
+        turn = math.degrees(turn_angle(arrival, departure))
+        assert turn == pytest.approx(expected)

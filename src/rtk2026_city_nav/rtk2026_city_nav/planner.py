@@ -21,8 +21,8 @@ from rtk2026_city_nav.maneuver import (
     Maneuver,
     SignAdvice,
     classify_candidates,
+    chord_direction,
     tangent_at_end,
-    tangent_at_start,
     turn_angle,
 )
 from rtk2026_city_nav.topology import Chain, Topology
@@ -137,12 +137,17 @@ class ManeuverTable:
             if arrival_tangent is None:
                 continue
 
+            here = self._topology.graph.nodes[state.current]
+
             turns: dict[int, float] = {}
             for outgoing in self._topology.chains_from(state.current):
-                departure_tangent = tangent_at_start(outgoing.polyline_xy)
-                if departure_tangent is None:
+                target = self._topology.graph.nodes.get(outgoing.end)
+                if target is None:
                     continue
-                turns[outgoing.end] = turn_angle(arrival_tangent, departure_tangent)
+                departure = chord_direction(here.xy, target.xy)
+                if departure is None:
+                    continue
+                turns[outgoing.end] = turn_angle(arrival_tangent, departure)
 
             if turns:
                 self._by_state[state] = classify_candidates(
@@ -187,7 +192,12 @@ class Planner:
 
         hint = (advice or SignAdvice()).resolved()
 
-        forward = tuple(c for c in available if c.maneuver is not Maneuver.UTURN)
+        # Возврат отбрасывается по номеру вершины, а не по метке разворота:
+        # метка считается от хорды до цели, и вершина, из которой приехали,
+        # может оказаться не строго позади, а сбоку. Тогда возврат по той же
+        # цепочке выглядел бы обычным поворотом и попал бы в выбор, а робот
+        # застрял бы, катаясь туда-обратно.
+        forward = tuple(c for c in available if c.target != state.previous)
         pool = forward if forward else available
         source = (
             DecisionSource.COVERAGE if forward else DecisionSource.UTURN_FALLBACK
