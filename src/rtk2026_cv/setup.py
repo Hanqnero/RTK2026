@@ -19,12 +19,14 @@ setup(
     zip_safe=True,
     maintainer="RTK2026",
     maintainer_email="kamilisxakof@gmail.com",
-    description="Traffic sign and bus detection adapter for RTK2026.",
+    description="Computer-vision processing and calibration nodes for RTK2026.",
     license="Apache-2.0",
     entry_points={
         "console_scripts": [
             "yolo_sign_adapter = rtk2026_cv.yolo_sign_adapter_node:main",
             "onnx_sign_detector = rtk2026_cv.onnx_sign_detector_node:main",
+            "perspective_hsv_tuner = rtk2026_cv.perspective_hsv_tuner_node:main",
+            "export_frame_pairs = rtk2026_cv.frame_pair_exporter:main",
         ]
     },
 )

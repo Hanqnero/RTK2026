@@ -27,7 +27,7 @@ setup(
     install_requires=["setuptools", "numpy"],
     zip_safe=True,
     maintainer="RTK2026",
-    maintainer_email="user@example.com",
+    maintainer_email="kamilisxakof@gmail.com",
     description="Frontier-based autonomous exploration node for RTK2026 (Nav2 + SLAM).",
     license="Apache-2.0",
     tests_require=["pytest"],

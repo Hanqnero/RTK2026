@@ -1,0 +1,39 @@
+perspective_hsv_tuner:
+  ros__parameters:
+    # Вход симуляционной RealSense и выходные отладочные изображения.
+    image_topic: "/camera/color/image_raw"
+    projected_topic: "/cv/perspective/image"
+    mask_topic: "/cv/perspective/hsv_mask"
+    filtered_topic: "/cv/perspective/hsv_filtered"
+    debug_topic: "/cv/perspective/debug"
+
+    # Разрешение bird's-eye view не обязано совпадать с разрешением камеры.
+    output_width: 640
+    output_height: 480
+    morphology_kernel: 3
+    process_every_n_frames: 1
+    publish_debug: true
+    show_gui: true
+
+    # Четырёхугольник на исходном кадре: TL, TR, BR, BL.
+    # Координаты нормализованы относительно ширины и высоты изображения.
+    top_left_x: 0.35
+    top_left_y: 0.52
+    top_right_x: 0.65
+    top_right_y: 0.52
+    bottom_right_x: 0.95
+    bottom_right_y: 0.95
+    bottom_left_x: 0.05
+    bottom_left_y: 0.95
+
+    # OpenCV HSV: H=[0,179], S=[0,255], V=[0,255].
+    # Если h_min > h_max, диапазон проходит через границу красного 179→0.
+    h_min: 0
+    h_max: 179
+    s_min: 0
+    s_max: 255
+    v_min: 0
+    v_max: 255
+
+    # Клавиша s сохраняет сюда готовый runtime-конфиг с show_gui=false.
+    config_output_path: "/workspace/records/cv/perspective_hsv_tuned.yaml"

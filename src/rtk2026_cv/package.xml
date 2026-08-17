@@ -3,7 +3,9 @@
 <package format="3">
   <name>rtk2026_cv</name>
   <version>0.1.0</version>
-  <description>Traffic sign and bus detection adapter for RTK2026, intended to consume yolo_ros detections.</description>
+  <description>
+    Computer-vision processing and calibration nodes for RTK2026.
+  </description>
   <maintainer email="kamilisxakof@gmail.com">RTK2026</maintainer>
   <license>Apache-2.0</license>
 
@@ -17,6 +19,11 @@
   <depend>std_msgs</depend>
   <depend>vision_msgs</depend>
   <depend>cv_bridge</depend>
+
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>rosbag2_py</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>
