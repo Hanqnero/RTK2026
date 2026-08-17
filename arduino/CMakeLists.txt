@@ -70,6 +70,7 @@ add_library(arduino_core STATIC ${ARDUINO_CORE_SOURCES} ${ARDUINO_LIBRARY_SOURCE
 target_include_directories(arduino_core PUBLIC
     ${ARDUINO_CORE_DIR}
     ${ARDUINO_VARIANT_DIR}
+    ${ARDUINO_DIR}/libraries/EEPROM/src
     ${ARDUINO_LIBRARY_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${VENDOR_DIR}
@@ -79,6 +80,16 @@ target_include_directories(arduino_core PUBLIC
     ${VENDOR_DIR}/GyverIO/src
 )
 target_compile_definitions(arduino_core PUBLIC ${ARDUINO_BOARD_DEFINES})
+# Стандартный буфер HardwareSerial - 64 байта, а кадр телеметрии занимает 72
+# (66 нагрузки плюс 6 служебных). При включённой отладке регуляторов за цикл
+# уходит ещё такой же кадр PidDebugPayload, то есть 144 байта подряд. При
+# буфере меньше кадра emitFrame отбрасывал бы каждый пакет: availableForWrite
+# никогда не вернул бы нужное число. Цена запаса - 384 байта RAM из 8 КБ.
+# Определения обязаны попасть именно в сборку ядра: их читает HardwareSerial.cpp.
+target_compile_definitions(arduino_core PUBLIC
+    SERIAL_TX_BUFFER_SIZE=256
+    SERIAL_RX_BUFFER_SIZE=128
+)
 target_compile_options(arduino_core PUBLIC
     -mmcu=${MCU}
     -DF_CPU=${F_CPU}
@@ -115,11 +126,16 @@ else()
     add_executable(${PROJECT_NAME}.elf
         src/main.cpp
         src/encoder.cpp
+        src/frame.cpp
+        src/gains_storage.cpp
+        src/profiling.cpp
         src/sonar.cpp
+        src/wheel_controller.cpp
     )
 endif()
 target_include_directories(${PROJECT_NAME}.elf PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${ARDUINO_DIR}/libraries/EEPROM/src
     ${ARDUINO_LIBRARY_INCLUDE_DIRS}
     ${VENDOR_DIR}
     ${VENDOR_DIR}/GyverMotor2

@@ -7,6 +7,9 @@ EncoderCounter::EncoderCounter(uint8_t pin_a, uint8_t pin_b, bool reverse, uint8
       _count(0) {}
 
 void EncoderCounter::begin() {
+    // Step1 - щелчок на каждую четверть периода квадратуры. Вместе с
+    // прерываниями на обоих каналах по CHANGE это даёт полное X4-декодирование:
+    // четыре отсчёта на период, то есть максимальное разрешение.
     _encoder.setEncType(uEncoderVirt::Type::Step1);
     _encoder.setEncReverse(_reverse);
 }
@@ -30,7 +33,13 @@ int32_t EncoderCounter::readAndResetDelta() {
     return delta;
 }
 
-int64_t EncoderCounter::readCount() const {
-    // Use volatile read to safely access shared counter
-    return _count;
+int32_t EncoderCounter::readCount() const {
+    // На AVR чтение 32-битного значения - это четыре отдельных чтения байтов.
+    // Прерывание энкодера, пришедшее между ними, дало бы смесь старого
+    // и нового значения. Volatile от этого не спасает: он запрещает
+    // оптимизацию, но не делает доступ атомарным.
+    noInterrupts();
+    const int32_t value = _count;
+    interrupts();
+    return value;
 }

@@ -158,7 +158,8 @@ bool Bmi270I2c::loadConfig() {
 }
 
 bool Bmi270I2c::configureSensors() {
-    // Performance-mode defaults: 100 Hz ODR, +/-4g accel, +/-500 dps gyro.
+    // Значения по умолчанию режима performance: частота выдачи 100 Гц,
+    // акселерометр +/-4g, гироскоп +/-500 градусов в секунду.
     if (!writeRegChecked(kRegPwrConf, 0x00)) {
         _online = false;
         return false;
