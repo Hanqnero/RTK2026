@@ -4,7 +4,7 @@
   <name>rtk2026_mearm</name>
   <version>0.1.0</version>
   <description>ROS2 wrapper for the vendor meArm Python control library</description>
-  <maintainer email="maintainer@example.com">RTK2026 Team</maintainer>
+  <maintainer email="kamilisxakof@gmail.com">RTK2026 Team</maintainer>
   <license>Apache-2.0</license>
 
   <depend>ament_index_python</depend>

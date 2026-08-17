@@ -4,7 +4,7 @@
   <name>mearm_driver</name>
   <version>0.1.0</version>
   <description>MeArm robotic arm driver for ROS2 with manual control support</description>
-  <maintainer email="maintainer@example.com">RTK2026 Team</maintainer>
+  <maintainer email="kamilisxakof@gmail.com">RTK2026 Team</maintainer>
   <license>Apache-2.0</license>
   
   <depend>rclpy</depend>

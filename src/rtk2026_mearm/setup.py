@@ -27,7 +27,7 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="RTK2026 Team",
-    maintainer_email="maintainer@example.com",
+    maintainer_email="kamilisxakof@gmail.com",
     description="ROS2 wrapper for the vendor meArm Python control library",
     license="Apache-2.0",
     tests_require=["pytest"],
