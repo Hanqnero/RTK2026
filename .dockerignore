@@ -1,0 +1,29 @@
+# Git и локальные настройки редакторов не участвуют в image.
+.git
+.gitignore
+.codex
+.vscode
+
+# Результаты локальной ROS-сборки всегда создаются заново внутри image.
+build
+install
+log
+
+# Runtime-данные монтируются через docker-compose volumes.
+records
+reports
+
+# Сгенерированная документация не нужна симуляционному runtime.
+docs/_build
+docs/build
+
+# Локальные Python-кэши и системные файлы.
+**/__pycache__
+**/*.py[cod]
+**/.DS_Store
+
+# Временные файлы редакторов и тестов.
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*~
