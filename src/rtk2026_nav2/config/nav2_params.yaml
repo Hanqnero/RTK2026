@@ -13,7 +13,10 @@ bt_navigator:
     use_sim_time: true
     global_frame: map
     robot_base_frame: base_footprint
-    odom_topic: /odom
+
+    # Значение подставляет лаунч: тот же топик уходит ремапом
+    # в controller_server, у которого параметра для одометрии нет.
+    odom_topic: /odometry/filtered
     navigators: ["navigate_to_pose", "navigate_through_poses"]
 
     # Оба пути подставляет лаунч. Значения здесь только чтобы ключи

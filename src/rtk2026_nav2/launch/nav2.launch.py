@@ -14,6 +14,15 @@ Nav2 действием ``navigate_through_poses``, поэтому своей н
 своим лаунчем. Без него фильтр включать нельзя: он будет ждать несуществующую
 информацию о фильтре и писать об этом в лог, ничего не запрещая.
 
+Одометрия
+---------
+
+Стек ездит по фильтрованной одометрии EKF, а не по сырой колёсной: скорость
+из неё задаёт lookahead контроллера и проверки в дереве поведения. Источник
+задаётся аргументом ``odom_topic`` и попадает к потребителям двумя путями:
+``bt_navigator`` берёт его параметром, а ``controller_server`` — ремапом,
+потому что параметра для одометрии у него нет и имя топика в нём зашито.
+
 Менеджер жизненного цикла
 -------------------------
 
@@ -50,6 +59,7 @@ def _stack(context, *_args, **_kwargs) -> list:
         root_key="",
         param_rewrites={
             "use_sim_time": LaunchConfiguration("use_sim_time"),
+            "odom_topic": LaunchConfiguration("odom_topic"),
             "default_nav_through_poses_bt_xml": LaunchConfiguration("through_poses_bt"),
             "default_nav_to_pose_bt_xml": LaunchConfiguration("to_pose_bt"),
         },
@@ -64,6 +74,12 @@ def _stack(context, *_args, **_kwargs) -> list:
     if use_keepout in ("true", "1"):
         params.append(LaunchConfiguration("keepout_params_file"))
 
+    # Ремапы по серверу. controller_server подписан на имя odom, менять его
+    # параметром нельзя, поэтому одометрия приходит к нему только так.
+    remappings = {
+        "controller_server": [("odom", LaunchConfiguration("odom_topic"))],
+    }
+
     servers = [
         Node(
             package=package,
@@ -71,6 +87,7 @@ def _stack(context, *_args, **_kwargs) -> list:
             name=executable,
             output="screen",
             parameters=params,
+            remappings=remappings.get(executable, []),
         )
         for package, executable in LIFECYCLE_NODES
     ]
@@ -110,6 +127,15 @@ def generate_launch_description() -> LaunchDescription:
                 "use_sim_time",
                 default_value="true",
                 description="Брать время из /clock. Для реального робота false.",
+            ),
+            DeclareLaunchArgument(
+                "odom_topic",
+                default_value="/odometry/filtered",
+                description=(
+                    "Одометрия для стека: выход EKF, а не сырая колёсная. "
+                    "Уходит параметром в bt_navigator и ремапом "
+                    "в controller_server."
+                ),
             ),
             DeclareLaunchArgument(
                 "params_file",
