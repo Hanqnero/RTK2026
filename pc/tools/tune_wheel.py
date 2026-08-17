@@ -585,6 +585,14 @@ def main() -> int:
 
     logger = TelemetryLogger(args.log) if args.log else None
 
+    # Экспорт выполняется на любом пути выхода: и после одиночной ступеньки,
+    # и при записи в EEPROM, и после интерактивной настройки.
+    def export_if_requested(link: BenchLink) -> None:
+        if not args.export:
+            return
+        export_yaml(args.export, current_gains(link))
+        print(f"Коэффициенты сохранены: {args.export}")
+
     try:
         with BenchLink(args.port, args.baud) as link:
             reports = link.get_gains()
@@ -621,26 +629,22 @@ def main() -> int:
                 if window is not None:
                     print("\nокно открыто, закройте для выхода")
                     window.wait_until_closed()
-                if args.export:
-                    export_yaml(args.export, current_gains(link))
-                    print(f"\nКоэффициенты сохранены: {args.export}")
+                export_if_requested(link)
                 if args.save:
                     saved = link.save_gains()
                     ok = saved and all(r.is_persisted for r in saved.values())
                     print("Записано в EEPROM" if ok else "ЗАПИСЬ НЕ ПОДТВЕРЖДЕНА")
                 return 0
 
-            if args.save and args.step is None:
+            if args.save:
+                export_if_requested(link)
                 saved = link.save_gains()
                 ok = saved and all(r.is_persisted for r in saved.values())
                 print("Записано в EEPROM" if ok else "ЗАПИСЬ НЕ ПОДТВЕРЖДЕНА")
                 return 0
 
             result = interactive(link, args, window, logger)
-
-            if args.export:
-                export_yaml(args.export, current_gains(link))
-                print(f"Коэффициенты сохранены: {args.export}")
+            export_if_requested(link)
 
             return result
     except KeyboardInterrupt:
