@@ -1,0 +1,777 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <world name="electrode_test_world">
+
+    <physics name="default_physics" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!--
+      Базовые системы Gazebo Harmonic.
+
+      Sensors обновляет рендерящие датчики, включая GPU lidar, а Imu —
+      IMU-сенсор робота. Без этих двух систем ROS-мосты /scan и /imu/data
+      создаются, но сообщения из мира в них не поступают.
+    -->
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+
+    <gravity>0 0 -9.81</gravity>
+    <magnetic_field>0 0 0</magnetic_field>
+
+    <scene>
+      <ambient>0.45 0.45 0.45 1</ambient>
+      <background>0.92 0.92 0.92 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 8 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.4 0.2 -1</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>20 20</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>20 20</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.55 0.55 0.55 1</ambient>
+            <diffuse>0.55 0.55 0.55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+
+    <model name="cell_base">
+      <static>true</static>
+      <pose>0 0 0.0400 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>2.2 1.2 0.08</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>2.2 1.2 0.08</size></box>
+          </geometry>
+          <material>
+            <ambient>0.12 0.12 0.12 1</ambient>
+            <diffuse>0.12 0.12 0.12 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!--
+      Верх бортиков должен находиться выше плоскости сканирования лидара.
+
+      Платформа заканчивается на z=0.08 м, а оптический центр лидара
+      установлен примерно на z=0.24 м. Поэтому бортики начинаются от
+      платформы и заканчиваются на z=0.38 м.
+    -->
+    <model name="border_front">
+      <static>true</static>
+      <pose>0.0000 -0.6250 0.2300 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>2.3000 0.0500 0.3000</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>2.3000 0.0500 0.3000</size></box>
+          </geometry>
+          <material>
+            <ambient>0.18 0.18 0.18 1</ambient>
+            <diffuse>0.18 0.18 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="border_back">
+      <static>true</static>
+      <pose>0.0000 0.6250 0.2300 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>2.3000 0.0500 0.3000</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>2.3000 0.0500 0.3000</size></box>
+          </geometry>
+          <material>
+            <ambient>0.18 0.18 0.18 1</ambient>
+            <diffuse>0.18 0.18 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="border_left">
+      <static>true</static>
+      <pose>-1.1250 0.0000 0.2300 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>0.0500 1.2000 0.3000</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.0500 1.2000 0.3000</size></box>
+          </geometry>
+          <material>
+            <ambient>0.18 0.18 0.18 1</ambient>
+            <diffuse>0.18 0.18 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="border_right">
+      <static>true</static>
+      <pose>1.1250 0.0000 0.2300 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>0.0500 1.2000 0.3000</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.0500 1.2000 0.3000</size></box>
+          </geometry>
+          <material>
+            <ambient>0.18 0.18 0.18 1</ambient>
+            <diffuse>0.18 0.18 0.18 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_1_anode_01">
+      <static>true</static>
+      <pose>-0.4500 -0.2750 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.30 0.15 1</ambient>
+            <diffuse>0.85 0.30 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_1_cathode_02">
+      <static>true</static>
+      <pose>-0.4500 -0.2250 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.70 0.72 0.75 1</ambient>
+            <diffuse>0.70 0.72 0.75 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_1_anode_03">
+      <static>true</static>
+      <pose>-0.4500 -0.1750 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.30 0.15 1</ambient>
+            <diffuse>0.85 0.30 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_1_cathode_04">
+      <static>true</static>
+      <pose>-0.4500 -0.1250 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.70 0.72 0.75 1</ambient>
+            <diffuse>0.70 0.72 0.75 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_1_anode_05">
+      <static>true</static>
+      <pose>-0.4500 -0.0750 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.30 0.15 1</ambient>
+            <diffuse>0.85 0.30 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_1_cathode_06">
+      <static>true</static>
+      <pose>-0.4500 -0.0250 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.70 0.72 0.75 1</ambient>
+            <diffuse>0.70 0.72 0.75 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_1_anode_07">
+      <static>true</static>
+      <pose>-0.4500 0.0250 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.30 0.15 1</ambient>
+            <diffuse>0.85 0.30 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_1_cathode_08">
+      <static>true</static>
+      <pose>-0.4500 0.0750 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.70 0.72 0.75 1</ambient>
+            <diffuse>0.70 0.72 0.75 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_1_anode_09">
+      <static>true</static>
+      <pose>-0.4500 0.1250 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.30 0.15 1</ambient>
+            <diffuse>0.85 0.30 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_1_cathode_10">
+      <static>true</static>
+      <pose>-0.4500 0.1750 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.70 0.72 0.75 1</ambient>
+            <diffuse>0.70 0.72 0.75 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_1_anode_11">
+      <static>true</static>
+      <pose>-0.4500 0.2250 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.30 0.15 1</ambient>
+            <diffuse>0.85 0.30 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_1_cathode_12">
+      <static>true</static>
+      <pose>-0.4500 0.2750 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.70 0.72 0.75 1</ambient>
+            <diffuse>0.70 0.72 0.75 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_2_anode_01">
+      <static>true</static>
+      <pose>0.4500 -0.2750 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.30 0.15 1</ambient>
+            <diffuse>0.85 0.30 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_2_cathode_02">
+      <static>true</static>
+      <pose>0.4500 -0.2250 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.70 0.72 0.75 1</ambient>
+            <diffuse>0.70 0.72 0.75 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_2_anode_03">
+      <static>true</static>
+      <pose>0.4500 -0.1750 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.30 0.15 1</ambient>
+            <diffuse>0.85 0.30 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_2_cathode_04">
+      <static>true</static>
+      <pose>0.4500 -0.1250 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.70 0.72 0.75 1</ambient>
+            <diffuse>0.70 0.72 0.75 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_2_anode_05">
+      <static>true</static>
+      <pose>0.4500 -0.0750 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.30 0.15 1</ambient>
+            <diffuse>0.85 0.30 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_2_cathode_06">
+      <static>true</static>
+      <pose>0.4500 -0.0250 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.70 0.72 0.75 1</ambient>
+            <diffuse>0.70 0.72 0.75 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_2_anode_07">
+      <static>true</static>
+      <pose>0.4500 0.0250 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.30 0.15 1</ambient>
+            <diffuse>0.85 0.30 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_2_cathode_08">
+      <static>true</static>
+      <pose>0.4500 0.0750 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.70 0.72 0.75 1</ambient>
+            <diffuse>0.70 0.72 0.75 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_2_anode_09">
+      <static>true</static>
+      <pose>0.4500 0.1250 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.30 0.15 1</ambient>
+            <diffuse>0.85 0.30 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_2_cathode_10">
+      <static>true</static>
+      <pose>0.4500 0.1750 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.70 0.72 0.75 1</ambient>
+            <diffuse>0.70 0.72 0.75 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_2_anode_11">
+      <static>true</static>
+      <pose>0.4500 0.2250 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.30 0.15 1</ambient>
+            <diffuse>0.85 0.30 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="row_2_cathode_12">
+      <static>true</static>
+      <pose>0.4500 0.2750 0.0925 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>1.2000 0.0250 0.0250</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2000 0.0250 0.0250</size></box>
+          </geometry>
+          <material>
+            <ambient>0.70 0.72 0.75 1</ambient>
+            <diffuse>0.70 0.72 0.75 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="magnet_01">
+      <static>true</static>
+      <pose>-0.6500 -0.1750 0.1090 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>0.0600 0.0180 0.0080</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.0600 0.0180 0.0080</size></box>
+          </geometry>
+          <material>
+            <ambient>0.03 0.03 0.03 1</ambient>
+            <diffuse>0.03 0.03 0.03 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="magnet_02">
+      <static>true</static>
+      <pose>-0.2000 0.0750 0.1090 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>0.0600 0.0180 0.0080</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.0600 0.0180 0.0080</size></box>
+          </geometry>
+          <material>
+            <ambient>0.03 0.03 0.03 1</ambient>
+            <diffuse>0.03 0.03 0.03 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="magnet_03">
+      <static>true</static>
+      <pose>0.5500 -0.0750 0.1090 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>0.0600 0.0180 0.0080</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.0600 0.0180 0.0080</size></box>
+          </geometry>
+          <material>
+            <ambient>0.03 0.03 0.03 1</ambient>
+            <diffuse>0.03 0.03 0.03 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="magnet_04">
+      <static>true</static>
+      <pose>0.1500 0.2250 0.1090 0 0 0</pose>
+      <link name="link">
+      <collision name="collision">
+        <geometry>
+          <box><size>0.0600 0.0180 0.0080</size></box>
+        </geometry>
+      </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.0600 0.0180 0.0080</size></box>
+          </geometry>
+          <material>
+            <ambient>0.03 0.03 0.03 1</ambient>
+            <diffuse>0.03 0.03 0.03 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+
+    <gui fullscreen="false">
+      <camera name="overview_camera">
+        <pose>2.8 -3.4 2.7 0 0.55 2.25</pose>
+      </camera>
+    </gui>
+
+  </world>
+</sdf>

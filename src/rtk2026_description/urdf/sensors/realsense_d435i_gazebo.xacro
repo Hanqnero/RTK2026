@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    Сенсоры Intel RealSense D435i для Gazebo Harmonic.
+
+    Геометрию и полное TF-дерево камеры создаёт официальный макрос
+    sensor_d435i из пакета realsense2_description. Здесь находится только
+    симуляционный backend:
+      /camera/image         — цветное изображение;
+      /camera/depth_image   — глубина, совмещённая с цветным изображением;
+      /camera/camera_info   — intrinsics общей RGB-D оптической модели;
+      /camera/points        — облако точек;
+      /camera/imu/sample    — IMU, встроенная в D435i.
+
+    sim_slam_launch.py мостит и переименовывает транспортные топики в
+    стандартный ROS API RealSense. Один rgbd_camera намеренно формирует цвет
+    и глубину одновременно: RTAB-Map получает согласованные timestamps и
+    aligned depth без дополнительной ноды выравнивания.
+  -->
+  <xacro:macro
+    name="rtk2026_realsense_d435i_gazebo"
+    params="
+      name:=camera
+      width:=640
+      height:=480
+      rgbd_rate:=30.0
+      imu_rate:=200.0
+      horizontal_fov:=1.2112585
+      near_clip:=0.10
+      far_clip:=10.0
+      gyro_stddev:=0.000563
+      accel_stddev:=0.00186">
+
+    <!-- Не сворачиваем D435i в base_link при преобразовании URDF в SDF. -->
+    <gazebo reference="${name}_joint">
+      <preserveFixedJoint>true</preserveFixedJoint>
+    </gazebo>
+
+    <gazebo reference="${name}_link">
+      <!--
+        Общая pinhole-модель соответствует цветовому потоку D435i:
+        640 x 480, 69.4° по горизонтали, 30 Гц. Depth image уже находится
+        в системе координат camera_color_optical_frame.
+      -->
+      <sensor name="${name}_rgbd_sensor" type="rgbd_camera">
+        <!-- Центр проекции совпадает с официальным color optical frame. -->
+        <pose>0 0.015 0 0 0 0</pose>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <update_rate>${rgbd_rate}</update_rate>
+        <topic>/${name}</topic>
+        <gz_frame_id>${name}_color_optical_frame</gz_frame_id>
+        <camera>
+          <horizontal_fov>${horizontal_fov}</horizontal_fov>
+          <image>
+            <width>${width}</width>
+            <height>${height}</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>${near_clip}</near>
+            <far>${far_clip}</far>
+          </clip>
+        </camera>
+      </sensor>
+
+      <!--
+        Gazebo публикует единый Imu, содержащий angular_velocity и
+        linear_acceleration. Кадр совпадает с gyro optical frame из
+        официального описания D435i.
+      -->
+      <sensor name="${name}_imu_sensor" type="imu">
+        <!--
+          Nominal pose camera_link -> camera_gyro_optical_frame из
+          realsense2_description. Поэтому значения IMU и frame_id используют
+          одну систему осей, а не оси camera_link.
+        -->
+        <pose>
+          -0.01174 -0.00552 0.00510
+          -1.5707963267948966 0 -1.5707963267948966
+        </pose>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <update_rate>${imu_rate}</update_rate>
+        <topic>/${name}/imu/sample</topic>
+        <gz_frame_id>${name}_gyro_optical_frame</gz_frame_id>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian"><mean>0</mean><stddev>${gyro_stddev}</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>${gyro_stddev}</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>${gyro_stddev}</stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian"><mean>0</mean><stddev>${accel_stddev}</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>${accel_stddev}</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>${accel_stddev}</stddev></noise></z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+</robot>

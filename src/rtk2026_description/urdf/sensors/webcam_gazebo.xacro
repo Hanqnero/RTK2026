@@ -11,17 +11,21 @@
       horizontal_fov — горизонтальный угол обзора в радианах.
 
     Для Gazebo Sim изображение публикуется сначала в Gazebo Transport и
-    требует отдельного ros_gz_bridge. Макрос не вызывается текущей
-    rtk2026_diff_drive_sim.urdf.xacro и оставлен как готовая точка расширения.
+    передаётся в ROS 2 через ros_gz_bridge из sim_slam_launch.py.
   -->
   <xacro:macro name="rtk2026_webcam_gazebo" params="prefix backend width height update_rate horizontal_fov">
-    <gazebo reference="${prefix}camera_link">
+    <!-- Сохраняем отдельный физический camera_link после URDF -> SDF. -->
+    <gazebo reference="${prefix}camera_joint">
       <preserveFixedJoint>true</preserveFixedJoint>
+    </gazebo>
+
+    <gazebo reference="${prefix}camera_link">
       <sensor name="${prefix}webcam_sensor" type="camera">
         <always_on>true</always_on>
         <visualize>true</visualize>
         <update_rate>${update_rate}</update_rate>
         <topic>${prefix}webcam/image_raw</topic>
+        <gz_frame_id>${prefix}camera_optical_frame</gz_frame_id>
         <camera>
           <horizontal_fov>${horizontal_fov}</horizontal_fov>
           <image><width>${width}</width><height>${height}</height><format>R8G8B8</format></image>

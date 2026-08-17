@@ -1,0 +1,80 @@
+<?xml version="1.0"?>
+<sdf version="1.9"><world name="electrolysis_world">
+<physics name="default_physics" type="ode"><max_step_size>0.001</max_step_size><real_time_factor>1</real_time_factor></physics>
+
+<!--
+  Базовые системы Gazebo Harmonic задаём явно.
+
+  Sensors обновляет рендеринговые сенсоры: gpu_lidar и camera.
+  Imu обновляет отдельный IMU sensor робота. Без этих двух систем мост
+  создаёт ROS-топики, но сообщения сенсоров в них не поступают.
+-->
+<plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+<plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+<plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+<plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+  <render_engine>ogre2</render_engine>
+</plugin>
+<plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+
+<gravity>0 0 -9.81</gravity><scene><ambient>0.55 0.55 0.55 1</ambient><background>0.92 0.92 0.92 1</background><shadows>true</shadows></scene>
+<light name="sun" type="directional"><pose>0 0 8 0 0 0</pose><cast_shadows>true</cast_shadows><diffuse>0.95 0.95 0.95 1</diffuse><direction>-0.4 0.2 -1</direction></light>
+<model name="ground_plane"><static>true</static><link name="link"><collision name="collision"><geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry></collision><visual name="visual"><geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry></visual></link></model>
+<include><uri>model://platform</uri><name>polygon_platform</name></include>
+<include><uri>model://rear_wall</uri><name>rear_wall</name><pose>0 1.975 0 0 0 0</pose></include>
+<!--
+  Стандартный OpenCV ArUco DICT_4X4_50, id=0, стоит по центру внутренней
+  стороны стены. У модели нет collision, поэтому проезд не изменяется.
+-->
+<include>
+  <uri>model://aruco_marker</uri>
+  <name>aruco_marker</name>
+  <pose>0 1.947 0 0 0 0</pose>
+</include>
+
+    <!--
+      На каждой стороне находятся восемь блоков:
+        два ряда по X;
+        четыре блока в каждом ряду по Y, в направлении задней стены.
+
+      Поперечный габарит блока по X равен 600 мм. Центры соседних
+      рядов на одной стороне
+      разнесены на 615 мм, поэтому чистый зазор между ними равен 15 мм.
+
+      Продольный габарит блока по Y равен 375 мм. Центры четырёх блоков вдоль
+      каждого ряда разнесены на 390 мм, поэтому чистый зазор между
+      блоками равен 15 мм, а общая длина ряда — 1545 мм.
+
+      Внутренняя поверхность задней стены находится на Y=1.950 м.
+      Ближняя к стене грань последнего блока находится на Y=1.930 м,
+      поэтому чистый зазор между ваннами и стеной равен 20 мм.
+
+      Внутренние границы расчётных габаритов левой и правой сторон
+      находятся на X=±0.500 м, поэтому поперечный центральный проход
+      равен 1000 мм.
+
+      Ориентация ванн остаётся исходной. Только второй ряд на каждой
+      стороне — inner — развёрнут на pi, чтобы чередование балок
+      начиналось с другого цвета.
+    -->
+    <include><uri>model://electrode_cell</uri><name>left_outer_01</name><pose>-1.4150 0.5725 0.080 0 0 0</pose></include>
+    <include><uri>model://electrode_cell</uri><name>left_outer_02</name><pose>-1.4150 0.9625 0.080 0 0 0</pose></include>
+    <include><uri>model://electrode_cell</uri><name>left_outer_03</name><pose>-1.4150 1.3525 0.080 0 0 0</pose></include>
+    <include><uri>model://electrode_cell</uri><name>left_outer_04</name><pose>-1.4150 1.7425 0.080 0 0 0</pose></include>
+
+    <include><uri>model://electrode_cell</uri><name>left_inner_05</name><pose>-0.8000 0.5725 0.080 0 0 3.141592653589793</pose></include>
+    <include><uri>model://electrode_cell</uri><name>left_inner_06</name><pose>-0.8000 0.9625 0.080 0 0 3.141592653589793</pose></include>
+    <include><uri>model://electrode_cell</uri><name>left_inner_07</name><pose>-0.8000 1.3525 0.080 0 0 3.141592653589793</pose></include>
+    <include><uri>model://electrode_cell</uri><name>left_inner_08</name><pose>-0.8000 1.7425 0.080 0 0 3.141592653589793</pose></include>
+
+    <include><uri>model://electrode_cell</uri><name>right_inner_09</name><pose>0.8000 0.5725 0.080 0 0 3.141592653589793</pose></include>
+    <include><uri>model://electrode_cell</uri><name>right_inner_10</name><pose>0.8000 0.9625 0.080 0 0 3.141592653589793</pose></include>
+    <include><uri>model://electrode_cell</uri><name>right_inner_11</name><pose>0.8000 1.3525 0.080 0 0 3.141592653589793</pose></include>
+    <include><uri>model://electrode_cell</uri><name>right_inner_12</name><pose>0.8000 1.7425 0.080 0 0 3.141592653589793</pose></include>
+
+    <include><uri>model://electrode_cell</uri><name>right_outer_13</name><pose>1.4150 0.5725 0.080 0 0 0</pose></include>
+    <include><uri>model://electrode_cell</uri><name>right_outer_14</name><pose>1.4150 0.9625 0.080 0 0 0</pose></include>
+    <include><uri>model://electrode_cell</uri><name>right_outer_15</name><pose>1.4150 1.3525 0.080 0 0 0</pose></include>
+    <include><uri>model://electrode_cell</uri><name>right_outer_16</name><pose>1.4150 1.7425 0.080 0 0 0</pose></include>
+
+</world></sdf>

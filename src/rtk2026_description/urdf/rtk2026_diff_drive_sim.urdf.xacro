@@ -28,13 +28,21 @@
     filename="$(find rtk2026_description)/urdf/sensors/imu.xacro"/>
 
   <xacro:include
+    filename="$(find rtk2026_description)/urdf/sensors/imu_gazebo.xacro"/>
+
+  <xacro:include
     filename="$(find rtk2026_description)/urdf/sensors/lidar.xacro"/>
 
   <xacro:include
     filename="$(find rtk2026_description)/urdf/sensors/lidar_gazebo.xacro"/>
 
+  <!-- Официальная геометрия и nominal extrinsics Intel RealSense D435i. -->
   <xacro:include
-    filename="$(find rtk2026_description)/urdf/sensors/webcam.xacro"/>
+    filename="$(find realsense2_description)/urdf/_d435i.urdf.xacro"/>
+
+  <!-- RGB-D и IMU backend D435i для Gazebo Harmonic. -->
+  <xacro:include
+    filename="$(find rtk2026_description)/urdf/sensors/realsense_d435i_gazebo.xacro"/>
 
   <!-- ROBOT PARAMETERS  -->
 
@@ -70,7 +78,6 @@
   -->
   <xacro:property name="imu_height" value="0.01"/>
   <xacro:property name="lidar_height" value="0.040"/>
-  <xacro:property name="camera_depth" value="0.025"/>
 
   <!-- PHYSICAL ROBOT -->
 
@@ -112,6 +119,16 @@
     use_mesh="false"
     mesh=""/>
 
+  <!--
+    Gazebo IMU публикует ориентацию, angular velocity и linear acceleration.
+    EKF использует только angular_velocity.z; абсолютный yaw не объединяем.
+  -->
+  <xacro:rtk2026_imu_gazebo
+    prefix="$(arg prefix)"
+    update_rate="100.0"
+    angular_velocity_stddev="0.002"
+    linear_acceleration_stddev="0.02"/>
+
   <!-- Лидар сверху в геометрическом центре корпуса. -->
   <xacro:rtk2026_lidar
     prefix="$(arg prefix)"
@@ -134,16 +151,23 @@
     range_resolution="0.01"
     noise_stddev="0.005"/>
 
-  <!-- Камера по центру передней грани; пока только геометрия и TF-фреймы. -->
-  <xacro:rtk2026_webcam
-    prefix="$(arg prefix)"
+  <!--
+    D435i установлена по центру передней грани.
+
+    origin задаёт положение нижнего резьбового крепления официальной модели.
+    Смещение -12.5 мм по Z оставляет оптические центры на средней высоте
+    корпуса. Все внутренние смещения color/depth/infra/IMU берутся из
+    realsense2_description и здесь не дублируются.
+  -->
+  <xacro:sensor_d435i
     parent="$(arg prefix)base_link"
-    xyz="${base_length/2.0 + camera_depth/2.0} 0 0"
-    rpy="0 0 0"
-    mass="0.035"
-    width="0.060"
-    height="0.025"
-    depth="${camera_depth}"/>
+    name="$(arg prefix)camera"
+    use_nominal_extrinsics="true">
+    <origin xyz="${base_length/2.0} 0 -0.0125" rpy="0 0 0"/>
+  </xacro:sensor_d435i>
+
+  <xacro:rtk2026_realsense_d435i_gazebo
+    name="$(arg prefix)camera"/>
 
   <!-- ROS 2 CONTROL  -->
 

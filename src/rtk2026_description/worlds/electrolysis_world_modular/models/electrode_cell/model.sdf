@@ -1,0 +1,191 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="electrode_cell">
+    <static>true</static>
+
+    <!--
+      Один переиспользуемый блок размером 600 x 375 мм содержит
+      12 параллельных палок.
+
+      Размер палки:
+        X — толщина 25 мм;
+        Y — длина 375 мм;
+        Z — высота упрощённой модели 25 мм.
+
+      Шаг центров по X равен 50 мм: толщина 25 мм и чистый зазор 25 мм.
+      Палки занимают область 575 x 375 мм внутри расчётного внешнего
+      габарита 600 x 375 мм. По X остаётся по 12.5 мм с каждой стороны.
+
+      Отдельного приподнятого основания у блока нет. Нижние грани палок
+      совпадают с верхней поверхностью общей платформы, а верхние находятся
+      на 25 мм выше неё.
+    -->
+    <link name="anode_01">
+      <pose>-0.2750 0 0.0125 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+        <material>
+          <ambient>0.85 0.30 0.14 1</ambient>
+          <diffuse>0.85 0.30 0.14 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <link name="cathode_02">
+      <pose>-0.2250 0 0.0125 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+        <material>
+          <ambient>0.72 0.72 0.74 1</ambient>
+          <diffuse>0.72 0.72 0.74 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <link name="anode_03">
+      <pose>-0.1750 0 0.0125 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+        <material>
+          <ambient>0.85 0.30 0.14 1</ambient>
+          <diffuse>0.85 0.30 0.14 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <link name="cathode_04">
+      <pose>-0.1250 0 0.0125 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+        <material>
+          <ambient>0.72 0.72 0.74 1</ambient>
+          <diffuse>0.72 0.72 0.74 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <link name="anode_05">
+      <pose>-0.0750 0 0.0125 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+        <material>
+          <ambient>0.85 0.30 0.14 1</ambient>
+          <diffuse>0.85 0.30 0.14 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <link name="cathode_06">
+      <pose>-0.0250 0 0.0125 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+        <material>
+          <ambient>0.72 0.72 0.74 1</ambient>
+          <diffuse>0.72 0.72 0.74 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <link name="anode_07">
+      <pose>0.0250 0 0.0125 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+        <material>
+          <ambient>0.85 0.30 0.14 1</ambient>
+          <diffuse>0.85 0.30 0.14 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <link name="cathode_08">
+      <pose>0.0750 0 0.0125 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+        <material>
+          <ambient>0.72 0.72 0.74 1</ambient>
+          <diffuse>0.72 0.72 0.74 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <link name="anode_09">
+      <pose>0.1250 0 0.0125 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+        <material>
+          <ambient>0.85 0.30 0.14 1</ambient>
+          <diffuse>0.85 0.30 0.14 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <link name="cathode_10">
+      <pose>0.1750 0 0.0125 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+        <material>
+          <ambient>0.72 0.72 0.74 1</ambient>
+          <diffuse>0.72 0.72 0.74 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <link name="anode_11">
+      <pose>0.2250 0 0.0125 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+        <material>
+          <ambient>0.85 0.30 0.14 1</ambient>
+          <diffuse>0.85 0.30 0.14 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <link name="cathode_12">
+      <pose>0.2750 0 0.0125 0 0 0</pose>
+      <collision name="collision">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.0250 0.3750 0.0250</size></box></geometry>
+        <material>
+          <ambient>0.72 0.72 0.74 1</ambient>
+          <diffuse>0.72 0.72 0.74 1</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

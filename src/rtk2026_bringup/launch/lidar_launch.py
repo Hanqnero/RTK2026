@@ -56,4 +56,3 @@ def generate_launch_description() -> LaunchDescription:
             lidar_launch,
         ]
     )
-    

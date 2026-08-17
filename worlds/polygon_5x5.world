@@ -11,6 +11,8 @@
     <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
       <render_engine>ogre2</render_engine>
     </plugin>
+    <!-- Обновляет IMU sensors, добавленные к моделям роботов. -->
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
 
     <!-- Начальный вид: позиция над (2,2), default камера смотрит +X; pitch +pi/2 вокруг Y -> взгляд вдоль -Z (строго сверху). -->
     <gui fullscreen="0">

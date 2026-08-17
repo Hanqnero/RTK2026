@@ -1,0 +1,96 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Симуляционный IMU для уже существующего imu_link.
+
+    Геометрия, масса и TF создаются макросом rtk2026_imu. Этот макрос
+    добавляет только Gazebo Sensor и не создаёт второй link или joint.
+
+    Параметры:
+      prefix                      — префикс имён link, joint и sensor;
+      update_rate                 — частота sensor_msgs/msg/Imu;
+      angular_velocity_stddev     — σ шума гироскопа, рад/с;
+      linear_acceleration_stddev  — σ шума акселерометра, м/с².
+
+    Значения шума являются стартовой моделью симуляции, а не паспортной
+    калибровкой конкретного экземпляра BMI270.
+  -->
+  <xacro:macro
+    name="rtk2026_imu_gazebo"
+    params="
+      prefix
+      update_rate
+      angular_velocity_stddev
+      linear_acceleration_stddev">
+
+    <!--
+      Не объединяем imu_link с base_link при преобразовании URDF -> SDF.
+      Благодаря этому Gazebo и ROS используют одинаковый frame imu_link.
+    -->
+    <gazebo reference="${prefix}imu_joint">
+      <preserveFixedJoint>true</preserveFixedJoint>
+    </gazebo>
+
+    <gazebo reference="${prefix}imu_link">
+      <sensor name="${prefix}imu_sensor" type="imu">
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <update_rate>${update_rate}</update_rate>
+
+        <!-- Gazebo Transport topic; sim launch мостит его в ROS /imu/data. -->
+        <topic>imu/data</topic>
+        <gz_frame_id>${prefix}imu_link</gz_frame_id>
+
+        <imu>
+          <!-- Независимый гауссовский шум трёх осей гироскопа. -->
+          <angular_velocity>
+            <x>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>${angular_velocity_stddev}</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>${angular_velocity_stddev}</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>${angular_velocity_stddev}</stddev>
+              </noise>
+            </z>
+          </angular_velocity>
+
+          <!-- Акселерометр публикуется для диагностики, но пока не входит в EKF. -->
+          <linear_acceleration>
+            <x>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>${linear_acceleration_stddev}</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>${linear_acceleration_stddev}</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>${linear_acceleration_stddev}</stddev>
+              </noise>
+            </z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+    </gazebo>
+
+  </xacro:macro>
+
+</robot>

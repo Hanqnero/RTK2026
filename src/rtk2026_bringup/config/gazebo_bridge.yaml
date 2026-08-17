@@ -1,0 +1,66 @@
+# Общие интерфейсы Gazebo -> ROS 2 для обеих моделей робота.
+#
+# Имена ROS-топиков задаются здесь один раз. Поэтому launch-файл не содержит
+# строк параметр_bridge и не выполняет отдельные remap для камеры.
+- gz_topic_name: /clock
+  ros_topic_name: /clock
+  gz_type_name: gz.msgs.Clock
+  ros_type_name: rosgraph_msgs/msg/Clock
+  direction: GZ_TO_ROS
+  qos_profile: CLOCK
+
+- gz_topic_name: /scan
+  ros_topic_name: /scan
+  gz_type_name: gz.msgs.LaserScan
+  ros_type_name: sensor_msgs/msg/LaserScan
+  direction: GZ_TO_ROS
+  qos_profile: SENSOR_DATA
+
+- gz_topic_name: /imu/data
+  ros_topic_name: /imu/data
+  gz_type_name: gz.msgs.IMU
+  ros_type_name: sensor_msgs/msg/Imu
+  direction: GZ_TO_ROS
+  qos_profile: SENSOR_DATA
+
+- gz_topic_name: /camera/image
+  ros_topic_name: /camera/color/image_raw
+  gz_type_name: gz.msgs.Image
+  ros_type_name: sensor_msgs/msg/Image
+  direction: GZ_TO_ROS
+  qos_profile: SENSOR_DATA
+
+- gz_topic_name: /camera/depth_image
+  ros_topic_name: /camera/aligned_depth_to_color/image_raw
+  gz_type_name: gz.msgs.Image
+  ros_type_name: sensor_msgs/msg/Image
+  direction: GZ_TO_ROS
+  qos_profile: SENSOR_DATA
+
+- gz_topic_name: /camera/camera_info
+  ros_topic_name: /camera/color/camera_info
+  gz_type_name: gz.msgs.CameraInfo
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  direction: GZ_TO_ROS
+  qos_profile: SENSOR_DATA
+
+- gz_topic_name: /camera/points
+  ros_topic_name: /camera/depth/color/points
+  gz_type_name: gz.msgs.PointCloudPacked
+  ros_type_name: sensor_msgs/msg/PointCloud2
+  direction: GZ_TO_ROS
+  qos_profile: SENSOR_DATA
+
+- gz_topic_name: /camera/imu/sample
+  ros_topic_name: /camera/imu/sample
+  gz_type_name: gz.msgs.IMU
+  ros_type_name: sensor_msgs/msg/Imu
+  direction: GZ_TO_ROS
+  qos_profile: SENSOR_DATA
+
+- gz_topic_name: /ground_truth/odom
+  ros_topic_name: /ground_truth/odom
+  gz_type_name: gz.msgs.Odometry
+  ros_type_name: nav_msgs/msg/Odometry
+  direction: GZ_TO_ROS
+  qos_profile: SENSOR_DATA
