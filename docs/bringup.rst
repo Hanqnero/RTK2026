@@ -5,6 +5,7 @@
 
 * Serial-конфигурация остаётся в ``rtk2026_driver``;
 * параметры SLAM остаются в ``rtk2026_slam``;
+* параметры EKF и AMCL остаются в ``rtk2026_localization``;
 * URDF и контроллеры остаются в ``rtk2026_description``.
 
 ``arduino_launch.py``
@@ -50,32 +51,54 @@
 ``real_slam.py``
 ----------------
 
-Композиция четырёх launch-файлов:
+Композиция пяти launch-файлов:
 
 .. code-block:: text
 
    display.launch.py  ──> robot_state_publisher, fixed TF
-   arduino_launch.py  ──> /cmd_vel -> Arduino -> /odom + odom TF
+   arduino_launch.py  ──> /cmd_vel -> Arduino -> /wheel/odom
    lidar_launch.py    ──> /scan
+   ekf.launch.py      ──> /odometry/filtered + odom -> base_footprint
    slam_launch.py     ──> map, map -> odom
 
 Для реального запуска: ``use_sim_time=false``, mesh отключены, webcam frame
-включён.
+включён. ``ekf_real.yaml`` объединяет ``vx``, ограничение ``vy=0`` из
+энкодеров и ``angular_velocity.z`` BMI270. Нода BMI270 подключается к I²C
+Raspberry Pi и должна отдельно публиковать ``/imu/data`` в ``imu_link``;
+текущий bringup её пока не запускает. Аргумент ``use_rviz`` по умолчанию
+false, а ``ekf_config`` позволяет явно выбрать другой YAML.
+
+``real_localization.py``
+------------------------
+
+Аппаратная часть и EKF совпадают с ``real_slam.py``, но глобальную
+трансформацию ``map -> odom`` публикует AMCL:
+
+.. code-block:: text
+
+   display + Arduino + RPLIDAR + Pi BMI270 + EKF
+                                  │
+   map_server ── /map ────────────┼──> AMCL ──> map -> odom
+   RPLIDAR ───── /scan ───────────┘
+
+Обязательный аргумент ``map`` — абсолютный путь к YAML карты. Одновременный
+запуск этого сценария и ``real_slam.py`` недопустим.
 
 ``sim_slam_launch.py``
 ----------------------
 
-Полный сценарий Gazebo SLAM:
+Сценарий Gazebo с локальным EKF и выбираемой глобальной локализацией:
 
-1. разворачивает ``rtk2026_diff_drive_sim.urdf.xacro``;
-2. запускает Gazebo Harmonic server-only;
-3. публикует ``robot_description`` и статические TF;
-4. создаёт модель ``rtk2026`` с начальным Z=0.03 м;
-5. мостит ``/clock`` и ``/scan`` из Gazebo;
-6. через 3 секунды запускает ``joint_state_broadcaster`` и
+1. выбирает одну модель: ``tracked`` или ``diff_drive``;
+2. один раз запускает Gazebo Harmonic, добавляя ``-s`` только в headless-режиме;
+3. публикует ``robot_description`` и статические TF выбранной модели;
+4. создаёт физическую модель в заданной начальной позе;
+5. загружает общие связи Gazebo→ROS из ``config/gazebo_bridge.yaml``;
+6. только для ``diff_drive`` запускает ``joint_state_broadcaster`` и
    ``diff_drive_controller``;
-7. remap-ит вход/выход контроллера в общий API ``/cmd_vel`` и ``/odom``;
-8. запускает ``slam_toolbox`` с симуляционным временем;
+7. запускает EKF, который публикует ``/odometry/filtered`` и odom TF;
+8. при ``slam_mode=lidar`` запускает ``slam_toolbox``, а при
+   ``slam_mode=visual`` — RTAB-Map RGB-D;
 9. при ``use_rviz=true`` запускает RViz.
 
 .. list-table:: Аргументы sim_slam_launch.py
@@ -85,29 +108,106 @@
    * - Аргумент
      - Default
      - Назначение
+   * - ``robot_model``
+     - tracked
+     - Ходовая часть: ``tracked`` или ``diff_drive``.
    * - ``world``
-     - ``rtk2026_slam_world.sdf``
+     - ``electrolysis.sdf``
      - Абсолютный путь к Gazebo world; сюда передаётся и
        ``polygon_5x5.world``.
    * - ``use_meshes``
      - false
      - STL visual вместо примитивов.
+   * - ``use_gazebo_gui``
+     - false
+     - Запустить клиент Gazebo вместе с сервером; окно выводится в noVNC.
    * - ``use_rviz``
      - true
      - Окно RViz в X11/noVNC.
+   * - ``slam_mode``
+     - visual
+     - ``lidar`` — ``slam_toolbox``;
+       ``visual`` — RTAB-Map RGB-D;
+       ``none`` — базовый стек без глобальной локализации.
+   * - ``rtabmap_database``
+     - ``/workspace/records/rtabmap/rtk2026.db``
+     - База графа и данных визуального SLAM.
+   * - ``rtabmap_localization``
+     - false
+     - ``false`` строит карту, ``true`` локализуется по существующей базе.
+   * - ``rtabmap_args``
+     - пусто
+     - Дополнительные аргументы; ``--delete_db_on_start`` создаёт новую базу.
    * - ``rviz_config``
      - ``rtk2026_sim_slam.rviz``
      - Пользовательская конфигурация RViz.
+   * - ``spawn_x`` / ``spawn_y`` / ``spawn_z`` / ``spawn_yaw``
+     - 0.0 / 0.2 / 0.081 / π/2
+     - Начальная поза модели; Z задаётся относительно поверхности world,
+       yaw — в радианах.
 
-Запуск произвольного мира:
+Запуск произвольного мира и модели
+----------------------------------
 
 .. code-block:: bash
 
    ros2 launch rtk2026_bringup sim_slam_launch.py \
+     robot_model:=tracked \
      world:=/absolute/path/to/polygon_5x5.world
 
-Контроллеры запускаются ``spawner`` с timeout 60 секунд. ``TimerAction(3.0)``
-только уменьшает стартовую гонку; фактическая синхронизация обеспечивается
-ожиданием сервисов ``/controller_manager``.
+Для ``robot_model:=diff_drive`` контроллеры запускаются ``spawner`` с
+timeout 60 секунд. ``TimerAction(3.0)`` только уменьшает стартовую гонку;
+фактическая синхронизация обеспечивается ожиданием сервисов
+``/controller_manager``. Для ``tracked`` эти процессы вообще не создаются.
+
+Runtime-блоки симуляционного launch
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table:: Ноды, которые остаются после запуска
+   :header-rows: 1
+   :widths: 27 30 43
+
+   * - Нода
+     - Главные интерфейсы
+     - Откуда появляется
+   * - ``/robot_state_publisher``
+     - ``/robot_description``, ``/tf`` и ``/tf_static``
+     - Один из двух условных ``Node`` для выбранного Xacro.
+   * - ``/gazebo_bridge``
+     - Gazebo→ROS: часы, лидар, IMU, RGB-D и ground truth
+     - Штатный ``parameter_bridge`` с ``config/gazebo_bridge.yaml``.
+   * - ``/tracked_drive_bridge``
+     - ROS→Gazebo ``/cmd_vel``; Gazebo→ROS ``/wheel/odom``
+     - Только для ``robot_model:=tracked``.
+   * - ``/controller_manager``
+     - control services, ``/robot_description``
+     - Только ``diff_drive``: плагин ``gz_ros2_control``.
+   * - ``/joint_state_broadcaster``
+     - Publisher ``/joint_states``
+     - Загружается краткоживущим ``spawner``.
+   * - ``/diff_drive_controller``
+     - Subscriber ``/cmd_vel``; publishers ``/wheel/odom`` и ``cmd_vel_out``
+     - Только ``diff_drive``: загружается вторым ``spawner``.
+   * - ``/ekf_filter_node``
+     - Subscribers ``/wheel/odom`` и ``/imu/data``;
+       publishers ``/odometry/filtered`` и ``/tf``
+     - Включён через ``rtk2026_localization/ekf.launch.py``.
+   * - ``/slam_toolbox``
+     - Subscriber ``/scan``; publishers ``/map``, ``/tf`` и lifecycle events
+     - Включён через ``slam_launch.py`` только при ``slam_mode=lidar``.
+   * - ``/rtabmap/rtabmap``
+     - Subscribers RGB, aligned depth и ``/odometry/filtered``;
+       publishers ``/map`` и ``map -> odom``
+     - Включён только при ``slam_mode=visual``.
+   * - ``/rviz2``
+     - ``/map``, ``/scan``, ``/tf``, ``/tf_static`` и другие display topics
+     - Запускается только при ``use_rviz=true``.
+
+``spawn_rtk2026_diff_drive`` или ``spawn_rtk2026_tracked`` выполняет одно
+действие и завершается, поэтому поздний ``rqt_graph`` его не показывает.
+Два ``spawner`` появляются только у колёсной модели.
+
+Практические команды для каждого launch и проверка получившегося графа:
+:doc:`running`.
 
 Исходники: `launch/ <https://github.com/Hanqnero/RTK2026/tree/main/src/rtk2026_bringup/launch>`_.

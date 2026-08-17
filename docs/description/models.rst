@@ -133,9 +133,13 @@ Gazebo plugins
 
 ``GazeboSimROS2ControlPlugin`` загружает
 ``config/diffbot_controllers.yaml`` и создаёт ``controller_manager``.
+Официальный ``sensor_d435i`` из ``realsense2_description`` создаёт геометрию
+и TF камеры, а ``rtk2026_realsense_d435i_gazebo`` добавляет RGB-D и IMU
+потоки Gazebo Harmonic.
 ``OdometryPublisher`` публикует идеальную позу в Gazebo Transport
-``/ground_truth/odom`` с частотой 50 Гц и без шума. Этот topic не мостится
-текущим launch автоматически.
+``/ground_truth/odom`` с частотой 50 Гц и без шума. ``sim_slam_launch.py``
+автоматически мостит его в одноимённый ROS-топик только для диагностики; TF
+из ground truth не публикуется.
 
 Отдельная модель камеры
 -----------------------

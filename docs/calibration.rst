@@ -12,7 +12,7 @@
 
 * оба колеса физически вращают робот вперёд;
 * обе энкодерные дельты положительные;
-* ``/odom.twist.twist.linear.x`` положителен;
+* ``/wheel/odom.twist.twist.linear.x`` положителен;
 * X в ``odom -> base_footprint`` растёт при начальном yaw=0.
 
 Arduino проверяется ``verify_signs.py`` на поднятом роботе. В Gazebo итоговый
@@ -74,7 +74,8 @@ URDF включает Gazebo ``OdometryPublisher``, но launch пока не с
 
 Сравниваются:
 
-* ``/odom`` — интегрирование wheel joint feedback;
+* ``/wheel/odom`` — интегрирование wheel joint feedback;
+* ``/odometry/filtered`` — результат локального EKF;
 * ``/ground_truth/odom`` — фактическая физическая поза модели.
 
 Перед тестом остановите другие publishers ``/cmd_vel``. Конкурирующие teleop и

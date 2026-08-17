@@ -1,10 +1,59 @@
 Параметры SLAM
 ==============
 
-Пакет ``rtk2026_slam`` не содержит собственного алгоритма SLAM. Он является
-единственным владельцем конфигурации ``slam_toolbox``; запуск выполняет
-``rtk2026_bringup/slam_launch.py`` через официальный
-``online_async_launch.py``.
+Пакет ``rtk2026_slam`` не содержит собственного алгоритма SLAM. Он хранит
+проектные конфигурации двух готовых ROS 2 backend:
+
+* ``slam_toolbox_params.yaml`` для lidar-картирования;
+* ``rtabmap_rgbd.ini`` для визуального RGB-D SLAM.
+
+Состав процессов выбирает единый ``rtk2026_bringup/sim_slam_launch.py``.
+Отдельный ``slam_launch.py`` остаётся минимальной точкой запуска
+``slam_toolbox`` на реальном роботе.
+
+Runtime-блок ноды:
+
+.. code-block:: text
+
+   /scan ──> slam_toolbox ──> /map
+                │
+                ├── TF map -> odom
+                └── /slam_toolbox/transition_event
+
+Одометрическое предсказание приходит через TF ``odom -> base_footprint``, а не
+через прямую подписку ``slam_toolbox`` на ``/wheel/odom`` или
+``/odometry/filtered``. Поэтому обычный
+``rqt_graph`` со скрытыми TF показывает только цепочку ``/scan -> /map``.
+
+Визуальный SLAM RTAB-Map
+------------------------
+
+``slam_mode:=visual`` запускает готовую ноду ``/rtabmap/rtabmap``:
+
+.. code-block:: text
+
+   color image ───────────────┐
+   aligned depth ─────────────┼──> /rtabmap/rtabmap ──> /map
+   camera_info ───────────────┤             │
+   /odometry/filtered ────────┘             └── TF map -> odom
+
+Локальная одометрия не дублируется: ``visual_odometry=false`` и
+``publish_tf_odom=false``. RTAB-Map получает готовую
+``/odometry/filtered`` от EKF и является единственным владельцем
+``map -> odom`` в visual-режиме. Основная IMU уже входит в EKF, поэтому
+повторно в RTAB-Map не подаётся.
+
+RGB-D интерфейсы:
+
+* ``/camera/color/image_raw``;
+* ``/camera/aligned_depth_to_color/image_raw``;
+* ``/camera/color/camera_info``.
+
+``rtabmap_rgbd.ini`` ограничивает обработку графа до 2 Гц, включает плоское
+движение ``x, y, yaw`` и строит occupancy grid по depth. База графа по
+умолчанию сохраняется в ``/workspace/records/rtabmap/rtk2026.db``. Аргумент
+``rtabmap_localization:=true`` открывает существующую базу для локализации;
+``rtabmap_args:=--delete_db_on_start`` начинает новый эксперимент.
 
 Интерфейсы
 ----------
@@ -142,12 +191,19 @@ scan matcher может выбрать неверный локальный ма�
 
    ros2 launch rtk2026_bringup real_slam.py
 
-Симуляция:
+Симуляция со SLAM Toolbox:
 
 .. code-block:: bash
 
-   ros2 launch rtk2026_bringup sim_slam_launch.py
+   ros2 launch rtk2026_bringup sim_slam_launch.py slam_mode:=lidar
+
+Симуляция с визуальным SLAM, используемая по умолчанию:
+
+.. code-block:: bash
+
+   ros2 launch rtk2026_bringup sim_slam_launch.py slam_mode:=visual
 
 В симуляции ``use_sim_time`` принудительно true, на реальном роботе должен
 быть false. Исходный YAML:
 `slam_toolbox_params.yaml <https://github.com/Hanqnero/RTK2026/blob/main/src/rtk2026_slam/config/slam_toolbox_params.yaml>`_.
+Команды проверки lifecycle, входного скана, карты и TF: :doc:`running`.

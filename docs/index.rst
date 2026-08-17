@@ -37,6 +37,7 @@ ROS 2-драйвер, построение карты, модели URDF/Xacro, 
    :caption: Эксплуатация и разработка
 
    running
+   drive_setup
    calibration
    transport_check
    diagnostics

@@ -37,6 +37,12 @@ Raspberry Pi
 
    docker compose -f pi/docker/docker-compose.pi.yml run --rm build
 
+Та же среда интерактивно, когда нужно поработать с ``avrdude`` руками:
+
+.. code-block:: bash
+
+   docker compose -f pi/docker/docker-compose.pi.yml run --rm shell
+
 .. note::
 
    Образ собирается из корня репозитория, а не из ``pi/``: контейнеру нужен
