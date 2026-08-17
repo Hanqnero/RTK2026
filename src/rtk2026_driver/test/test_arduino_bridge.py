@@ -36,11 +36,15 @@ class _FakeClock:
 class _FakeLogger:
     def __init__(self):
         self.info_messages = []
+        self.warning_messages = []
         self.error_messages = []
         self.fatal_messages = []
 
     def info(self, message):
         self.info_messages.append(message)
+
+    def warning(self, message):
+        self.warning_messages.append(message)
 
     def error(self, message):
         self.error_messages.append(message)
@@ -112,6 +116,7 @@ class _FakeOdometry:
         self.child_frame_id = ""
 
         self.pose = types.SimpleNamespace(
+            covariance=[0.0] * 36,
             pose=types.SimpleNamespace(
                 position=types.SimpleNamespace(
                     x=0.0,
@@ -128,6 +133,7 @@ class _FakeOdometry:
         )
 
         self.twist = types.SimpleNamespace(
+            covariance=[0.0] * 36,
             twist=types.SimpleNamespace(
                 linear=types.SimpleNamespace(
                     x=0.0,
@@ -313,37 +319,9 @@ def _load_bridge_module(monkeypatch):
         serial_mod,
     )
 
-    protocol_mod = types.ModuleType("rtk2026_driver.protocol")
-    protocol_mod.TelemetryPacket = _FakeTelemetryPacket
-    protocol_mod.pack_calls = []
-
-    def _pack_command(
-        linear_mps,
-        angular_rps,
-        debug_raw_encoder,
-    ):
-        protocol_mod.pack_calls.append(
-            (
-                linear_mps,
-                angular_rps,
-                debug_raw_encoder,
-            )
-        )
-
-        return (
-            f"{linear_mps:.3f},"
-            f"{angular_rps:.3f},"
-            f"{int(debug_raw_encoder)}"
-        ).encode()
-
-    protocol_mod.pack_command = _pack_command
-    protocol_mod.pop_telemetry_packet = lambda buffer: None
-
-    monkeypatch.setitem(
-        sys.modules,
-        "rtk2026_driver.protocol",
-        protocol_mod,
-    )
+    # protocol.py не зависит ни от ROS, ни от pyserial, поэтому подменять его
+    # нечем и незачем: тест моста работает с настоящим форматом провода.
+    import rtk2026_driver.protocol as protocol_mod
 
     transport_mod = types.ModuleType(
         "rtk2026_driver.serial_transport"
@@ -490,17 +468,23 @@ def test_send_command_writes_fresh_command(monkeypatch):
     node._target_angular_rps = -0.34
     node._last_cmd_time = 10.0
     node._drop_stale_cmd_after_sec = 0.30
-    node._debug_raw_encoder = True
 
     node._send_command()
 
-    assert module._test_protocol_module.pack_calls == [
-        (0.12, -0.34, True)
-    ]
+    # Ожидается настоящий кадр протокола v2, а не суррогат из мока.
+    expected = module._test_protocol_module.pack_velocity_command(0.12, -0.34)
+    assert transport.writes == [expected]
 
-    assert transport.writes == [
-        b"0.120,-0.340,1"
-    ]
+    # Кадр обязан разбираться обратно тем же кодеком.
+    decoder = module._test_protocol_module.FrameDecoder()
+    (message_id, payload), = list(decoder.feed(transport.writes[0]))
+    assert message_id == module._test_protocol_module.MSG_CMD_VELOCITY
+
+    linear_mps, angular_rps, _ = (
+        module._test_protocol_module.VELOCITY_STRUCT.unpack(payload)
+    )
+    assert linear_mps == pytest.approx(0.12)
+    assert angular_rps == pytest.approx(-0.34)
 
 # проверяет dead-man после тайм-аута
 def test_send_command_writes_zero_when_command_is_stale(
@@ -525,16 +509,11 @@ def test_send_command_writes_zero_when_command_is_stale(
     node._target_angular_rps = 0.4
     node._last_cmd_time = 10.0
     node._drop_stale_cmd_after_sec = 0.30
-    node._debug_raw_encoder = False
 
     node._send_command()
 
-    assert module._test_protocol_module.pack_calls == [
-        (0.0, 0.0, False)
-    ]
-
     assert transport.writes == [
-        b"0.000,0.000,0"
+        module._test_protocol_module.pack_velocity_command(0.0, 0.0)
     ]
 
 # проверяет остановку до получения первой команды
@@ -560,69 +539,220 @@ def test_send_command_writes_zero_before_first_cmd_vel(
     node._target_angular_rps = 0.4
     node._last_cmd_time = None
     node._drop_stale_cmd_after_sec = 0.30
-    node._debug_raw_encoder = False
 
     node._send_command()
 
-    assert module._test_protocol_module.pack_calls == [
-        (0.0, 0.0, False)
+    assert transport.writes == [
+        module._test_protocol_module.pack_velocity_command(0.0, 0.0)
     ]
 
-# проверяет добавление байтов в буфер и обработку нескольких пакетов
+def _telemetry_frame(protocol, seq=0, odom_x_m=0.0, dt_us=20000, flags=0):
+    """Собрать настоящий кадр телеметрии протокола v2."""
+
+    payload = protocol.TELEMETRY_STRUCT.pack(
+        seq,        # seq
+        1000,       # mcu_time_ms
+        dt_us,      # dt_us
+        10,         # left_encoder_delta
+        12,         # right_encoder_delta
+        1000,       # left_encoder_total
+        1200,       # right_encoder_total
+        1.0,        # left_wheel_rps
+        1.1,        # right_wheel_rps
+        1.0,        # left_setpoint_rps
+        1.1,        # right_setpoint_rps
+        100,        # left_pwm
+        110,        # right_pwm
+        odom_x_m,   # odom_x_m
+        0.0,        # odom_y_m
+        0.0,        # odom_heading_rad
+        0.5,        # current_linear_mps
+        0.0,        # current_angular_rps
+        -1,         # sonar_distance_cm
+        flags,
+        protocol.CONTROL_MODE_VELOCITY,
+    )
+
+    return protocol.build_frame(protocol.MSG_TELEMETRY, payload)
+
+
+def _make_reading_node(module, transport):
+    """Собрать ноду с состоянием, достаточным для чтения телеметрии."""
+
+    protocol = module._test_protocol_module
+
+    node = module.ArduinoBridgeNode.__new__(module.ArduinoBridgeNode)
+    node._transport = transport
+    node._decoder = protocol.FrameDecoder()
+    node._sequence = protocol.SequenceTracker()
+    node._latest_stats = None
+
+    return node
+
+
+# проверяет разбор нескольких кадров из одной порции байт
 def test_read_telemetry_publishes_all_received_packets(
     monkeypatch,
 ):
     module = _load_bridge_module(monkeypatch)
-
-    first_packet = _FakeTelemetryPacket(
-        odom_x_m=1.0,
-    )
-
-    second_packet = _FakeTelemetryPacket(
-        odom_x_m=2.0,
-    )
-
-    parser_results = iter(
-        [
-            first_packet,
-            second_packet,
-            None,
-        ]
-    )
-
-    parser_buffers = []
-
-    def _pop_packet(buffer):
-        parser_buffers.append(bytes(buffer))
-        return next(parser_results)
-
-    monkeypatch.setattr(
-        module,
-        "pop_telemetry_packet",
-        _pop_packet,
-    )
+    protocol = module._test_protocol_module
 
     transport = _FakeTransport()
-    transport.read_bytes = b"received telemetry"
+    transport.read_bytes = (
+        _telemetry_frame(protocol, seq=1, odom_x_m=1.0)
+        + _telemetry_frame(protocol, seq=2, odom_x_m=2.0)
+    )
 
     published_packets = []
 
-    node = module.ArduinoBridgeNode.__new__(
-        module.ArduinoBridgeNode
-    )
-
-    node._transport = transport
-    node._receive_buffer = bytearray(b"old ")
+    node = _make_reading_node(module, transport)
     node._publish_odometry = published_packets.append
 
     node._read_telemetry()
 
-    assert parser_buffers[0] == b"old received telemetry"
+    assert [packet.odom_x_m for packet in published_packets] == [1.0, 2.0]
+    assert node._sequence.received == 2
+    assert node._sequence.lost == 0
 
-    assert published_packets == [
-        first_packet,
-        second_packet,
-    ]
+
+# проверяет, что кадр, разорванный между чтениями, собирается целиком
+def test_read_telemetry_reassembles_split_frame(monkeypatch):
+    module = _load_bridge_module(monkeypatch)
+    protocol = module._test_protocol_module
+
+    frame = _telemetry_frame(protocol, seq=3, odom_x_m=3.5)
+
+    transport = _FakeTransport()
+    published_packets = []
+
+    node = _make_reading_node(module, transport)
+    node._publish_odometry = published_packets.append
+
+    transport.read_bytes = frame[:20]
+    node._read_telemetry()
+    assert published_packets == []
+
+    transport.read_bytes = frame[20:]
+    node._read_telemetry()
+
+    assert len(published_packets) == 1
+    assert published_packets[0].odom_x_m == pytest.approx(3.5)
+
+
+# проверяет, что повреждённый кадр не публикуется как одометрия
+def test_read_telemetry_drops_corrupted_frame(monkeypatch):
+    module = _load_bridge_module(monkeypatch)
+    protocol = module._test_protocol_module
+
+    damaged = bytearray(_telemetry_frame(protocol, seq=4, odom_x_m=9.0))
+    damaged[10] ^= 0xFF
+
+    transport = _FakeTransport()
+    transport.read_bytes = bytes(damaged)
+
+    published_packets = []
+
+    node = _make_reading_node(module, transport)
+    node._publish_odometry = published_packets.append
+
+    node._read_telemetry()
+
+    # В протоколе v1 такой пакет опубликовался бы как правдоподобная,
+    # но неверная одометрия.
+    assert published_packets == []
+    assert node._decoder.bad_crc_count == 1
+
+
+# проверяет учёт потерь по разрыву seq
+def test_read_telemetry_counts_lost_packets(monkeypatch):
+    module = _load_bridge_module(monkeypatch)
+    protocol = module._test_protocol_module
+
+    transport = _FakeTransport()
+    transport.read_bytes = (
+        _telemetry_frame(protocol, seq=10)
+        + _telemetry_frame(protocol, seq=13)
+    )
+
+    node = _make_reading_node(module, transport)
+    node._publish_odometry = lambda packet: None
+
+    node._read_telemetry()
+
+    assert node._sequence.lost == 2
+
+
+# проверяет сохранение статистики прошивки
+def test_read_telemetry_stores_stats_packet(monkeypatch):
+    module = _load_bridge_module(monkeypatch)
+    protocol = module._test_protocol_module
+
+    payload = protocol.STATS_STRUCT.pack(
+        2, 60000, 3000, 19800, 25400, 20010, 900, 24800,
+        3000, 1500, 0, 0, 0, 0, 0, 5300,
+    )
+
+    transport = _FakeTransport()
+    transport.read_bytes = protocol.build_frame(protocol.MSG_STATS, payload)
+
+    node = _make_reading_node(module, transport)
+    node._publish_odometry = lambda packet: None
+
+    node._read_telemetry()
+
+    assert node._latest_stats is not None
+    assert node._latest_stats.dt_max_us == 25400
+    assert node._latest_stats.free_ram_bytes == 5300
+
+
+# проверяет уровень отчёта о состоянии линка
+@pytest.mark.parametrize(
+    "lost_packets, expects_warning",
+    [
+        (0, False),
+        (3, True),
+    ],
+)
+def test_report_link_health_warns_only_on_degradation(
+    monkeypatch,
+    lost_packets,
+    expects_warning,
+):
+    module = _load_bridge_module(monkeypatch)
+    protocol = module._test_protocol_module
+
+    logger = _FakeLogger()
+
+    node = module.ArduinoBridgeNode.__new__(module.ArduinoBridgeNode)
+    node._decoder = protocol.FrameDecoder()
+    node._sequence = protocol.SequenceTracker()
+    node._sequence.received = 100
+    node._sequence.lost = lost_packets
+    node._latest_stats = None
+    node.get_logger = lambda: logger
+
+    node._report_link_health()
+
+    assert bool(logger.warning_messages) is expects_warning
+    assert bool(logger.info_messages) is not expects_warning
+
+
+# проверяет предупреждение при полном отсутствии телеметрии
+def test_report_link_health_warns_when_silent(monkeypatch):
+    module = _load_bridge_module(monkeypatch)
+    protocol = module._test_protocol_module
+
+    logger = _FakeLogger()
+
+    node = module.ArduinoBridgeNode.__new__(module.ArduinoBridgeNode)
+    node._decoder = protocol.FrameDecoder()
+    node._sequence = protocol.SequenceTracker()
+    node._latest_stats = None
+    node.get_logger = lambda: logger
+
+    node._report_link_health()
+
+    assert len(logger.warning_messages) == 1
 
 # проверяет поля /odom, quaternion и TF
 def test_publish_odometry_publishes_ros_message_and_tf(
@@ -641,6 +771,23 @@ def test_publish_odometry_publishes_ros_message_and_tf(
     node._base_frame = "base_footprint"
     node._odom_publisher = publisher
     node._tf_broadcaster = broadcaster
+    node._publish_odom_tf = True
+    node._pose_covariance_diagonal = (
+        0.02,
+        0.02,
+        1.0e6,
+        1.0e6,
+        1.0e6,
+        0.05,
+    )
+    node._twist_covariance_diagonal = (
+        0.01,
+        0.01,
+        1.0e6,
+        1.0e6,
+        1.0e6,
+        0.03,
+    )
     node.get_clock = lambda: _FakeClock(1_000_000_000)
 
     telemetry = _FakeTelemetryPacket(
@@ -692,6 +839,10 @@ def test_publish_odometry_publishes_ros_message_and_tf(
         odom.twist.twist.angular.z
         == pytest.approx(-0.20)
     )
+    assert odom.pose.covariance[0] == pytest.approx(0.02)
+    assert odom.pose.covariance[35] == pytest.approx(0.05)
+    assert odom.twist.covariance[0] == pytest.approx(0.01)
+    assert odom.twist.covariance[35] == pytest.approx(0.03)
 
     assert transform.header.stamp == odom.header.stamp
     assert transform.header.frame_id == "odom"
@@ -716,6 +867,34 @@ def test_publish_odometry_publishes_ros_message_and_tf(
         transform.transform.rotation.w
         == pytest.approx(expected_w)
     )
+
+
+# проверяет, что при включённом EKF bridge не создаёт второй odom TF
+def test_publish_odometry_does_not_publish_tf_when_disabled(
+    monkeypatch,
+):
+    module = _load_bridge_module(monkeypatch)
+
+    publisher = _FakePublisher()
+    broadcaster = _FakeTransformBroadcaster()
+
+    node = module.ArduinoBridgeNode.__new__(
+        module.ArduinoBridgeNode
+    )
+
+    node._odom_frame = "odom"
+    node._base_frame = "base_footprint"
+    node._odom_publisher = publisher
+    node._tf_broadcaster = broadcaster
+    node._publish_odom_tf = False
+    node._pose_covariance_diagonal = (0.0,) * 6
+    node._twist_covariance_diagonal = (0.0,) * 6
+    node.get_clock = lambda: _FakeClock(1_000_000_000)
+
+    node._publish_odometry(_FakeTelemetryPacket())
+
+    assert len(publisher.messages) == 1
+    assert broadcaster.transforms == []
 
 # проверяет реакцию на потерю serial-порта.
 def test_handle_serial_error_closes_transport_and_shutdowns_ros(
@@ -765,12 +944,8 @@ def test_destroy_node_sends_stop_and_closes_transport(
 
     node.destroy_node()
 
-    assert module._test_protocol_module.pack_calls == [
-        (0.0, 0.0, False)
-    ]
-
     assert transport.writes == [
-        b"0.000,0.000,0"
+        module._test_protocol_module.pack_velocity_command(0.0, 0.0)
     ]
 
     assert transport.closed is True

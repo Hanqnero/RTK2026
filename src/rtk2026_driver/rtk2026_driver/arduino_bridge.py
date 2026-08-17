@@ -5,11 +5,14 @@
 #. Получает :class:`geometry_msgs.msg.TwistStamped` из ``/cmd_vel``.
 #. Периодически передаёт последнюю команду Arduino.
 #. Читает :class:`~rtk2026_driver.protocol.TelemetryPacket` из USB Serial.
-#. Публикует ``/odom`` и динамическую трансформацию
-   ``odom -> base_footprint``.
+#. Публикует сырую колёсную одометрию ``/wheel/odom``.
+
+Динамическую трансформацию ``odom -> base_footprint`` по умолчанию публикует
+EKF. Bridge может публиковать её сам только в аварийном режиме без фильтра.
 """
 
 import math
+import struct
 import time
 
 import rclpy
@@ -21,9 +24,16 @@ from rclpy.node import Node
 from tf2_ros import TransformBroadcaster
 
 from rtk2026_driver.protocol import (
+    MSG_STATS,
+    MSG_TELEMETRY,
+    RESET_STATS,
+    FrameDecoder,
+    SequenceTracker,
     TelemetryPacket,
-    pack_command,
-    pop_telemetry_packet,
+    decode_stats,
+    decode_telemetry,
+    pack_reset_command,
+    pack_velocity_command,
 )
 from rtk2026_driver.transport import SerialTransport
 
@@ -41,10 +51,22 @@ class ArduinoBridgeNode(Node):
         self.declare_parameter("arduino_reset_wait_sec", 1.0) # время ожидания после открытия порта
 
         self.declare_parameter("cmd_vel_topic", "/cmd_vel") # входной топик данной ноды (по умолч "/cmd_vel")
-        self.declare_parameter("odom_topic", "/odom") # выходной топик данной ноды
+        self.declare_parameter("odom_topic", "/wheel/odom") # выходной топик данной ноды
 
         self.declare_parameter("odom_frame", "odom") # создаем неподвижную СК одометрии
         self.declare_parameter("base_frame", "base_footprint") # создаем СК робота
+        self.declare_parameter("publish_odom_tf", False) # TF обычно принадлежит EKF
+
+        # Диагонали ковариаций задаются отдельно от прошивки: это оценка
+        # неопределённости энкодерной одометрии, а не геометрия робота.
+        self.declare_parameter(
+            "pose_covariance_diagonal",
+            [0.02, 0.02, 1.0e6, 1.0e6, 1.0e6, 0.05],
+        )
+        self.declare_parameter(
+            "twist_covariance_diagonal",
+            [0.01, 0.01, 1.0e6, 1.0e6, 1.0e6, 0.03],
+        )
 
         self.declare_parameter("command_send_interval_sec", 0.02) # интервал отправки команд на ардуино (в сек)
         self.declare_parameter("telemetry_poll_period_sec", 0.01) # интервал проверки буфера (в сек)
@@ -52,7 +74,10 @@ class ArduinoBridgeNode(Node):
 
         self.declare_parameter("max_linear_mps", 1.5)
         self.declare_parameter("max_angular_rps", math.pi / 2.0)
-        self.declare_parameter("debug_raw_encoder", False)
+
+        # Период отчёта о состоянии линка в логе. В протоколе v2 потери и
+        # ошибки CRC наконец наблюдаемы, и молчать о них нельзя.
+        self.declare_parameter("link_report_period_sec", 10.0)
 
         # тут мы просто приводим нодовские параметры в стр питона
         serial_port = str(
@@ -78,6 +103,15 @@ class ArduinoBridgeNode(Node):
         self._base_frame = str(
             self.get_parameter("base_frame").value
         )
+        self._publish_odom_tf = bool(
+            self.get_parameter("publish_odom_tf").value
+        )
+        self._pose_covariance_diagonal = self._read_covariance_diagonal(
+            "pose_covariance_diagonal"
+        )
+        self._twist_covariance_diagonal = self._read_covariance_diagonal(
+            "twist_covariance_diagonal"
+        )
 
         command_send_interval_sec = float(
             self.get_parameter("command_send_interval_sec").value
@@ -95,15 +129,20 @@ class ArduinoBridgeNode(Node):
         self._max_angular_rps = float(
             self.get_parameter("max_angular_rps").value
         )
-        self._debug_raw_encoder = bool(
-            self.get_parameter("debug_raw_encoder").value
+        link_report_period_sec = float(
+            self.get_parameter("link_report_period_sec").value
         )
 
         self._target_linear_mps = 0.0
         self._target_angular_rps = 0.0
         self._last_cmd_time: float | None = None
 
-        self._receive_buffer = bytearray()
+        # Разборщик кадров и учёт потерь. Оба живут всё время работы ноды:
+        # их счётчики накопительные и составляют картину качества линка.
+        self._decoder = FrameDecoder()
+        self._sequence = SequenceTracker()
+        self._latest_stats = None
+        self._last_link_report_time = time.monotonic()
         # создаем сериал объект
         self._transport = SerialTransport(
             port=serial_port,
@@ -137,9 +176,53 @@ class ArduinoBridgeNode(Node):
             self._read_telemetry,
         )
 
-        self.get_logger().info(
-            f"Arduino bridge started on {serial_port}"
+        self._link_report_timer = self.create_timer(
+            link_report_period_sec,
+            self._report_link_health,
         )
+
+        # Счётчики прошивки обнуляются при старте ноды, чтобы статистика
+        # относилась к текущему сеансу, а не ко всему времени с подачи питания.
+        try:
+            self._transport.write(pack_reset_command(RESET_STATS))
+        except serial.SerialException as exception:
+            self.get_logger().warning(
+                f"Не удалось сбросить счётчики прошивки: {exception}"
+            )
+
+        self.get_logger().info(
+            f"Arduino bridge started on {serial_port}, протокол v2"
+        )
+
+    def _read_covariance_diagonal(self, parameter_name: str) -> tuple[float, ...]:
+        """Прочитать и проверить шесть диагональных элементов ковариации.
+
+        Порядок значений: ``x, y, z, roll, pitch, yaw`` для pose и
+        ``vx, vy, vz, vroll, vpitch, vyaw`` для twist.
+
+        :param parameter_name: имя ROS-параметра с массивом из шести чисел.
+        :raises ValueError: если размер, знак или конечность значений неверны.
+        """
+
+        diagonal = tuple(
+            float(value)
+            for value in self.get_parameter(parameter_name).value
+        )
+
+        if len(diagonal) != 6:
+            raise ValueError(
+                f"{parameter_name} must contain exactly 6 values"
+            )
+
+        if any(
+            value < 0.0 or not math.isfinite(value)
+            for value in diagonal
+        ):
+            raise ValueError(
+                f"{parameter_name} must contain finite non-negative values"
+            )
+
+        return diagonal
     # тот самый колбек подписки
     def _on_cmd_vel(self, message: TwistStamped) -> None:
         """Проверить и сохранить новую команду скорости.
@@ -204,10 +287,9 @@ class ArduinoBridgeNode(Node):
             linear_mps = self._target_linear_mps
             angular_rps = self._target_angular_rps
 
-        command_packet = pack_command(
+        command_packet = pack_velocity_command(
             linear_mps=linear_mps,
             angular_rps=angular_rps,
-            debug_raw_encoder=self._debug_raw_encoder,
         )
 
         try:
@@ -219,9 +301,10 @@ class ArduinoBridgeNode(Node):
             )
     # калбек чтения буфера
     def _read_telemetry(self) -> None:
-        """Прочитать доступные байты и обработать все полные телепакеты.
+        """Прочитать доступные байты и обработать все собранные кадры.
 
-        Неполный хвост остаётся в ``_receive_buffer`` до следующего вызова
+        Неполный хвост кадра остаётся во внутреннем состоянии
+        :class:`~rtk2026_driver.protocol.FrameDecoder` до следующего вызова
         таймера. Ошибка serial считается фатальной для ноды.
         """
 
@@ -234,28 +317,105 @@ class ArduinoBridgeNode(Node):
             )
             return
 
-        if received_bytes:
-            self._receive_buffer.extend(received_bytes)
+        if not received_bytes:
+            return
 
-        while True:
-            telemetry = pop_telemetry_packet(
-                self._receive_buffer
+        for message_id, payload in self._decoder.feed(received_bytes):
+            if message_id == MSG_TELEMETRY:
+                self._handle_telemetry(payload)
+            elif message_id == MSG_STATS:
+                self._handle_stats(payload)
+            # Прочие идентификаторы принадлежат сообщениям, которых эта
+            # версия ноды ещё не знает. Кадр корректен, поэтому молча
+            # пропускаем его, не портя счётчики ошибок.
+
+    def _handle_telemetry(self, payload: bytes) -> None:
+        """Разобрать пакет телеметрии и опубликовать одометрию.
+
+        :param payload: полезная нагрузка кадра ``MSG_TELEMETRY``.
+        """
+
+        try:
+            telemetry = decode_telemetry(payload)
+        except struct.error as exception:
+            # Кадр прошёл CRC, но длина не совпала с ожидаемой разметкой.
+            # Это означает рассогласование версий прошивки и ноды.
+            self.get_logger().error(
+                f"Телеметрия неожиданной длины {len(payload)}: {exception}"
+            )
+            return
+
+        self._sequence.update(telemetry.seq)
+        self._publish_odometry(telemetry)
+
+    def _handle_stats(self, payload: bytes) -> None:
+        """Сохранить последнюю статистику прошивки.
+
+        :param payload: полезная нагрузка кадра ``MSG_STATS``.
+        """
+
+        try:
+            self._latest_stats = decode_stats(payload)
+        except struct.error as exception:
+            self.get_logger().error(
+                f"Статистика неожиданной длины {len(payload)}: {exception}"
             )
 
-            if telemetry is None:
-                break
+    def _report_link_health(self) -> None:
+        """Записать в лог состояние линка с Arduino.
 
-            self._publish_odometry(telemetry)
-            
-    # ~ распаковка одометрии с ардуинки и ее публкикация 
+        Отчёт выводится с уровнем WARN, если за прошедший интервал были
+        потери, ошибки CRC или срывы периода на MCU: такие события ничем
+        другим себя не проявляют и иначе остались бы незамеченными.
+        """
+
+        if self._sequence.received == 0:
+            self.get_logger().warning(
+                "Телеметрия от Arduino не поступает"
+            )
+            return
+
+        stats = self._latest_stats
+
+        message = (
+            f"link: принято={self._sequence.received} "
+            f"потеряно={self._sequence.lost} "
+            f"({100.0 * self._sequence.loss_ratio:.2f} %) "
+            f"crc={self._decoder.bad_crc_count} "
+            f"мусор={self._decoder.resync_count}"
+        )
+
+        if stats is not None:
+            message += (
+                f" | mcu: dt={stats.dt_mean_us / 1000.0:.1f} мс "
+                f"макс={stats.dt_max_us / 1000.0:.1f} мс "
+                f"срывов={stats.overruns} "
+                f"tx_drop={stats.tx_dropped} "
+                f"ram={stats.free_ram_bytes}"
+            )
+
+        degraded = (
+            self._sequence.lost > 0
+            or self._decoder.bad_crc_count > 0
+            or self._decoder.resync_count > 0
+            or (stats is not None and (stats.overruns > 0 or stats.tx_dropped > 0))
+        )
+
+        if degraded:
+            self.get_logger().warning(message)
+        else:
+            self.get_logger().info(message)
+
+    # ~ распаковка одометрии с ардуинки и ее публкикация
     def _publish_odometry(
         self,
         telemetry: TelemetryPacket,
     ) -> None:
-        """Опубликовать одометрию и соответствующую динамическую TF.
+        """Опубликовать сырую одометрию и, при необходимости, динамическую TF.
 
-        Оба сообщения получают одну временную метку. Плоский угол курса из
-        телеметрии переводится в quaternion вращения вокруг оси Z.
+        Плоский угол курса из телеметрии переводится в quaternion вращения
+        вокруг оси Z. При ``publish_odom_tf=false`` TF не отправляется:
+        единственным владельцем ``odom -> base_footprint`` остаётся EKF.
 
         :param telemetry: разобранный пакет состояния Arduino.
         """
@@ -295,7 +455,17 @@ class ArduinoBridgeNode(Node):
             telemetry.current_angular_rps
         )
 
+        for index, value in enumerate(self._pose_covariance_diagonal):
+            odom_message.pose.covariance[index * 7] = value
+
+        for index, value in enumerate(self._twist_covariance_diagonal):
+            odom_message.twist.covariance[index * 7] = value
+
         self._odom_publisher.publish(odom_message) # публикация сообщения
+
+        if not self._publish_odom_tf:
+            return
+
         transform = TransformStamped() # создаем дерево трансформаций (чтобы в рвиз визуализировать собственно локализацию робота)
 
         transform.header.stamp = stamp
@@ -338,10 +508,9 @@ class ArduinoBridgeNode(Node):
     def destroy_node(self) -> None:
         """Остановить приводы, закрыть serial-порт и уничтожить ноду."""
 
-        stop_packet = pack_command(
+        stop_packet = pack_velocity_command(
             linear_mps=0.0,
             angular_rps=0.0,
-            debug_raw_encoder=False,
         )
 
         try:
@@ -373,4 +542,4 @@ def main(args=None) -> None:
 
 
 if __name__ == "__main__":
-    main()     
+    main()
