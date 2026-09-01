@@ -51,14 +51,14 @@ Raspberry Pi 5 строит карту и ведёт машину, отдель�
    ``diff_drive_controller``, на реальном роботе — ``ArduinoBridgeNode``.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Как устроено
 
    architecture
    interfaces
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Части робота
 
    arduino/index
@@ -69,7 +69,7 @@ Raspberry Pi 5 строит карту и ведёт машину, отдель�
    city_nav
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Запуск
 
    bringup
@@ -77,7 +77,7 @@ Raspberry Pi 5 строит карту и ведёт машину, отдель�
    docker
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Стенд и настройка привода
 
    bench
@@ -86,7 +86,7 @@ Raspberry Pi 5 строит карту и ведёт машину, отдель�
    transport_check
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Наблюдение и сопровождение
 
    diagnostics
