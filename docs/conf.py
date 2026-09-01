@@ -95,6 +95,31 @@ html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 html_title = "RTK2026 — техническая документация"
 html_show_sourcelink = True
+# Боковая панель: сначала поиск и оглавление текущей страницы, потом общее.
+# Без localtoc длинные справочники - протокол, инструменты стенда, диагностика -
+# читаются вслепую: заголовков там полтора десятка, а перейти к нужному нечем.
+# Типы из библиотек, для которых нет словаря intersphinx. Перечислены явно,
+# чтобы строгая сборка (sphinx -n) оставалась рабочей проверкой: любое ДРУГОЕ
+# неразрешённое имя означает опечатку в аннотации или в ссылке.
+nitpick_ignore = [
+    ("py:class", "serial.Serial"),
+    ("py:class", "rclpy.node.Node"),
+    ("py:class", "geometry_msgs.msg.TwistStamped"),
+    ("py:class", "_csv.writer"),
+    ("py:class", "_curses.window"),
+    ("py:class", "Path"),
+]
+
+html_sidebars = {
+    "**": [
+        "about.html",
+        "searchbox.html",
+        "localtoc.html",
+        "navigation.html",
+        "relations.html",
+    ]
+}
+
 html_theme_options = {
     "description": "Прошивка, ROS 2, SLAM, описание робота и симуляция",
     "fixed_sidebar": True,

@@ -149,11 +149,7 @@ false, а ``ekf_config`` позволяет явно выбрать другой
 Запуск произвольного мира и модели
 ----------------------------------
 
-.. code-block:: bash
-
-   ros2 launch rtk2026_bringup sim_slam_launch.py \
-     robot_model:=tracked \
-     world:=/absolute/path/to/polygon_5x5.world
+Команды запуска собраны в :doc:`running`; здесь - что при этом происходит.
 
 Для ``robot_model:=diff_drive`` контроллеры запускаются ``spawner`` с
 timeout 60 секунд. ``TimerAction(3.0)`` только уменьшает стартовую гонку;

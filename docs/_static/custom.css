@@ -67,3 +67,42 @@ code.literal {
     padding-right: 20px;
   }
 }
+
+/* Длина строки.
+ *
+ * Тело документа намеренно широкое: таблицы параметров и схемы в нём не
+ * помещаются иначе. Но текст, набранный на всю эту ширину, читается тяжело -
+ * глаз теряет начало следующей строки. Поэтому ограничиваем сами текстовые
+ * блоки, оставляя таблицам, коду и картинкам полную ширину.
+ */
+div.body p,
+div.body ul,
+div.body ol,
+div.body blockquote,
+div.body dd {
+  max-width: 82ch;
+}
+
+div.body table,
+div.body pre,
+div.body img,
+div.body .highlight {
+  max-width: none;
+}
+
+/* Оглавление текущей страницы в панели: компактнее общего списка,
+ * иначе на длинных страницах оно вытесняет всё остальное.
+ */
+div.sphinxsidebar ul.simple,
+div.sphinxsidebar > div > ul ul {
+  font-size: 0.92em;
+  line-height: 1.4;
+}
+
+/* Таблицы параметров: разделители строк вместо сплошной сетки. */
+div.body table.docutils td,
+div.body table.docutils th {
+  border-left: none;
+  border-right: none;
+  padding: 6px 10px;
+}

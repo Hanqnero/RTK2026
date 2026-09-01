@@ -16,24 +16,133 @@
 4. timestamp и frame_id ``/scan``;
 5. только после этого — параметры scan matching.
 
-Топики и частоты
-----------------
+
+Топики: список, связи, частоты
+------------------------------
+
+Что вообще опубликовано и каких типов:
 
 .. code-block:: bash
 
-   ros2 topic list
-   ros2 topic info -v /cmd_vel
+   ros2 topic list -t
+
+Кто публикует, кто читает и с каким QoS. Несовпадение QoS - самая частая
+причина того, что подписчик не получает ничего при живом издателе:
+
+.. code-block:: bash
+
+   for topic in \
+       /joint_states /robot_description /cmd_vel /wheel/odom \
+       /imu/data /odometry/filtered /scan /map /clock /tf /tf_static
+   do
+       echo "========== ${topic} =========="
+       ros2 topic info "${topic}" -v || true
+   done
+
+Разовый снимок содержимого, без бесконечного вывода:
+
+.. code-block:: bash
+
+   ros2 topic echo /joint_states --once
+   ros2 topic echo /wheel/odom --once
+   ros2 topic echo /imu/data --once
+   ros2 topic echo /odometry/filtered --once
+   ros2 topic echo /scan --once --field header
+   ros2 topic echo /map --once --field info
+
+Фактические частоты:
+
+.. code-block:: bash
+
    ros2 topic hz /wheel/odom
    ros2 topic hz /imu/data
    ros2 topic hz /odometry/filtered
    ros2 topic hz /scan
-   ros2 topic echo /imu/data --once
-   ros2 topic echo /scan --once --field header
 
-Для основной tracked-симуляции nominal: odom 50 Гц, lidar 10 Гц. Только у
-дополнительной ``diff_drive``-модели controller update равен 100 Гц.
-SLAM Toolbox принимает измерения не чаще 5 Гц из-за
-``minimum_time_interval=0.2``.
+Ожидаемые значения для основной гусеничной симуляции: одометрия 50 Гц,
+лидар 10 Гц. У дополнительной ``diff_drive``-модели цикл контроллера 100 Гц.
+SLAM Toolbox принимает сканы не чаще 5 Гц из-за ``minimum_time_interval=0.2``,
+поэтому более частый лидар прироста качества не даст.
+
+Ноды и их интерфейсы
+--------------------
+
+Список активных нод:
+
+.. code-block:: bash
+
+   ros2 node list | sort
+
+Подробно проверить главные блоки:
+
+.. code-block:: bash
+
+   ros2 node info /joint_state_broadcaster
+   ros2 node info /robot_state_publisher
+   ros2 node info /controller_manager
+   ros2 node info /diff_drive_controller
+   ros2 node info /ekf_filter_node
+   ros2 node info /gazebo_bridge
+   ros2 node info /slam_toolbox
+
+Состояние lifecycle SLAM:
+
+.. code-block:: bash
+
+   ros2 lifecycle get /slam_toolbox
+   ros2 topic info /slam_toolbox/transition_event -v
+
+
+Диагностическое GUI
+-------------------
+
+Для SLAM Toolbox откройте третий CONTAINER-терминал:
+
+.. code-block:: bash
+
+   ros2 launch rtk2026_observability diagnostics_lidar.launch.py \
+     use_gui:=true
+
+Для визуального SLAM:
+
+.. code-block:: bash
+
+   ros2 launch rtk2026_observability diagnostics_visual.launch.py \
+     use_gui:=true
+
+Для AMCL измените профиль:
+
+.. code-block:: bash
+
+   ros2 launch rtk2026_observability diagnostics.launch.py \
+     use_gui:=true \
+     localization_mode:=localization
+
+``rqt_robot_monitor`` показывает агрегированное дерево
+``/diagnostics_agg``, ``rqt_runtime_monitor`` — исходные статусы
+``/diagnostics``, PlotJuggler — временные графики выбранных полей топиков.
+Окна находятся на ``http://127.0.0.1:6081/vnc.html``.
+
+Текущие автоматические профили observability рассчитаны на Gazebo: они
+проверяют ``/imu/data``, ``/wheel/odom`` и ground truth. На реальном роботе до
+появления отдельного real-профиля используйте проверки частот, нод и TF из
+этого раздела; иначе симуляционные ожидания закономерно дадут stale/warn.
+
+Граф системы
+------------
+
+.. code-block:: bash
+
+   rqt_graph
+
+Окно открывается через noVNC. Чтобы увидеть основной поток данных, скройте
+``/tf`` и ``/tf_static``: они связывают почти всё со всем и заслоняют картину.
+Для поиска пропавшего преобразования, наоборот, включите их или возьмите
+``rqt_tf_tree``.
+
+``rqt_graph`` не показывает hardware interfaces и уже завершившиеся служебные
+процессы - отсутствие ``spawn_rtk2026`` и spawner-ов контроллеров после старта
+нормально.
 
 Автоматическое дерево диагностики
 ---------------------------------
@@ -157,14 +266,6 @@ scan matching или готовую метрику качества loop closure
 эксперимент: ``/scan``, ``/pose``, ``/map``, TF, одометрия, ground truth и
 ``/rosout``.
 
-Снимок графа для отчёта
------------------------
-
-Во втором терминале контейнера запустите ``rqt_graph`` и откройте окно через
-noVNC. Для основного data flow скройте ``/tf`` и ``/tf_static``; для поиска
-пропавшего преобразования, наоборот, включите их или используйте
-``rqt_tf_tree``. Отсутствие ``spawn_rtk2026`` и controller spawner-ов после
-старта нормально: это завершившиеся служебные процессы.
 
 TF
 --

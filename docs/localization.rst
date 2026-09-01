@@ -79,10 +79,10 @@ wheel joints — прямого аналога энкодерных углов. 
                                                        └── TF odom -> base_footprint
 
 Физическая IMU присутствует в URDF как ``imu_link``, но статический link сам
-по себе не создаёт измерений. Отдельная ROS-нода на Raspberry Pi должна
-читать BMI270 по I²C и публиковать ``sensor_msgs/msg/Imu`` с
-``header.frame_id=imu_link``. В штатном ``ekf_real.yaml`` включён gyro Z, а
-wheel ``vyaw`` выключен.
+по себе не создаёт измерений. Их публикует нода ``imu_bridge`` из
+``rtk2026_driver``: она читает BMI270 по I²C и отдаёт ``sensor_msgs/msg/Imu``
+с ``header.frame_id=imu_link``. В штатном ``ekf_real.yaml`` включён gyro Z,
+а wheel ``vyaw`` выключен.
 
 ``ekf_real_wheel_only.yaml`` оставлен как явно деградированный стендовый
 режим без IMU. Он использует энкодерный ``vyaw`` и сильнее зависит от

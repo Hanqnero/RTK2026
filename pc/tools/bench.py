@@ -26,6 +26,7 @@ from transport import open_transport  # noqa: E402
 
 from rtk_link import (  # noqa: E402
     COMMAND_FLAG_REQUEST_PID_DEBUG,
+    MSG_AUTOTUNE_STATUS,
     MSG_GAINS_REPORT,
     MSG_PID_DEBUG,
     MSG_STATS,
@@ -35,6 +36,7 @@ from rtk_link import (  # noqa: E402
     RESET_STATS,
     WHEEL_LEFT,
     WHEEL_RIGHT,
+    AutotuneStatus,
     FrameDecoder,
     GainsReport,
     PidDebug,
@@ -42,10 +44,13 @@ from rtk_link import (  # noqa: E402
     Stats,
     Telemetry,
     WheelGains,
+    decode_autotune_status,
     decode_gains_report,
     decode_pid_debug,
     decode_stats,
     decode_telemetry,
+    pack_autotune_command,
+    pack_autotune_stop,
     pack_get_gains,
     pack_save_gains,
     pack_set_gains,
@@ -153,6 +158,9 @@ class BenchLink:
         self.sequence = SequenceTracker()
 
         self.latest_stats: Stats | None = None
+
+        #: Последний отчёт автотюнера. Обновляется в poll(), как и статистика.
+        self.latest_autotune: AutotuneStatus | None = None
         self._gains: dict[int, GainsReport] = {}
         #: Кадр отладки ждёт свою телеметрию: они приходят парой, телеметрия первой.
         self._pending_debug: PidDebug | None = None
@@ -248,6 +256,9 @@ class BenchLink:
                 report = decode_gains_report(payload)
                 self._gains[report.wheel] = report
 
+            elif message_id == MSG_AUTOTUNE_STATUS:
+                self.latest_autotune = decode_autotune_status(payload)
+
         return samples
 
 
@@ -308,6 +319,86 @@ class BenchLink:
         flags = COMMAND_FLAG_REQUEST_PID_DEBUG if debug else 0
         return self.hold(
             pack_wheel_setpoint_command(left_rps, right_rps, flags), seconds
+        )
+
+
+
+    def run_autotune(
+        self,
+        wheel: int,
+        steady_pwm: int,
+        step_pwm: int,
+        wait_ms: int = 1500,
+        window_rps: float = 0.05,
+        pulse_ms: int = 400,
+        target_accuracy: int = 90,
+        tuner_period_ms: int = 100,
+        timeout_s: float = 120.0,
+        on_status=None,
+        on_sample=None,
+    ) -> AutotuneStatus:
+        """Запустить релейный автотюнер прошивки и дождаться результата.
+
+        Раскачкой и расчётом занимается PIDtuner на MCU: он обязан работать
+        в темпе управляющего цикла, а по сети такой темп не выдержать.
+        Здесь только запуск, ретрансляция хода и ожидание финального отчёта.
+
+        Команда повторяется, как и любая другая: dead-man прошивки не знает,
+        что колесом сейчас распоряжается тюнер, и заглушил бы приводы.
+
+        :param on_status: вызывается на каждый отчёт о ходе автотюна.
+        :param on_sample: вызывается на каждый пакет телеметрии.
+        :returns: финальный отчёт с найденными коэффициентами.
+        :raises SystemExit: если прошивка не завершила автотюн за timeout_s.
+        """
+
+        command = pack_autotune_command(
+            wheel,
+            steady_pwm,
+            step_pwm,
+            wait_ms,
+            window_rps,
+            pulse_ms,
+            target_accuracy,
+            tuner_period_ms,
+        )
+
+        self.latest_autotune = None
+        deadline = time.monotonic() + timeout_s
+        next_send = 0.0
+        reported = None
+
+        try:
+            while time.monotonic() < deadline:
+                now = time.monotonic()
+
+                if now >= next_send:
+                    self._write(command)
+                    next_send = now + COMMAND_PERIOD_S
+
+                for sample in self.poll():
+                    if on_sample is not None:
+                        on_sample(sample)
+
+                status = self.latest_autotune
+                if status is not None and status is not reported:
+                    reported = status
+                    if on_status is not None:
+                        on_status(status)
+                    if status.is_done:
+                        return status
+
+                time.sleep(0.002)
+        finally:
+            # Тюнер остаётся в своём режиме, пока ему не скажут иначе:
+            # выход по таймауту или по Ctrl+C не должен оставить колесо
+            # раскачиваться.
+            self._write(pack_autotune_stop(wheel))
+
+        raise SystemExit(
+            f"автотюн не завершился за {timeout_s:.0f} с. "
+            "Проверьте, что колесо действительно раскачивается: "
+            "steady_pwm ниже PWM страгивания даёт неподвижное колесо."
         )
 
 
@@ -411,7 +502,7 @@ class BenchLink:
 
 
 
-#: Колонки CSV. Порядок зафиксирован: логи разных прогонов должны
+#: Колонки CSV. Порядок зафиксирован, потому что логи разных прогонов должны
 #: сравниваться между собой и разбираться одним и тем же кодом.
 LOG_COLUMNS = [
     "host_time_s",

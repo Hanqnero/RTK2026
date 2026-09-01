@@ -31,12 +31,14 @@ MSG_SET_CONFIG = 0x05
 MSG_CMD_RESET = 0x06
 MSG_SAVE_GAINS = 0x07
 MSG_GET_GAINS = 0x08
+MSG_CMD_AUTOTUNE = 0x09
 
 # MCU -> Host
 MSG_TELEMETRY = 0x81
 MSG_PID_DEBUG = 0x82
 MSG_STATS = 0x83
 MSG_GAINS_REPORT = 0x84
+MSG_AUTOTUNE_STATUS = 0x85
 
 # Флаг любой команды движения: пока он взведён, прошивка добавляет к
 # телеметрии кадр внутренностей регуляторов.
@@ -76,6 +78,8 @@ WHEEL_PWM_STRUCT = struct.Struct("<hhB")
 WHEEL_SETPOINT_STRUCT = struct.Struct("<ffB")
 SET_GAINS_STRUCT = struct.Struct("<Bfffff")
 GAINS_REPORT_STRUCT = struct.Struct("<BfffffB")
+AUTOTUNE_STRUCT = struct.Struct("<BhhHfHBH")
+AUTOTUNE_STATUS_STRUCT = struct.Struct("<BBBBfff")
 TELEMETRY_STRUCT = struct.Struct("<HIIhhiiffffhhfffffhBB")
 PID_DEBUG_STRUCT = struct.Struct("<H16f")
 STATS_STRUCT = struct.Struct("<BIIIIIIIIIHHHHHH")
@@ -86,6 +90,8 @@ assert WHEEL_PWM_STRUCT.size == 5, "WheelPwmCommandPayload разошёлся с
 assert WHEEL_SETPOINT_STRUCT.size == 9, "WheelSetpointCommandPayload разошёлся с прошивкой"
 assert SET_GAINS_STRUCT.size == 21, "SetGainsPayload разошёлся с прошивкой"
 assert GAINS_REPORT_STRUCT.size == 22, "GainsReportPayload разошёлся с прошивкой"
+assert AUTOTUNE_STRUCT.size == 16, "AutotuneCommandPayload разошёлся с прошивкой"
+assert AUTOTUNE_STATUS_STRUCT.size == 16, "AutotuneStatusPayload разошёлся с прошивкой"
 assert TELEMETRY_STRUCT.size == 66, "TelemetryPayload разошёлся с прошивкой"
 assert PID_DEBUG_STRUCT.size == 66, "PidDebugPayload разошёлся с прошивкой"
 assert STATS_STRUCT.size == 49, "StatsPayload разошёлся с прошивкой"
@@ -286,6 +292,66 @@ def pack_get_gains() -> bytes:
 
 
 
+def pack_autotune_command(
+    wheel: int,
+    steady_pwm: int,
+    step_pwm: int,
+    wait_ms: int = 1500,
+    window_rps: float = 0.05,
+    pulse_ms: int = 400,
+    target_accuracy: int = 90,
+    tuner_period_ms: int = 100,
+) -> bytes:
+    """Кадр запуска релейного автотюнера на одном колесе.
+
+    Тюнер живёт в прошивке, потому что обязан работать в темпе управляющего
+    цикла: он раскачивает колесо вокруг ``steady_pwm`` и считает коэффициенты
+    из периода и амплитуды автоколебаний. Регуляторы при этом отключены,
+    поэтому робот должен быть поднят, как и для прямого PWM.
+
+    :param wheel: ``WHEEL_LEFT`` или ``WHEEL_RIGHT``.
+    :param steady_pwm: базовый PWM. Обязан быть выше PWM страгивания,
+        иначе колесо стоит в мёртвой зоне и автоколебаний не возникает.
+    :param step_pwm: амплитуда релейной ступеньки. Ноль останавливает
+        автотюн и возвращает прошивку в режим уставки.
+    :param wait_ms: сколько ждать установившейся скорости перед раскачкой.
+    :param window_rps: порог скорости изменения, ниже которого система
+        считается устоявшейся.
+    :param pulse_ms: длительность первого импульса раскачки.
+    :param target_accuracy: совпадение соседних периодов в процентах,
+        при котором автотюн завершается.
+    :param tuner_period_ms: период итерации тюнера. Намеренно медленнее
+        управляющего цикла: у скоростного контура мотора почти нет
+        запаздывания, и на 25 мс реле переключается раньше, чем скорость
+        уйдёт от средней линии, отчего амплитуда автоколебаний вырождается,
+        а расчётный Ku улетает в тысячи.
+    """
+
+    return build_frame(
+        MSG_CMD_AUTOTUNE,
+        AUTOTUNE_STRUCT.pack(
+            int(wheel) & 0xFF,
+            int(steady_pwm),
+            int(step_pwm),
+            int(wait_ms) & 0xFFFF,
+            float(window_rps),
+            int(pulse_ms) & 0xFFFF,
+            int(target_accuracy) & 0xFF,
+            int(tuner_period_ms) & 0xFFFF,
+        ),
+    )
+
+
+
+
+def pack_autotune_stop(wheel: int = WHEEL_LEFT) -> bytes:
+    """Кадр остановки автотюна: нулевая ступенька раскачки."""
+
+    return pack_autotune_command(wheel, steady_pwm=0, step_pwm=0)
+
+
+
+
 @dataclass(frozen=True, slots=True)
 class Telemetry:
     """Разобранный ``TelemetryPayload``."""
@@ -415,6 +481,49 @@ class WheelGains:
 
 
 @dataclass(frozen=True, slots=True)
+class AutotuneStatus:
+    """Разобранный ``AutotuneStatusPayload``.
+
+    Приходит раз в четверть секунды, пока автотюн работает, и один раз
+    с ``done=1`` по завершении.
+    """
+
+    wheel: int
+    #: Этап PIDtuner - 1 стабилизация, 2 импульс, 3 анализ автоколебаний.
+    state: int
+    #: Совпадение соседних периодов автоколебаний, проценты.
+    accuracy: int
+    #: Ненулевой, когда коэффициенты окончательные.
+    done: int
+
+    kp: float
+    ki: float
+    kd: float
+
+    @property
+    def wheel_name(self) -> str:
+        return "left" if self.wheel == WHEEL_LEFT else "right"
+
+    @property
+    def is_done(self) -> bool:
+        return self.done != 0
+
+    @property
+    def stage_name(self) -> str:
+        """Человекочитаемый этап.
+
+        Нулевой этап в отчёт не попадает: тюнер уходит с него в первом же
+        вызове ``compute()``.
+        """
+
+        return {
+            1: "стабилизация",
+            2: "импульс раскачки",
+            3: "анализ автоколебаний",
+        }.get(self.state, f"этап {self.state}")
+
+
+@dataclass(frozen=True, slots=True)
 class GainsReport:
     """Разобранный ``GainsReportPayload``."""
 
@@ -498,6 +607,14 @@ def decode_gains_report(payload: bytes) -> GainsReport:
     """Разобрать полезную нагрузку кадра ``MSG_GAINS_REPORT``."""
 
     return GainsReport(*GAINS_REPORT_STRUCT.unpack(payload))
+
+
+
+
+def decode_autotune_status(payload: bytes) -> AutotuneStatus:
+    """Разобрать полезную нагрузку кадра ``MSG_AUTOTUNE_STATUS``."""
+
+    return AutotuneStatus(*AUTOTUNE_STATUS_STRUCT.unpack(payload))
 
 
 
