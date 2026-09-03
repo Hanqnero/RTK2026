@@ -14,9 +14,13 @@ void EncoderCounter::begin() {
     _encoder.setEncReverse(_reverse);
 }
 
-void EncoderCounter::handleInterrupt() {
-    _encoder.tickISR();
-    if (!_encoder.turn()) {
+void EncoderCounter::poll() {
+    // tick() сам читает оба физических вывода и возвращает, случился ли
+    // поворот - тот же способ, что и в стендовом скетче, только внутри
+    // библиотеки. Разница с прежним tickISR() только в служебном флаге
+    // _isr, нужном библиотеке для смешанного (прерывание + опрос)
+    // использования - здесь его нет, только чистый опрос.
+    if (!_encoder.tick()) {
         return;
     }
 

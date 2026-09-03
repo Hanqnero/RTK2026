@@ -48,14 +48,6 @@ uint32_t last_print_ms = 0;
 int32_t total_left_delta = 0;
 int32_t total_right_delta = 0;
 
-void leftEncoderISR() {
-    left_encoder.handleInterrupt();
-}
-
-void rightEncoderISR() {
-    right_encoder.handleInterrupt();
-}
-
 void configureHardware() {
     left_motor.setReverse(kLeftMotorReverse);
     right_motor.setReverse(kRightMotorReverse);
@@ -66,10 +58,14 @@ void configureHardware() {
     left_encoder.begin();
     right_encoder.begin();
 
-    attachInterrupt(digitalPinToInterrupt(LEFT_ENC_CLK), leftEncoderISR, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(LEFT_ENC_DT), leftEncoderISR, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(RIGHT_ENC_CLK), rightEncoderISR, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(RIGHT_ENC_DT), rightEncoderISR, CHANGE);
+    // Прерываний нет: часть выводов энкодера на этой плате не имеет
+    // аппаратного прерывания. Энкодеры читаются опросом из loop(),
+    // см. pollEncoders().
+}
+
+void pollEncoders() {
+    left_encoder.poll();
+    right_encoder.poll();
 }
 
 void applyStep(const TestStep& step) {
@@ -140,6 +136,8 @@ void setup() {
 }
 
 void loop() {
+    pollEncoders();
+
     const uint32_t now = millis();
     const TestStep& step = kTestSteps[step_index];
 

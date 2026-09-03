@@ -75,13 +75,27 @@ class Transport(Protocol):
 
 
 class SerialTransport:
-    """Локальный serial-порт."""
+    """Локальный serial-порт.
+
+    ``in_waiting`` у pyserial опрашивает драйвер напрямую, и на части
+    USB-serial адаптеров под macOS этот запрос лжёт нулём даже тогда,
+    когда ``read()`` тем же кадром спокойно отдаёт байты - проверено
+    на этой машине отдельно: при ``timeout=0.0`` ``in_waiting`` и
+    ``read()`` оба возвращали пусто, хотя плата непрерывно слала
+    телеметрию. Поэтому транспорт не спрашивает драйвер "сколько ждёт",
+    а как и ``TcpTransport``, сам вычитывает всё доступное во внутренний
+    буфер и отдаёт из него - это единственный способ, что здесь надёжно
+    работает.
+    """
 
     def __init__(self, device: str, baud: int, reset_wait_s: float = 2.0) -> None:
         self.description = f"serial {device} @ {baud}"
 
         try:
-            self._port = serial.Serial(device, baud, timeout=0.0)
+            # Ненулевой таймаут обязателен: с timeout=0.0 read() на этом
+            # драйвере возвращает пусто даже при данных в буфере, а не
+            # только in_waiting.
+            self._port = serial.Serial(device, baud, timeout=0.01)
         except serial.SerialException as exc:
             raise SystemExit(f"не удалось открыть {device}: {exc}") from exc
 
@@ -89,13 +103,28 @@ class SerialTransport:
         time.sleep(reset_wait_s)
         self._port.reset_input_buffer()
 
+        self._buffer = bytearray()
+
+    def _drain_serial(self) -> None:
+        """Забрать всё, что накопилось в буфере драйвера, без обмана in_waiting."""
+
+        while True:
+            chunk = self._port.read(4096)
+            if not chunk:
+                return
+            self._buffer.extend(chunk)
+
     @property
     def in_waiting(self) -> int:
-        return self._port.in_waiting
+        self._drain_serial()
+        return len(self._buffer)
 
 
     def read(self, size: int) -> bytes:
-        return self._port.read(size)
+        self._drain_serial()
+        chunk = bytes(self._buffer[:size])
+        del self._buffer[:size]
+        return chunk
 
 
 
@@ -106,6 +135,7 @@ class SerialTransport:
 
     def reset_input_buffer(self) -> None:
         self._port.reset_input_buffer()
+        self._buffer.clear()
 
 
 

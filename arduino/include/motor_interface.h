@@ -10,20 +10,36 @@
 //
 // Номера обязаны совпадать с фактической распайкой платы.
 
-#define LEFT_PWM_A 7
-#define LEFT_PWM_B 6
-#define RIGHT_PWM_A 5
-#define RIGHT_PWM_B 4
+// Моторные разъёмы на плате стоят крест-накрест: мотор левого колеса
+// физически сидит на 5/4, правого - на 7/6. Меняется распайка здесь,
+// а не знаки в коде. Проверено стендом: команда крутила заявленное
+// колесо, энкодеры не перепутаны.
+#define LEFT_PWM_A 5
+#define LEFT_PWM_B 4
+#define RIGHT_PWM_A 7
+#define RIGHT_PWM_B 6
 
-#define LEFT_ENC_CLK 20
-#define LEFT_ENC_DT 2
-#define RIGHT_ENC_CLK 21
-#define RIGHT_ENC_DT 3
+// Реальная разводка платы: 16 и 17 не имеют аппаратного прерывания
+// на Mega (только 2, 3, 18, 19, 20, 21). Поэтому энкодеры читаются
+// не прерыванием, а опросом из loop() - см. EncoderCounter::poll()
+// и pollEncoders() в main.cpp. Прерывание только на одном из двух
+// каналов колеса корректно считать не может: переходы, вызванные
+// вторым, необнаруженным каналом, ломают декодирование квадратуры,
+// а не просто снижают разрешение вдвое, как может показаться на
+// первый взгляд.
+#define LEFT_ENC_CLK 16
+#define LEFT_ENC_DT 18
+#define RIGHT_ENC_CLK 17
+#define RIGHT_ENC_DT 19
 
-#define SONAR_VCC_PIN 37
+// Сигнальные выводы дальномера. Питание он берёт с рельс 5V и GND платы,
+// а не с ножек контроллера: в момент посылки пачки датчик потребляет больше,
+// чем вывод AVR отдаёт штатно.
+//
+// ECHO читается опросом, поэтому подойдёт любой цифровой вывод: все четыре
+// с внешними прерываниями заняты энкодерами.
 #define SONAR_TRIG_PIN 39
 #define SONAR_ECHO_PIN 41
-#define SONAR_GND_PIN 43
 
 constexpr float kPi = 3.14159265358979323846F;
 
@@ -42,7 +58,7 @@ constexpr float kPi = 3.14159265358979323846F;
 constexpr bool kLeftMotorReverse = true;
 constexpr bool kRightMotorReverse = true;
 constexpr bool kLeftEncoderReverse = true;
-constexpr bool kRightEncoderReverse = false;
+constexpr bool kRightEncoderReverse = true;
 
 constexpr uint32_t kSerialBaudRate = 115200;
 // Период управляющего цикла. Величину задаёт разрешение энкодера, а не
@@ -64,6 +80,12 @@ constexpr uint32_t kCycleOverrunThresholdUs = kControlPeriodUs + kControlPeriodU
 // и не мешает потоку телеметрии.
 constexpr uint16_t kStatsPeriodMs = 1000;
 
+// Радиус колеса гусеничного шасси XR: диаметр 48 мм.
+//
+// Ведущая звёздочка меньше, около 25 мм, но качение задаёт колесо, по
+// которому идёт гусеница, поэтому в пересчёт отсчётов в метры входит
+// именно 24 мм. У гусеничного шасси эффективный радиус всё равно
+// уточняется замером из-за проскальзывания, см. route_test.py (шаг 8).
 constexpr float kWheelRadiusM = 0.024f;
 constexpr float kTrackWidthM = 0.195f;
 constexpr float kWheelCircumferenceM = 2.0f * kPi * kWheelRadiusM;
@@ -88,13 +110,20 @@ constexpr float kEncoderDecodeFactor = 4.0f;
 //
 // Энкодер JGB37-520 стоит на валу мотора, ДО редуктора. Поэтому редуктор
 // обязан входить в пересчёт отсчётов в обороты колеса, иначе одометрия
-// ошибается ровно в это число раз. Для варианта 960 об/мин на выходе это
-// примерно 1:5.2, но паспорт даёт только обороты, а не отношение, поэтому
-// значение подлежит измерению.
-constexpr float kGearRatio = 5.2f;
+// ошибается ровно в это число раз.
+//
+// Стоящий на роботе мотор маркирован DC12V333RPM, чему соответствует
+// редуктор около 18.8:1. Прежнее значение 5.2 относилось к варианту
+// на 960 об/мин, то есть к другому мотору, и завышало скорость втрое.
+//
+// ВНИМАНИЕ: значение предварительное. Замер даёт около 1400 отсчётов на
+// оборот колеса, что соответствует отношению ~31.8, а не 18.8. Паспорт
+// расходится с измерением, и разрешает спор только calibrate_encoder.py:
+//     .venv/bin/python tools/calibrate_encoder.py --port $RTK_LINK --manual --turns 10
+constexpr float kGearRatio = 18.8f;
 
-// Обороты ВЫХОДНОГО вала на холостом ходу, из паспорта мотора.
-constexpr float kMaxWheelRpm = 960.0f;
+// Обороты ВЫХОДНОГО вала на холостом ходу, из маркировки мотора DC12V333RPM.
+constexpr float kMaxWheelRpm = 333.0f;
 
 // Производные величины.
 

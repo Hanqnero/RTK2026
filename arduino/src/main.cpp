@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include <GyverMotor2.h>
+#include <PIDtuner.h>
 
 #include "control_protocol.h"
 #include "encoder.h"
@@ -51,6 +52,37 @@ int16_t direct_left_pwm = 0;
 int16_t direct_right_pwm = 0;
 bool pid_debug_requested = false;
 
+// Релейный автотюнер. Свои коэффициенты он считает из периода и амплитуды
+// автоколебаний, поэтому работает только тогда, когда сам держит PWM:
+// регуляторы в этом режиме отключены.
+PIDtuner autotuner;
+uint8_t autotune_wheel = kWheelLeft;
+uint8_t autotune_target_accuracy = 0;
+uint32_t autotune_started_ms = 0;
+uint32_t last_autotune_status_ms = 0;
+
+// Период отчётов о ходе автотюна.
+constexpr uint16_t kAutotuneStatusPeriodMs = 250U;
+
+// Предохранитель: раскачка может не сойтись, если steady_pwm попал
+// в мёртвую зону или колесо срывается. Без ограничения мотор крутился бы
+// на полном PWM бесконечно.
+constexpr uint32_t kAutotuneTimeoutMs = 120000UL;
+
+// Этап PIDtuner, на котором идёт анализ автоколебаний и коэффициенты
+// становятся осмысленными.
+constexpr uint8_t kAutotuneStateOscillating = 3U;
+
+// Сколько раскачка обязана длиться, прежде чем результат принимается.
+//
+// Точность считается по двум соседним периодам, поэтому она случайно
+// достигает порога уже на второй качели, когда установившихся колебаний
+// ещё нет. Выдержка гарантирует, что порог держится на десятках периодов.
+constexpr uint32_t kAutotuneMinOscillationMs = 6000UL;
+
+// Момент входа в анализ автоколебаний.
+uint32_t autotune_oscillation_started_ms = 0;
+
 uint32_t last_control_us = 0;  // плановое время следующего цикла
 uint32_t last_cycle_us = 0;    // фактическое время предыдущего цикла
 uint32_t last_command_ms = 0;  // время получения последней команды
@@ -61,14 +93,6 @@ float odom_x_m = 0.0f;
 float odom_y_m = 0.0f;
 float odom_heading_rad = 0.0f;
 bool status_led_state = false;
-
-void leftEncoderISR() {
-    left_encoder.handleInterrupt();
-}
-
-void rightEncoderISR() {
-    right_encoder.handleInterrupt();
-}
 
 // Дельты энкодеров передаются как int16. При 960 об/мин это 16 оборотов
 // колеса в секунду, то есть около 3700 отсчётов в секунду и порядка 90
@@ -82,6 +106,18 @@ int16_t saturateToInt16(int32_t value) {
         return -32768;
     }
     return static_cast<int16_t>(value);
+}
+
+// Вызывается из loop() на каждой итерации, как updateSonar(). Потолок по
+// kMaxWheelRpm и kEncoderCountsPerWheelRev - около 4600 отсчётов в секунду,
+// то есть фронт раз в ~220 мкс; loop() без длинных блокировок проходит этот
+// промежуток многократно, так что опрос не теряет переходы. Единственный
+// узкий случай - если readIncomingFrames() выберет весь бюджет в 128 байт
+// за одну итерацию при шквале команд с хоста: тогда одна итерация чуть
+// затягивается. В штатном темпе команд это не встречается.
+void pollEncoders() {
+    left_encoder.poll();
+    right_encoder.poll();
 }
 
 // Обороты колеса в секунду по фактическому интервалу.
@@ -120,7 +156,6 @@ float wrapAngleRad(float angle) {
 
 // Обратная кинематика дифференциального привода в соглашении ROS:
 // положительная угловая скорость означает вращение против часовой стрелки,
-// то есть правое колесо быстрее левого.
 void bodyToWheelSetpoints(float linear_mps, float angular_rps) {
     const float half_track = 0.5f * kTrackWidthM;
 
@@ -189,12 +224,13 @@ void configureHardware() {
     left_encoder.begin();
     right_encoder.begin();
 
-    // digitalPinToInterrupt переводит номер вывода в номер внешнего прерывания.
-    // Оба канала каждого энкодера обрабатываются одним ISR по фронту и спаду.
-    attachInterrupt(digitalPinToInterrupt(LEFT_ENC_CLK), leftEncoderISR, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(LEFT_ENC_DT), leftEncoderISR, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(RIGHT_ENC_CLK), rightEncoderISR, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(RIGHT_ENC_DT), rightEncoderISR, CHANGE);
+    // Прерываний на энкодерах нет: у части выводов на этой плате нет
+    // аппаратного прерывания, а держать один канал на прерывании, а
+    // другой в опросе, декодирование квадратуры ломает - оба физических
+    // провода читаются вместе, и без второго прерывания половина
+    // переходов становится неотличима от дребезга. Единственный
+    // корректный вариант - опрашивать оба канала обоих энкодеров вместе,
+    // из loop(), см. pollEncoders().
 }
 
 void emitFrame(uint8_t message_id, const void* payload, uint8_t payload_length) {
@@ -377,6 +413,113 @@ void handleWheelPwmCommand(const uint8_t* payload, uint8_t length) {
     acceptMotionCommand(received.flags);
 }
 
+void sendAutotuneStatus(bool done) {
+    AutotuneStatusPayload status;
+
+    status.wheel = autotune_wheel;
+    status.state = autotuner.getState();
+    status.accuracy = autotuner.getAccuracy();
+    status.done = done ? 1U : 0U;
+    status.kp = autotuner.getPID_p();
+    status.ki = autotuner.getPID_i();
+    status.kd = autotuner.getPID_d();
+
+    emitFrame(kMsgAutotuneStatus, &status, sizeof(AutotuneStatusPayload));
+}
+
+// Снять режим автотюна и остановить колесо.
+//
+// apply_gains разделяет два исхода: удачное завершение переносит найденные
+// коэффициенты в регулятор, а прерывание по таймауту или по команде хоста
+// оставляет прежние. Иначе неудачная раскачка молча портила бы настройку.
+void finishAutotune(bool apply_gains) {
+    if (apply_gains) {
+        WheelController& controller =
+            (autotune_wheel == kWheelRight) ? right_controller : left_controller;
+
+        // Feedforward автотюнер не измеряет: он оценивает только динамику
+        // контура. Прежние k_static и k_velocity от identify_wheel.py
+        // обязаны пережить автотюн.
+        WheelGains gains = controller.gains();
+        gains.kp = autotuner.getPID_p();
+        gains.ki = autotuner.getPID_i();
+        gains.kd = autotuner.getPID_d();
+        controller.setGains(gains);
+    }
+
+    sendAutotuneStatus(true);
+
+    control_mode = kControlModeWheelSetpoint;
+    left_setpoint_rps = 0.0f;
+    right_setpoint_rps = 0.0f;
+    stopMotorsAndResetControllers();
+}
+
+void handleAutotuneCommand(const uint8_t* payload, uint8_t length) {
+    if (length != sizeof(AutotuneCommandPayload)) {
+        return;
+    }
+
+    AutotuneCommandPayload received;
+    memcpy(&received, payload, sizeof(AutotuneCommandPayload));
+
+    if (received.wheel > kWheelRight) {
+        return;
+    }
+
+    acceptMotionCommand(0U);
+
+    // Нулевая ступенька - это команда остановки: раскачивать колесо нечем.
+    if (received.step_pwm == 0) {
+        if (control_mode == kControlModeAutotune) {
+            finishAutotune(false);
+        }
+        return;
+    }
+
+    if (isnan(received.window_rps)) {
+        return;
+    }
+
+    // Команда повторяется хостом с частотой 50 Гц, иначе dead-man заглушил бы
+    // привод посреди раскачки. Значит обработчик обязан быть идемпотентным:
+    // повторный запуск того же автотюна не должен ничего сбрасывать.
+    // Иначе autotuner.reset() ниже возвращал бы тюнер в нулевое состояние
+    // пятьдесят раз в секунду, и дальше первого этапа он бы не уходил.
+    if (control_mode == kControlModeAutotune && autotune_wheel == received.wheel) {
+        return;
+    }
+
+    autotune_wheel = received.wheel;
+    autotune_target_accuracy = received.target_accuracy;
+    autotune_started_ms = millis();
+    last_autotune_status_ms = autotune_started_ms;
+    autotune_oscillation_started_ms = 0;
+
+    // NORMAL: рост PWM увеличивает скорость колеса. REVERSE описывает
+    // обратные системы вроде холодильника и нам не подходит - знак мотора
+    // уже учтён флагами k*MotorReverse.
+    autotuner.setParameters(
+        NORMAL,
+        static_cast<int>(clampFloat(static_cast<float>(received.steady_pwm),
+                                    -kMaxPwmCommand, kMaxPwmCommand)),
+        static_cast<int>(clampFloat(static_cast<float>(received.step_pwm),
+                                    0.0f, kMaxPwmCommand)),
+        static_cast<int>(received.wait_ms),
+        received.window_rps,
+        received.pulse_ms,
+        static_cast<int>(received.tuner_period_ms >= kControlPeriodMs
+                             ? received.tuner_period_ms
+                             : kControlPeriodMs));
+    autotuner.reset();
+
+    control_mode = kControlModeAutotune;
+    left_setpoint_rps = 0.0f;
+    right_setpoint_rps = 0.0f;
+    direct_left_pwm = 0;
+    direct_right_pwm = 0;
+}
+
 void handleSetGains(const uint8_t* payload, uint8_t length) {
     if (length != sizeof(SetGainsPayload)) {
         return;
@@ -509,6 +652,10 @@ void readIncomingFrames() {
                 handleResetCommand(rx_parser.payload(), rx_parser.payloadLength());
                 break;
 
+            case kMsgCmdAutotune:
+                handleAutotuneCommand(rx_parser.payload(), rx_parser.payloadLength());
+                break;
+
             default:
                 // Кадр разобран корректно, но идентификатор неизвестен.
                 // В счётчик ошибок это не попадает: так добавление новых
@@ -604,6 +751,61 @@ void runControlCycle(uint32_t dt_us, bool overrun) {
 
         left_motor.runSpeed(left_pwm_out);
         right_motor.runSpeed(right_pwm_out);
+    } else if (control_mode == kControlModeAutotune) {
+        // Автотюнер сам решает, какой PWM подать: он раскачивает колесо
+        // релейно и по периоду автоколебаний считает коэффициенты.
+        // Регуляторы держатся сброшенными - их выход тюнеру только помешал бы.
+        left_controller.reset();
+        right_controller.reset();
+
+        const float tuned_wheel_rps =
+            (autotune_wheel == kWheelRight) ? right_wheel_rps : left_wheel_rps;
+
+        autotuner.setInput(tuned_wheel_rps);
+        autotuner.compute();
+
+        const int16_t tuned_pwm = static_cast<int16_t>(clampFloat(
+            static_cast<float>(autotuner.getOutput()), -kMaxPwmCommand, kMaxPwmCommand));
+
+        // Второе колесо стоит: раскачка одного колеса при работающем втором
+        // измеряла бы динамику пары, а настраиваем мы их по отдельности.
+        if (autotune_wheel == kWheelRight) {
+            right_pwm_out = tuned_pwm;
+        } else {
+            left_pwm_out = tuned_pwm;
+        }
+
+        left_motor.runSpeed(left_pwm_out);
+        right_motor.runSpeed(right_pwm_out);
+
+        const uint32_t now_ms = millis();
+
+        const bool oscillating =
+            autotuner.getState() == kAutotuneStateOscillating;
+
+        if (oscillating && autotune_oscillation_started_ms == 0) {
+            autotune_oscillation_started_ms = now_ms;
+        }
+
+        const bool long_enough =
+            oscillating &&
+            (now_ms - autotune_oscillation_started_ms) >= kAutotuneMinOscillationMs;
+
+        const bool converged =
+            long_enough && autotuner.getAccuracy() >= autotune_target_accuracy;
+        const bool timed_out =
+            (now_ms - autotune_started_ms) > kAutotuneTimeoutMs;
+
+        if (converged) {
+            finishAutotune(true);
+        } else if (timed_out) {
+            // Раскачка не сошлась. Коэффициенты в этом случае недостоверны,
+            // и молча принять их значило бы испортить рабочую настройку.
+            finishAutotune(false);
+        } else if ((now_ms - last_autotune_status_ms) >= kAutotuneStatusPeriodMs) {
+            last_autotune_status_ms = now_ms;
+            sendAutotuneStatus(false);
+        }
     } else {
         const float left_output =
             left_controller.update(left_setpoint_rps, left_wheel_rps, dt_s);
@@ -688,6 +890,11 @@ void loop() {
     // циклами их тысячи, и этого хватает для разрешения в единицы сантиметров
     // без единой блокирующей паузы.
     updateSonar();
+
+    // Энкодеры - по той же причине: между управляющими циклами loop()
+    // проходит много раз, и опрос на каждой итерации не даёт пропустить
+    // переход квадратуры.
+    pollEncoders();
 
     const uint32_t now_us = micros();
 
