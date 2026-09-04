@@ -75,7 +75,7 @@ Visualization Manager:
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: map
+    Fixed Frame: lidar_frame
     Frame Rate: 20
   Tools:
     - Class: rviz_default_plugins/MoveCamera

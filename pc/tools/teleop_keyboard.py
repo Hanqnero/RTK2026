@@ -538,27 +538,35 @@ def draw_ui(
     """Перерисовать curses UI без блокирующего чтения клавиатуры."""
 
     stdscr.erase()
-    stdscr.addstr(0, 0, "Teleop")
-    stdscr.addstr(
+    max_y, max_x = stdscr.getmaxyx()
+
+    def line(y: int, x: int, text: str) -> None:
+        # ncurses не умеет сам переносить строку и бросает ERR, если она не
+        # влезает в оставшуюся ширину окна - маленький терминал (например,
+        # узкая панель VS Code) иначе валит весь цикл отрисовки исключением.
+        if y >= max_y or x >= max_x - 1:
+            return
+        stdscr.addstr(y, x, text[: max_x - x - 1])
+
+    line(0, 0, "Teleop")
+    line(
         1,
         0,
         f"Port: {args.port} @ {args.baud}  Connected: {'yes' if connected else 'no'}",
     )
-    stdscr.addstr(
-        2, 0, f"Publish rate: {args.rate:.1f} Hz   Deadman: {args.deadman:.2f} s"
-    )
-    stdscr.addstr(3, 0, f"UP/DOWN linear: +/-{args.linear:.3f} m/s")
-    stdscr.addstr(4, 0, f"LEFT/RIGHT angular: +/-{args.angular:.3f} rad/s")
-    stdscr.addstr(
+    line(2, 0, f"Publish rate: {args.rate:.1f} Hz   Deadman: {args.deadman:.2f} s")
+    line(3, 0, f"UP/DOWN linear: +/-{args.linear:.3f} m/s")
+    line(4, 0, f"LEFT/RIGHT angular: +/-{args.angular:.3f} rad/s")
+    line(
         6,
         0,
         f"Current command -> linear: {cmd.linear_mps:+.3f} m/s   "
         f"angular: {cmd.angular_rps:+.3f} rad/s",
     )
-    stdscr.addstr(8, 0, "Controls: arrows or WASD, SPACE stop, Q quit")
-    stdscr.addstr(9, 0, f"UART RX bytes drained: {stats.rx_bytes}")
-    stdscr.addstr(10, 0, f"Last key code: {stats.last_key_code}")
-    stdscr.addstr(
+    line(8, 0, "Controls: arrows or WASD, SPACE stop, Q quit")
+    line(9, 0, f"UART RX bytes drained: {stats.rx_bytes}")
+    line(10, 0, f"Last key code: {stats.last_key_code}")
+    line(
         11,
         0,
         f"Measured speed -> linear: {stats.current_linear_mps:+.3f} m/s   "
@@ -566,14 +574,14 @@ def draw_ui(
     )
     # Качество линка выводится прямо в UI: потери и ошибки CRC иначе
     # выглядят просто как более редкая телеметрия.
-    stdscr.addstr(
+    line(
         12,
         0,
         f"Link -> packets: {stats.sequence.received}   "
         f"lost: {stats.sequence.lost} ({100.0 * stats.sequence.loss_ratio:.2f} %)   "
         f"crc: {stats.decoder.bad_crc_count}   junk: {stats.decoder.resync_count}",
     )
-    stdscr.addstr(13, 0, f"Firmware flags: {describe_telemetry_flags(stats.last_flags)}")
+    line(13, 0, f"Firmware flags: {describe_telemetry_flags(stats.last_flags)}")
     stdscr.refresh()
 
 

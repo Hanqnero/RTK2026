@@ -1,0 +1,55 @@
+# Профиль mapping-режима реального робота: SLAM обязателен, AMCL выключен.
+# Для отдельного localization launch достаточно переопределить mode.
+mode: mapping
+
+topics:
+  wheel_odometry: /wheel/odom
+  filtered_odometry: /odometry/filtered
+  imu: /imu/data
+  slam_pose: /pose
+  amcl_pose: /amcl_pose
+  particle_cloud: /particle_cloud
+  map: /map
+
+# Ключ ground_truth не задан: истинную позу на роботе взять неоткуда,
+# и секция порогов ниже поэтому тоже отсутствует. Проверка сходимости
+# остаётся относительной - между колёсной одометрией, EKF и SLAM.
+
+covariance:
+  max_age: 1.0
+  symmetry_tolerance: 1.0e-9
+  positive_semidefinite_tolerance: 1.0e-10
+  # Wheel odometry и локальный EKF не имеют абсолютного наблюдения x/y/yaw,
+  # поэтому их sigma закономерно растут и только отображаются как метрики.
+  # Пределы применяем к глобальным оценкам, которые должны быть ограничены
+  # картой и лазерными измерениями.
+  uncertainty_limits:
+    slam:
+      sigma_xy_warn: 2.0
+      sigma_xy_error: 10.0
+      sigma_yaw_warn: 1.5
+      sigma_yaw_error: 3.14
+    amcl:
+      sigma_xy_warn: 1.0
+      sigma_xy_error: 3.0
+      sigma_yaw_warn: 0.8
+      sigma_yaw_error: 2.0
+
+consistency:
+  # Допуск по времени шире: без ноды BMI270 угловая скорость приходит
+  # только из энкодеров, и EKF работает с одним источником.
+  max_timestamp_skew: 0.15
+  linear_difference_warn: 0.20
+
+  # Порог расхождения по углу поднят относительно симуляционного: без
+  # гироскопа курс держится только колёсной одометрией, а гусеничное
+  # шасси при повороте проскальзывает.
+  angular_difference_warn: 0.50
+
+slam:
+  map_frame: map
+  max_map_age: 5.0
+  minimum_known_ratio: 0.01
+
+amcl:
+  minimum_particles: 100

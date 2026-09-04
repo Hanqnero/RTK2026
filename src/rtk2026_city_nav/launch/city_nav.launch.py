@@ -47,13 +47,14 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "graph_path",
-                default_value=PathJoinSubstitution(
-                    [share, "config", "graph.geojson"]
-                ),
+                default_value="/workspace/maps/graph",
                 description=(
-                    "GeoJSON разметочной линии. По умолчанию берётся из config "
-                    "этого пакета: туда кладут файл, сохранённый панелью "
-                    "Nav2 Route Tool."
+                    "GeoJSON разметочной линии, сохранённый панелью Nav2 Route "
+                    "Tool. По умолчанию берётся из рабочего каталога карт, а не "
+                    "из config пакета: граф правится вместе с картой и живёт "
+                    "рядом с ней, копия внутри пакета разъезжалась бы с ней. "
+                    "Каталог maps/ смонтирован в /workspace/maps и на роботе, "
+                    "и в симуляции."
                 ),
             ),
             DeclareLaunchArgument(

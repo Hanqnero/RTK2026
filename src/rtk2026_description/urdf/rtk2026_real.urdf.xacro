@@ -1,20 +1,425 @@
 <?xml version="1.0"?>
-<robot name="rtk2026_real" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<robot
+  name="rtk2026_real"
+  xmlns:xacro="http://www.ros.org/wiki/xacro">
+
   <!--
-    Точка входа fixed-модели реального робота.
+    Модель реального робота RTK2026.
 
-    prefix      — общий префикс TF-фреймов;
-    use_meshes  — STL visual при true, простая геометрия при false;
-    use_webcam  — добавить camera_link и camera_optical_frame.
+    Один файл на два потребителя, переключается аргументом use_visual.
 
-    Размеры, положения сенсоров и инерции находятся в robot_macro.xacro.
+      use_visual:=false   Pi. robot_state_publisher считает статические
+                          TF, и больше ничего. На выходе только links и
+                          joints, ни одного visual.
+
+      use_visual:=true    Ноутбук. Те же фреймы плюс геометрия для RViz.
+                          Подключается как RobotModel с Description
+                          Source: File.
+
+    robot_state_publisher запускается ТОЛЬКО на Pi. На ноутбуке его быть
+    не должно: статические TF уже приезжают с робота, второй источник тех
+    же трансформаций заставит TF2 дёргаться между ними.
+
+    Координаты сенсоров живут в одном месте - в блоке РАЗМЕРЫ ниже, - и
+    общие для обоих режимов. Скелет и картинка разъехаться не могут.
+
+    Система координат:
+
+      base_footprint  точка на полу под осью привода;
+      base_link       ОСЬ ПРИВОДА, центр линии между ведущими звёздочками.
+
+    base_link стоит на оси привода потому, что это точка разворота
+    робота. Её же движение интегрирует прошивка, поэтому
+    odom -> base_footprint от EKF ложится на модель без смещения.
+    Радиус колеса и колея, по которым считается одометрия, живут в
+    arduino/include/motor_interface.h и в модель не входят.
+
+    Оси по REP-103: X вперёд, Y ВЛЕВО, Z вверх. Метры и радианы.
   -->
-  <xacro:arg name="prefix" default=""/>
-  <xacro:arg name="use_meshes" default="true"/>
-  <xacro:arg name="use_webcam" default="true"/>
-  <xacro:include filename="$(find rtk2026_description)/urdf/robot_macro.xacro"/>
-  <xacro:rtk2026_robot
-    prefix="$(arg prefix)"
-    use_meshes="$(arg use_meshes)"
-    use_webcam="$(arg use_webcam)"/>
+
+  <xacro:arg name="use_visual" default="false"/>
+  <xacro:arg name="use_camera" default="true"/>
+
+
+  <!-- ==================================================================
+       РАЗМЕРЫ, ВЛИЯЮЩИЕ НА TF
+
+       Всё, что попадает на Pi.
+
+       Координата Z сенсора задаётся ОТ ПОЛА - так их и меряют линейкой,
+       и так значение можно проверить, не считая ничего в уме.
+
+       В само дерево TF сенсоры входят от base_link, то есть от оси
+       привода: origin у джойнта всегда отсчитывается от родительского
+       линка, и выбрать тут нечего. Поэтому axle_height вычитается в
+       джойнте - один раз на сенсор, и забыть про него негде.
+       ================================================================== -->
+
+  <!--
+    Смещение base_footprint -> base_link, м. Замерено.
+
+    Замер прямой: от пола до центра вала ведущей звёздочки. Вывести из
+    радиуса звёздочки нельзя - на гусеничном шасси пола касается нижняя
+    ветвь ленты, а сами катки висят над ним, и просвет задаёт подвеска,
+    а не геометрия колеса.
+
+    Замер сошёлся с track_radius, поэтому в модели низ катка садится
+    ровно в ноль, то есть на пол. Совпадение проверяемое, а не принятое
+    на веру: при прежнем нуле весь робот был утоплен в пол на 60 мм.
+  -->
+  <xacro:property name="axle_height" value="0.060"/>
+
+  <!-- ── Лидар RPLIDAR A1M8 ──────────────────────────────────────────── -->
+
+  <!-- Корпус лидара относительно base_link. ЗАПОЛНИТЬ ПО ЗАМЕРУ. -->
+  <xacro:property name="lidar_x" value="-0.040"/>
+  <xacro:property name="lidar_y" value="0.0"/>
+  <xacro:property name="lidar_z" value="0.190"/>
+  <xacro:property name="lidar_rpy" value="0 0 0"/>
+
+  <!--
+    Разворот нулевого луча скана, рад.
+
+    Это не наклон прибора - наклон задаёт lidar_rpy. Здесь только то,
+    куда смотрит луч с индексом 0: производитель привязал его к корпусу,
+    а корпус можно прикрутить любым боком.
+
+    Определяется опытом. Коробка строго перед роботом, LaserScan в RViz
+    с Fixed Frame = base_link, смотрим куда лёг кластер:
+
+        перед роботом -> 0        сзади  -> ${pi}
+        слева -> ${pi / 2.0}      справа -> ${-pi / 2.0}
+
+    Ошибка не видна на стоящем роботе: карта разъезжается веером на
+    первом повороте.
+  -->
+  <xacro:property name="scan_yaw" value="0"/>
+
+  <!-- ── IMU BMI270 ──────────────────────────────────────────────────── -->
+
+  <!--
+    Плата IMU относительно base_link. ЗАПОЛНИТЬ ПО ЗАМЕРУ.
+
+    imu_rpy описывает поворот осей датчика, в том числе плату вверх
+    ногами. Нода BMI270 должна публиковать сырые оси датчика с
+    frame_id = imu_link, а разворот в систему робота делает
+    robot_localization по TF. Поправка знака в коде ноды даст двойной
+    разворот.
+
+    Проверка: поднять робота и повернуть против часовой. Угловая
+    скорость в /odometry/filtered должна быть положительной. Если
+    отрицательная - врёт imu_rpy, а не нода.
+  -->
+  <xacro:property name="imu_x" value="-0.090"/>
+  <xacro:property name="imu_y" value="0.0"/>
+  <xacro:property name="imu_z" value="0.190"/>
+  <xacro:property name="imu_rpy" value="0 ${pi} 0"/>
+
+  <!-- ── Камера ──────────────────────────────────────────────────────── -->
+
+  <!--
+    Камера относительно base_link. ЗАПОЛНИТЬ ПО ЗАМЕРУ.
+    Ставится по оптическому центру объектива, не по корпусу.
+    camera_rpy задаётся в соглашении робота, X вперёд.
+  -->
+  <xacro:property name="camera_x" value="0.135"/>
+  <xacro:property name="camera_y" value="0.0"/>
+  <xacro:property name="camera_z" value="0.090"/>
+  <xacro:property name="camera_rpy" value="0 0 0"/>
+
+
+  <!-- ==================================================================
+       РАЗМЕРЫ ТОЛЬКО ДЛЯ КАРТИНКИ
+
+       Силуэт взят из rtk2026_tracked_sim/urdf/rtk2026_tracked.urdf.xacro:
+       корпус коробкой, гусеница лентой между двумя катками. Числа
+       оттуда же и остаются стартовыми, пока не заменены замером.
+
+       На TF не влияет, на Pi не приезжает. Ошибка здесь портит вид в
+       RViz и ничего больше.
+       ================================================================== -->
+
+  <!-- Габариты корпуса, м. -->
+  <xacro:property name="body_length" value="0.300"/>
+  <xacro:property name="body_width" value="0.180"/>
+  <xacro:property name="body_height" value="0.113"/>
+
+  <!--
+    Центр корпуса относительно ОСИ ПРИВОДА, м.
+
+    В гусеничной модели корпус отсчитывался от base_footprint и стоял на
+    (-0.060, 0, 0.080) при оси на высоте 0.060. Здесь начало отсчёта -
+    сама ось, поэтому по Z остаётся 0.080 - 0.060 = 0.020.
+  -->
+  <xacro:property name="body_x" value="0"/>
+  <xacro:property name="body_z" value="0.020"/>
+
+  <!-- Гусеница. Числа из гусеничной модели. -->
+  <xacro:property name="track_separation" value="0.213"/>
+  <xacro:property name="track_width" value="0.025"/>
+  <xacro:property name="track_radius" value="0.060"/>
+  <xacro:property name="track_end_x" value="0.095"/>
+
+  <!--
+    Лента между катками. Её низ совпадает с низом катков, а верх ниже их
+    верха - отсюда узнаваемый силуэт гусеницы, а не капсула.
+  -->
+  <xacro:property name="belt_height" value="0.080"/>
+  <xacro:property name="belt_z" value="-0.020"/>
+
+  <!-- Корпус лидара, м. -->
+  <xacro:property name="lidar_radius" value="0.035"/>
+  <xacro:property name="lidar_height" value="0.040"/>
+
+  <!-- Корпус камеры, м. -->
+  <xacro:property name="camera_depth" value="0.025"/>
+  <xacro:property name="camera_width" value="0.060"/>
+  <xacro:property name="camera_height" value="0.025"/>
+
+  <!-- Метка сонара, чтобы его было видно в RViz, м. -->
+  <xacro:property name="sonar_marker_depth" value="0.012"/>
+  <xacro:property name="sonar_marker_width" value="0.044"/>
+  <xacro:property name="sonar_marker_height" value="0.020"/>
+
+
+  <!-- ==================================================================
+       ШАССИ
+       ================================================================== -->
+
+  <!-- Опорная СК на полу для одометрии, SLAM и навигации. -->
+  <link name="base_footprint"/>
+
+  <!--
+    Силуэт одной гусеницы: лента между катками и два катка по краям.
+    Это набор visual внутри base_link, а не отдельные links: лишние
+    фреймы пришлось бы публиковать на Pi ради одной картинки.
+  -->
+  <xacro:macro name="track_visual" params="side y">
+    <visual name="${side}_belt_visual">
+      <origin xyz="0 ${y} ${belt_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${2.0 * track_end_x} ${track_width} ${belt_height}"/>
+      </geometry>
+      <material name="${side}_belt_black">
+        <color rgba="0.04 0.04 0.04 1"/>
+      </material>
+    </visual>
+
+    <visual name="${side}_front_wheel_visual">
+      <origin xyz="${track_end_x} ${y} 0" rpy="${pi / 2.0} 0 0"/>
+      <geometry>
+        <cylinder radius="${track_radius}" length="${track_width}"/>
+      </geometry>
+      <material name="${side}_front_wheel_black">
+        <color rgba="0.04 0.04 0.04 1"/>
+      </material>
+    </visual>
+
+    <visual name="${side}_rear_wheel_visual">
+      <origin xyz="${-track_end_x} ${y} 0" rpy="${pi / 2.0} 0 0"/>
+      <geometry>
+        <cylinder radius="${track_radius}" length="${track_width}"/>
+      </geometry>
+      <material name="${side}_rear_wheel_black">
+        <color rgba="0.04 0.04 0.04 1"/>
+      </material>
+    </visual>
+  </xacro:macro>
+
+  <link name="base_link">
+    <xacro:if value="$(arg use_visual)">
+      <visual name="body_visual">
+        <origin xyz="${body_x} 0 ${body_z}" rpy="0 0 0"/>
+        <geometry>
+          <box size="${body_length} ${body_width} ${body_height}"/>
+        </geometry>
+        <material name="body_gray">
+          <color rgba="0.45 0.48 0.52 1"/>
+        </material>
+      </visual>
+
+      <xacro:track_visual side="left" y="${track_separation / 2.0}"/>
+      <xacro:track_visual side="right" y="${-track_separation / 2.0}"/>
+    </xacro:if>
+  </link>
+
+  <!--
+    Только подъём на высоту оси. Смещений по X и Y нет: base_link обязан
+    лежать на оси разворота, иначе команда угловой скорости и модель
+    разъедутся.
+  -->
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${axle_height}" rpy="0 0 0"/>
+  </joint>
+
+
+  <!-- ==================================================================
+       ЛИДАР
+
+       lidar_link   где прибор стоит физически;
+       lidar_frame  header.frame_id сообщения LaserScan.
+
+       Разделение позволяет развернуть ноль скана через scan_yaw, не
+       трогая ни модель, ни крепление.
+       ================================================================== -->
+
+  <link name="lidar_link">
+    <xacro:if value="$(arg use_visual)">
+      <visual name="lidar_visual">
+        <geometry>
+          <cylinder radius="${lidar_radius}" length="${lidar_height}"/>
+        </geometry>
+        <material name="lidar_black">
+          <color rgba="0.08 0.08 0.08 1"/>
+        </material>
+      </visual>
+    </xacro:if>
+  </link>
+
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="${lidar_x} ${lidar_y} ${lidar_z - axle_height}" rpy="${lidar_rpy}"/>
+  </joint>
+
+  <!--
+    Имя обязано совпадать с frame_id драйвера в
+    rtk2026_bringup/launch/lidar_launch.py. Расхождение оставит скан без
+    места в дереве, и slam_toolbox молча перестанет строить карту.
+  -->
+  <link name="lidar_frame"/>
+
+  <joint name="lidar_frame_joint" type="fixed">
+    <parent link="lidar_link"/>
+    <child link="lidar_frame"/>
+    <origin xyz="0 0 0" rpy="0 0 ${scan_yaw}"/>
+  </joint>
+
+
+  <!-- ==================================================================
+       IMU
+       ================================================================== -->
+
+  <link name="imu_link"/>
+
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="${imu_x} ${imu_y} ${imu_z - axle_height}" rpy="${imu_rpy}"/>
+  </joint>
+
+
+  <!-- ==================================================================
+       СОНАРЫ
+
+       ГЛАВНОЕ ПРАВИЛО: sensor_msgs/Range не содержит направления, оно
+       берётся из TF по header.frame_id, и луч идёт вдоль оси +X своего
+       фрейма. Значит yaw разворачивает именно направление измерения.
+       Никаких инверсий в коде ноды быть не должно.
+
+           вперёд  0            назад   ${pi}
+           влево   ${pi/2}      вправо  ${-pi/2}
+           вперёд-влево  ${pi/4}   вперёд-вправо  ${-pi/4}
+
+       Наклон вниз задаётся pitch: положительный опускает нос, потому
+       что ось Y смотрит влево. Наклон на 15 градусов вниз это
+       pitch="${15 * pi / 180}".
+
+       Имя фрейма ${name}_link обязано совпадать с тем, что нода сонаров
+       кладёт в header.frame_id. Не совпадёт - Range повиснет вне дерева
+       и Nav2 не увидит его молча.
+
+       Проверка в RViz: TF display, оси красная=X, зелёная=Y, синяя=Z.
+       Красная стрелка каждого сонара должна смотреть туда же, куда
+       физически светит излучатель.
+       ================================================================== -->
+
+  <xacro:macro name="sonar" params="name x y z yaw:=0 pitch:=0 roll:=0">
+    <link name="${name}_link">
+      <xacro:if value="$(arg use_visual)">
+        <visual name="${name}_visual">
+          <geometry>
+            <box size="${sonar_marker_depth} ${sonar_marker_width} ${sonar_marker_height}"/>
+          </geometry>
+          <material name="${name}_blue">
+            <color rgba="0.20 0.45 0.80 1"/>
+          </material>
+        </visual>
+      </xacro:if>
+    </link>
+
+    <joint name="${name}_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="${name}_link"/>
+      <origin xyz="${x} ${y} ${z - axle_height}" rpy="${roll} ${pitch} ${yaw}"/>
+    </joint>
+  </xacro:macro>
+
+  <!--
+    Шесть сонаров. Координаты и углы ниже - ЗАГОТОВКА, не замер:
+    раскладка взята типовая, три вперёд веером, два по бортам, один
+    назад. Заполнить по факту установки, включая имена, если на роботе
+    они называются иначе.
+
+    x и y в метрах от base_link, z - от пола, как и у прочих сенсоров.
+    y > 0 левый борт, y < 0 правый.
+  -->
+  <xacro:sonar name="sonar_front_left"  x="0.145"  y="-0.05"  z="0.060" yaw="0"/>
+  <xacro:sonar name="sonar_front_right"       x="0.145"  y="0.05"    z="0.060" yaw="0"/>
+  <xacro:sonar name="sonar_left_right" x="-0.060"  y="0.090" z="0.060" yaw="${pi / 2.0}"/>
+  <xacro:sonar name="sonar_left_left"        x="0.060"    y="0.090"  z="0.060" yaw="${pi / 2.0}"/>
+  <xacro:sonar name="sonar_right_right"       x="0.060"    y="-0.090" z="0.060" yaw="${-pi / 2.0}"/>
+  <xacro:sonar name="sonar_right_left"        x="-0.060" y="-0.090"    z="0.060" yaw="${-pi / 2.0}"/>
+
+
+  <!-- ==================================================================
+       КАМЕРА
+
+       В гусеничной модели здесь стояла xacro:sensor_d435i из
+       realsense2_description. Она тянула внешний пакет ради extrinsics
+       RealSense и создавала полдюжины фреймов color/depth/infra,
+       которым на этом роботе ничего не соответствует.
+       ================================================================== -->
+
+  <xacro:if value="$(arg use_camera)">
+    <link name="camera_link">
+      <xacro:if value="$(arg use_visual)">
+        <visual name="camera_visual">
+          <geometry>
+            <box size="${camera_depth} ${camera_width} ${camera_height}"/>
+          </geometry>
+          <material name="camera_black">
+            <color rgba="0.08 0.08 0.08 1"/>
+          </material>
+        </visual>
+      </xacro:if>
+    </link>
+
+    <joint name="camera_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="camera_link"/>
+      <origin xyz="${camera_x} ${camera_y} ${camera_z - axle_height}" rpy="${camera_rpy}"/>
+    </joint>
+
+    <!--
+      Оптическая СК по REP-103: Z вперёд, X вправо, Y вниз. Её ждут
+      OpenCV, image_pipeline и детекторы маркеров, тогда как camera_link
+      выше живёт в соглашении робота.
+
+      Поворот фиксированный и от установки камеры не зависит: он
+      описывает разницу двух соглашений, а не крепление. Положение
+      камеры задаётся camera_rpy выше.
+    -->
+    <link name="camera_optical_frame"/>
+
+    <joint name="camera_optical_joint" type="fixed">
+      <parent link="camera_link"/>
+      <child link="camera_optical_frame"/>
+      <origin xyz="0 0 0" rpy="${-pi / 2.0} 0 ${-pi / 2.0}"/>
+    </joint>
+  </xacro:if>
+
 </robot>

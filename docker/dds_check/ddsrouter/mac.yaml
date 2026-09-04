@@ -76,6 +76,22 @@ topics:
       durability: true
       reliability: true
 
+  # Модель робота. robot_state_publisher публикует её однократно и
+  # удерживает, поэтому без durability RViz показал бы пустой RobotModel:
+  # подписка происходит уже после публикации и без удержания не получает
+  # ничего. Отказ тихий - ошибок в логе нет, просто нет модели.
+  - name: "rt/robot_description"
+    qos:
+      durability: true
+      reliability: true
+
+  # Метаданные карты: размер, разрешение и origin. Публикуются рядом с
+  # самой картой и с тем же удержанием.
+  - name: "rt/map_metadata"
+    qos:
+      durability: true
+      reliability: true
+
   # Датчики: потеря отдельного сообщения допустима, повторная передача
   # только увеличила бы задержку.
   - name: "rt/scan"

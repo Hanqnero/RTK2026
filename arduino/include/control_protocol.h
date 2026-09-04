@@ -47,12 +47,14 @@ constexpr uint8_t kMsgSetConfig = 0x05U;         // зарезервирован
 constexpr uint8_t kMsgCmdReset = 0x06U;
 constexpr uint8_t kMsgSaveGains = 0x07U;
 constexpr uint8_t kMsgGetGains = 0x08U;
+constexpr uint8_t kMsgCmdAutotune = 0x09U;
 
 // MCU -> хост
 constexpr uint8_t kMsgTelemetry = 0x81U;
 constexpr uint8_t kMsgPidDebug = 0x82U;
 constexpr uint8_t kMsgStats = 0x83U;
 constexpr uint8_t kMsgGainsReport = 0x84U;
+constexpr uint8_t kMsgAutotuneStatus = 0x85U;
 
 // Флаги VelocityCommandPayload.flags
 // Действует для всех трёх команд движения: пока флаг взведён, прошивка
@@ -77,6 +79,9 @@ constexpr uint8_t kWheelRight = 1U;
 constexpr uint8_t kControlModeVelocity = 0U;      // cmd_vel -> кинематика -> ПИД
 constexpr uint8_t kControlModeWheelSetpoint = 1U; // уставка колеса -> ПИД
 constexpr uint8_t kControlModeWheelPwm = 2U;      // прямой PWM, ПИД не работает
+// Релейный автотюнер PIDtuner держит PWM сам, регуляторы отключены. Режим
+// снимается автоматически по достижении точности либо по таймауту.
+constexpr uint8_t kControlModeAutotune = 3U;
 
 // Источник действующих коэффициентов в GainsReportPayload.source.
 constexpr uint8_t kGainsSourceCompiled = 0U;
@@ -117,6 +122,70 @@ struct __attribute__((packed)) WheelSetpointCommandPayload {
     float right_rps;
     uint8_t flags;
 };  // 9 байт
+
+// Запуск релейного автотюнера GyverPID/PIDtuner на одном колесе.
+//
+// Тюнер сам держит PWM: раскачивает колесо вокруг steady_pwm ступенькой
+// step_pwm, меряет период и амплитуду автоколебаний и выводит из них
+// коэффициенты. Регуляторы на время автотюна не работают, поэтому режим
+// требует поднятого робота ровно так же, как прямой PWM.
+//
+// Нулевой step_pwm останавливает автотюн и возвращает прошивку в режим
+// уставки скорости с нулями.
+struct __attribute__((packed)) AutotuneCommandPayload {
+    uint8_t wheel;
+
+    // Базовый PWM, вокруг которого идёт раскачка. Обязан быть выше PWM
+    // страгивания: на колесе, стоящем в мёртвой зоне, автоколебаний не
+    // возникнет и тюнер зависнет на этапе стабилизации.
+    int16_t steady_pwm;
+
+    // Амплитуда релейной ступеньки в обе стороны от steady_pwm.
+    int16_t step_pwm;
+
+    // Сколько ждать установившейся скорости перед раскачкой, мс.
+    uint16_t wait_ms;
+
+    // Порог скорости изменения, ниже которого система считается устоявшейся.
+    float window_rps;
+
+    // Длительность первого импульса раскачки, мс.
+    uint16_t pulse_ms;
+
+    // Точность автоколебаний в процентах, при которой автотюн завершается.
+    uint8_t target_accuracy;
+
+    // Период итерации тюнера, мс.
+    //
+    // Не совпадает с периодом управляющего цикла намеренно. Скоростной
+    // контур мотора почти лишён запаздывания, и на 25 мс реле переключается
+    // раньше, чем скорость успевает уйти от средней линии: амплитуда
+    // автоколебаний выходит близкой к нулю, а Ku = 4*step/((max-min)*pi)
+    // улетает в тысячи. Более редкий опрос даёт реле различимую амплитуду
+    // и коэффициенты того порядка, который привод способен отработать.
+    uint16_t tuner_period_ms;
+};  // 16 байт
+
+// Ход автотюна. Отправляется раз в kAutotuneStatusPeriodMs, пока режим
+// активен, и один раз по завершении с финальными коэффициентами.
+struct __attribute__((packed)) AutotuneStatusPayload {
+    uint8_t wheel;
+
+    // Этап работы PIDtuner: 1 - стабилизация, 2 - первый импульс,
+    // 3 - анализ автоколебаний.
+    uint8_t state;
+
+    // Совпадение соседних периодов автоколебаний в процентах. Чем ближе
+    // к 100, тем достовернее коэффициенты.
+    uint8_t accuracy;
+
+    // Ненулевой, когда автотюн завершён и коэффициенты окончательные.
+    uint8_t done;
+
+    float kp;
+    float ki;
+    float kd;
+};  // 16 байт
 
 struct __attribute__((packed)) SetGainsPayload {
     uint8_t wheel;

@@ -25,6 +25,17 @@ def generate_launch_description():
     use_nav2 = LaunchConfiguration("use_nav2")
     use_vector_objects = LaunchConfiguration("use_vector_objects")
 
+    # Профиль ожиданий: какой комплект конфигураций читают мониторы.
+    #
+    # Состав системы у стенда и у робота разный, и разными оказываются не
+    # пороги, а сам список того, что обязано присутствовать. Держать это
+    # в одном файле нельзя: запись, обязательная в одном случае, в другом
+    # даёт постоянную ошибку.
+    #
+    # Имена файлов собираются как <вид>_<profile>.yaml, поэтому новый
+    # профиль добавляется комплектом конфигураций без правки этого файла.
+    profile = LaunchConfiguration("profile")
+
     aggregator_config = PathJoinSubstitution(
         [
             FindPackageShare("rtk2026_observability"),
@@ -36,7 +47,7 @@ def generate_launch_description():
         [
             FindPackageShare("rtk2026_observability"),
             "config",
-            "topics_sim.yaml",
+            ["topics_", profile, ".yaml"],
         ]
     )
     localization_topic_monitor_config = PathJoinSubstitution(
@@ -64,7 +75,7 @@ def generate_launch_description():
         [
             FindPackageShare("rtk2026_observability"),
             "config",
-            "nodes_sim.yaml",
+            ["nodes_", profile, ".yaml"],
         ]
     )
     localization_node_monitor_config = PathJoinSubstitution(
@@ -92,21 +103,21 @@ def generate_launch_description():
         [
             FindPackageShare("rtk2026_observability"),
             "config",
-            "tf_time_sim.yaml",
+            ["tf_time_", profile, ".yaml"],
         ]
     )
     sensor_monitor_config = PathJoinSubstitution(
         [
             FindPackageShare("rtk2026_observability"),
             "config",
-            "sensors_sim.yaml",
+            ["sensors_", profile, ".yaml"],
         ]
     )
     localization_monitor_config = PathJoinSubstitution(
         [
             FindPackageShare("rtk2026_observability"),
             "config",
-            "localization_sim.yaml",
+            ["localization_", profile, ".yaml"],
         ]
     )
     city_nav_topic_monitor_config = PathJoinSubstitution(
@@ -574,6 +585,14 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "profile",
+                default_value="sim",
+                description=(
+                    "Комплект конфигураций мониторов: sim или real. "
+                    "Определяет имена файлов <вид>_<profile>.yaml."
+                ),
+            ),
             DeclareLaunchArgument(
                 "use_gui",
                 default_value="false",

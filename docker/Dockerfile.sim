@@ -123,9 +123,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     ros-jazzy-slam-toolbox \
     ros-jazzy-robot-localization \
     \
-    # Полный Nav2. Содержит planner, controller, BT, behaviors,
-    # costmap filters и map_server, из которого берётся
-    # vector_object_server для запретных зон.
+    # Полный Nav2: planner, controller, BT, behaviors, costmap filters
+    # и map_server. Внимание: vector_object_server сюда НЕ входит - в
+    # Jazzy (1.3.12) его нет, он появился только в Nav2 main (1.5.0).
+    # Его добавляет слой vo_backport ниже.
     ros-jazzy-navigation2 \
     ros-jazzy-nav2-bringup \
     \
@@ -136,8 +137,38 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     ros-jazzy-nav2-rviz-plugins
 
 
+# Vector Object Server: backport в Jazzy.
+#
+# Запретные зоны размечаются кликами в RViz (rtk2026_vector_objects,
+# keepout_click_tool), а тот работает через nav2_msgs/AddShapes и
+# vector_object_server. Ни того, ни другого в Jazzy нет: интерфейсы и сервер
+# появились только в Nav2 main. Ветку целиком взять нельзя - подробности и
+# причины в самом скрипте.
+#
+# Отдельным слоем и до сборки workspace: меняется он практически никогда,
+# а собирается несколько минут.
+FROM ros_navigation AS vo_backport
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git \
+    libgraphicsmagick++-dev \
+    ros-jazzy-nav2-common
+
+COPY --chmod=755 docker/vo_backport.sh /usr/local/bin/vo_backport
+
+RUN /usr/local/bin/vo_backport
+
+# Порядок сорсинга обязателен: backport перекрывает nav2_msgs и
+# nav2_map_server из apt, поэтому идёт после /opt/ros/jazzy и до workspace.
+
+
 # Perception и диагностика: меняются чаще навигации.
-FROM ros_navigation AS ros_perception
+FROM vo_backport AS ros_perception
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -277,14 +308,20 @@ COPY worlds/ /workspace/worlds/
 # rtk2026_cv с rtk2026_city_nav падают на импорте. Раньше его в списке
 # не было, хотя rtk2026_cv от него зависит.
 #
-# rtk2026_graph и rtk2026_route_nav не собираются: их заменили
-# rtk2026_city_nav и rtk2026_nav2.
+# rtk2026_route_nav и rtk2026_graph собираются не ради навигации - её
+# заменили rtk2026_city_nav и rtk2026_nav2 - а ради единственного
+# сценария: route_tool_with_costmap.launch.py, офлайн-режим правки
+# костмапы и запретных зон над готовой картой. rtk2026_graph тянется
+# как зависимость rtk2026_route_nav.
 RUN source /opt/ros/jazzy/setup.bash && \
+    source /opt/vo_ws/install/setup.bash && \
     colcon build \
         --symlink-install \
         --packages-select \
             rtk2026_interfaces \
             rtk2026_pose_graph \
+            rtk2026_graph \
+            rtk2026_route_nav \
             rtk2026_city_nav \
             rtk2026_nav2 \
             rtk2026_vector_objects \
@@ -308,6 +345,7 @@ EXPOSE 6080 6081
 RUN printf '%s\n' \
     'set +u' \
     'source /opt/ros/jazzy/setup.bash' \
+    'source /opt/vo_ws/install/setup.bash' \
     'source /workspace/install/setup.bash' \
     'set -u' \
     >> /root/.bashrc

@@ -27,6 +27,7 @@ def generate_launch_description() -> LaunchDescription:
     graph_filepath = LaunchConfiguration("graph_filepath")
     costmap_params_file = LaunchConfiguration("costmap_params_file")
     use_vector_server = LaunchConfiguration("use_vector_server")
+    zones_path = LaunchConfiguration("zones_path")
     lane_params_file = LaunchConfiguration("lane_params_file")
     lane_manager_executable = LaunchConfiguration("lane_manager_executable")
     lane_pose_topic = LaunchConfiguration("lane_pose_topic")
@@ -67,6 +68,15 @@ def generate_launch_description() -> LaunchDescription:
                 "use_vector_server",
                 default_value="false",
                 description="Поднять vector_object_server + costmap_filter_info_server + keepout tool.",
+            ),
+            DeclareLaunchArgument(
+                "zones_path",
+                default_value="",
+                description=(
+                    "Файл keepout-зон. Пусто - зоны живут только до выхода. "
+                    "Для правки карты задайте путь рядом с ней, например "
+                    "/workspace/maps/polygon_5x5.zones.json."
+                ),
             ),
             DeclareLaunchArgument(
                 "lane_params_file",
@@ -144,6 +154,22 @@ def generate_launch_description() -> LaunchDescription:
                     "--child-frame-id", "odom",
                 ],
             ),
+            # Офлайн-редактору робота никто не двигает, но костмапе нужна
+            # поза: без odom -> base_footprint дерево распадается на две
+            # части, и она встаёт с "map and base_footprint are not part of
+            # the same tree". В бою эту связь даёт EKF, здесь её некому
+            # дать, поэтому она статическая и живёт под тем же флагом.
+            Node(
+                condition=IfCondition(publish_map_odom_static_tf),
+                package="tf2_ros",
+                executable="static_transform_publisher",
+                arguments=[
+                    "--x", "0", "--y", "0", "--z", "0",
+                    "--qx", "0", "--qy", "0", "--qz", "0", "--qw", "1",
+                    "--frame-id", "odom",
+                    "--child-frame-id", "base_footprint",
+                ],
+            ),
             Node(
                 package="tf2_ros",
                 executable="static_transform_publisher",
@@ -199,7 +225,11 @@ def generate_launch_description() -> LaunchDescription:
                 executable="nav2_costmap_2d",
                 name="costmap",
                 output="screen",
-                parameters=[costmap_params_file],
+                # use_sim_time отдельно от файла: в YAML он свой, а режимом
+                # управляет аргумент launch. Без этой строки костмапа
+                # оставалась на sim-времени при выключенном Gazebo, часы
+                # ноды стояли на нуле.
+                parameters=[costmap_params_file, {"use_sim_time": use_sim_time}],
             ),
             Node(
                 package="nav2_lifecycle_manager",
@@ -232,7 +262,14 @@ def generate_launch_description() -> LaunchDescription:
                     str(vector_objects_pkg / "launch" / "vector_objects.launch.py")
                 ),
                 condition=IfCondition(use_vector_server),
-                launch_arguments={"use_sim_time": use_sim_time}.items(),
+                launch_arguments={
+                    "use_sim_time": use_sim_time,
+                    # Без этого keepout_click_tool работает только в
+                    # памяти: сервис ~/save пишет в zones_path, и при
+                    # пустом значении размеченные зоны теряются при
+                    # выходе. Для редактора это и есть результат работы.
+                    "zones_path": zones_path,
+                }.items(),
             ),
             Node(
                 package="nav2_route",

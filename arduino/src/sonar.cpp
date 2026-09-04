@@ -41,15 +41,10 @@ void startPulse() {
 }  // namespace
 
 void configureSonar() {
-    pinMode(SONAR_VCC_PIN, OUTPUT);
-    pinMode(SONAR_GND_PIN, OUTPUT);
     pinMode(SONAR_TRIG_PIN, OUTPUT);
     pinMode(SONAR_ECHO_PIN, INPUT);
 
-    digitalWrite(SONAR_GND_PIN, LOW);
-    digitalWrite(SONAR_VCC_PIN, HIGH);
     digitalWrite(SONAR_TRIG_PIN, LOW);
-    delay(100);
 
     last_sample_start_ms = millis();
 }

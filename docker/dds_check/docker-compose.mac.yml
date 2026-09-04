@@ -1,3 +1,26 @@
+# PI_ADDRESS - адрес робота в ТОЙ сети, через которую идёт связь.
+# Задаётся одинаково на обеих машинах, конфиги подставляют его вместо
+# 192.168.1.50 (см. entrypoint.sh).
+#
+#   ethernet + Internet Sharing с Mac   export PI_ADDRESS=192.168.2.2
+#   точка робота ROSSIYANE              export PI_ADDRESS=10.42.0.1
+#   общий Wi-Fi                         ip -4 addr show wlan1  на Pi
+#
+# Смена сети - это ровно три шага: узнать адрес Pi в новой сети,
+# выставить PI_ADDRESS на обеих сторонах, перезапустить оба роутера:
+#
+#   docker compose -f docker/dds_check/docker-compose.pi.yml  up -d --force-recreate router
+#   docker compose -f docker/dds_check/docker-compose.mac.yml up -d --force-recreate router
+#
+# Адрес должен быть тот, который Pi реально держит: он не только слушается,
+# но и объявляется удалённой стороне. Поэтому 0.0.0.0 сюда не годится.
+#
+# ИЗВЕСТНОЕ ПОВЕДЕНИЕ: при поднятом роутере частота топика на самом роботе
+# утраивается - сообщения возвращаются в его домен обратной ветвью моста.
+# Замерено на /scan: 7.0 Гц без роутера и 20.0 Гц с ним. На картинку в RViz
+# не влияет, но частотные проверки rtk2026_observability при поднятом
+# роутере мерить нельзя - только на роботе с остановленным роутером.
+
 # Проверка транспорта: сторона ноутбука.
 #
 #   export PI_ADDRESS=192.168.1.50
@@ -31,6 +54,34 @@ services:
     <<: *common
     container_name: rtk2026_dds_router_mac
     command: router
+
+  # Визуализация данных робота: RViz и DDS Router в одном контейнере.
+  #
+  # Router здесь не отдельный сервис намеренно, как и в локальной
+  # репетиции: он делит сетевое пространство с RViz, поэтому между ними
+  # работает обычный локальный DDS, а виртуализированную сеть Docker
+  # Desktop пересекает ровно одно исходящее TCP-соединение до робота.
+  #
+  # Отличие от сервиса router выше: тот проверяет транспорт числами,
+  # этот показывает картинку. Одновременно поднимать оба не нужно -
+  # два Router-а на одной стороне будут дублировать маршруты.
+  viz:
+    build:
+      context: .
+      dockerfile: Dockerfile.viz
+      args:
+        VULCANEXUS_TAG: ${VULCANEXUS_TAG:-jazzy}
+    image: rtk2026-dds-check-viz
+    container_name: rtk2026_viz
+    environment:
+      PI_ADDRESS: ${PI_ADDRESS:?задайте адрес Raspberry Pi, например export PI_ADDRESS=192.168.2.2}
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_DOMAIN_ID: "0"
+      ROS_LOCALHOST_ONLY: "0"
+    ports:
+      # noVNC доступен только с этого компьютера: VNC работает без пароля.
+      - "127.0.0.1:6080:6080"
+    init: true
 
   talker:
     <<: *common

@@ -143,7 +143,15 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.02
+
+        # Равен вписанному радиусу footprint (0.095 + padding 0.005).
+        #
+        # При 0.02 костмапа писала ошибку на каждом старте: ореол уже
+        # корпуса. Выше поднимать нельзя - дорога 800 мм при смещении
+        # полосы 200 мм, и градиент начал бы сталкивать маршрут с полосы.
+        # Непроезжую зону это не расширяет: её задаёт вписанный радиус
+        # footprint, а не ореол.
+        inflation_radius: 0.10
 
 
 local_costmap:
@@ -191,7 +199,15 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.02
+
+        # Равен вписанному радиусу footprint (0.095 + padding 0.005).
+        #
+        # При 0.02 костмапа писала ошибку на каждом старте: ореол уже
+        # корпуса. Выше поднимать нельзя - дорога 800 мм при смещении
+        # полосы 200 мм, и градиент начал бы сталкивать маршрут с полосы.
+        # Непроезжую зону это не расширяет: её задаёт вписанный радиус
+        # footprint, а не ореол.
+        inflation_radius: 0.10
 
 
 behavior_server:

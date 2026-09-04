@@ -3,9 +3,11 @@
 #   docker compose -f pi/docker/docker-compose.pi.yml up link        # ретранслятор порта
 #   docker compose -f pi/docker/docker-compose.pi.yml run --rm build # собрать прошивку
 #   docker compose -f pi/docker/docker-compose.pi.yml run --rm flash # собрать и прошить
+#   docker compose -f pi/docker/docker-compose.pi.yml up -d ros      # ROS2: arduino_bridge
 #
-# ВАЖНО: link и flash не могут работать одновременно - порт занимает кто-то
-# один. Перед прошивкой остановите link.
+# ВАЖНО: link, flash и ros не могут работать одновременно - все три
+# конкурируют за serial-порт /dev/arduino. Перед прошивкой или запуском ros
+# остановите остальных.
 #
 # Контекст сборки - корень репозитория (../..): контейнеру нужны и
 # прошивка из arduino/, и ретранслятор из pi/tools/, а эта директория
@@ -68,3 +70,99 @@ services:
     command: bash
     stdin_open: true
     tty: true
+
+  # ROS 2 реального робота: привод, лидар, EKF и SLAM.
+  #
+  # network_mode: host + ipc: host обязательны вместе, как и в
+  # docker/dds_check/docker-compose.pi.yml: DDS на одном хосте выбирает
+  # shared memory, а /dev/shm у контейнера без ipc: host свой собственный -
+  # обмен тихо не пойдёт. ROS_DOMAIN_ID и RMW те же, что у DDS Router
+  # (docker/dds_check/), чтобы эти ноды попали в тот локальный граф, который
+  # Router прокидывает на ноутбук.
+  ros:
+    build:
+      context: ../..
+      dockerfile: pi/docker/Dockerfile.ros
+    image: rtk2026-ros-pi
+    container_name: rtk2026-ros
+    network_mode: host
+    ipc: host
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_DOMAIN_ID: "0"
+      ROS_LOCALHOST_ONLY: "0"
+    volumes:
+      # Симлинк-сборка: правка Python-кода действует сразу без пересборки
+      # образа, как в docker/Dockerfile.sim.
+      - ../../src:/workspace/src
+      # Карты и записи прогонов сохраняются на саму Pi, а не внутрь
+      # контейнера: иначе они исчезали бы вместе с ним.
+      - ../../maps:/workspace/maps
+      - ../../records:/workspace/records
+    devices:
+      # Пути по идентификатору устройства, а не /dev/ttyUSB0 и ttyUSB1:
+      # номера присваиваются в порядке подключения и после перезагрузки
+      # могут поменяться местами, а идентификатор постоянен.
+      #
+      # Arduino - мост CH340 (вендор 1a86), лидар C1 - CP2102N от Silicon
+      # Labs. Именно CP2102N и с длинным серийником: у прежнего A1M8 стоял
+      # CP2102 с серийником 0001, и путь от него здесь не подойдёт.
+      - "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0:/dev/arduino"
+      - "/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_5816f0d8d96ff0118dde93301045c30f-if00-port0:/dev/rplidar"
+      #
+      # Шина I2C для BMI270. В отличие от USB, номер здесь постоянный:
+      # это контроллер самой Pi на GPIO2/GPIO3, а не устройство,
+      # получающее номер в порядке подключения.
+      #
+      # Шину надо предварительно включить на хосте:
+      #   sudo raspi-config nonint do_i2c 0 && sudo reboot
+      # проверить наличие узла: ls -l /dev/i2c-1
+      # и увидеть чип: i2cdetect -y 1  (ждём 68 или 69)
+      - "/dev/i2c-1:/dev/i2c-1"
+    init: true
+    stdin_open: true
+    tty: true
+    command: bash
+
+  # ~ Только лидар, без остального железа.
+  #
+  # Зачем отдельный сервис, а не ros
+  # --------------------------------
+  #
+  # Docker резолвит каждую запись devices при старте контейнера и
+  # отказывается запускать его, если хоть одного устройства нет. У ros
+  # объявлены Arduino и шина I2C, поэтому при отключённой периферии он не
+  # поднимется вовсе - а отлаживать лидар удобно именно так, в одиночку.
+  #
+  # Здесь объявлен ровно один device, поэтому сервис стартует, пока на
+  # роботе есть лидар, и не зависит от всего прочего.
+  #
+  #     docker compose -f pi/docker/docker-compose.pi.yml up -d lidar
+  #     docker logs -f rtk2026-lidar
+  lidar:
+    build:
+      context: ../..
+      dockerfile: pi/docker/Dockerfile.ros
+    image: rtk2026-ros-pi
+    container_name: rtk2026-lidar
+    network_mode: host
+    ipc: host
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_DOMAIN_ID: "0"
+      ROS_LOCALHOST_ONLY: "0"
+    volumes:
+      - ../../src:/workspace/src
+    devices:
+      - "/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_5816f0d8d96ff0118dde93301045c30f-if00-port0:/dev/rplidar"
+    init: true
+    # Перезапуск ноды при неудачном рукопожатии делает сам launch через
+    # respawn, поэтому здесь нужен только запуск.
+    command:
+      - bash
+      - -lc
+      - >-
+        source /opt/ros/jazzy/setup.bash &&
+        source /opt/lidar_ws/install/setup.bash &&
+        source /workspace/install/setup.bash &&
+        ros2 launch rtk2026_bringup lidar_launch.py

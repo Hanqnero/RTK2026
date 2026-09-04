@@ -1,0 +1,82 @@
+# Общие topics реального робота RTK2026.
+#
+# Частоты здесь заданы железом: периодом управляющего цикла прошивки,
+# частотой вращения лидара и собственным циклом EKF.
+#
+# expected_rate проверяется по timestamp самого сообщения, а не по wall time.
+
+topics:
+
+  scan:
+    topic: /scan
+    type: sensor_msgs/msg/LaserScan
+    required: true
+
+    # Паспортная частота вращения A1M8. Параметром её не изменить:
+    # sllidar_ros2 обороты не настраивает, их задаёт PWM мотора.
+    #
+    # Допуск широкий: обороты держит сам мотор без обратной связи, и они
+    # плавают от питания и температуры.
+    expected_rate: 5.5
+    tolerance: 0.30
+    window_size: 20
+    max_age: 0.5
+    stamp_field: header.stamp
+    qos: sensor_data
+
+  imu:
+    topic: /imu/data
+    type: sensor_msgs/msg/Imu
+
+    # Нода BMI270 на Raspberry Pi пока не реализована, см. docs/running.rst.
+    # EKF при этом работает, но только по колёсной одометрии, поэтому угол
+    # накапливает ошибку быстрее.
+    #
+    # Как только нода появится, здесь возвращается required: true и
+    # фактическая частота публикации.
+    required: false
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: sensor_data
+
+  wheel_odometry:
+    topic: /wheel/odom
+    type: nav_msgs/msg/Odometry
+    required: true
+
+    # Драйвер публикует одометрию на каждый пакет телеметрии, а его темп
+    # задаёт управляющий цикл прошивки: kControlPeriodMs = 25 мс, то есть
+    # 40 Гц.
+    expected_rate: 40.0
+    tolerance: 0.20
+    window_size: 30
+    max_age: 0.3
+    stamp_field: header.stamp
+    qos: system_default
+
+  filtered_odometry:
+    topic: /odometry/filtered
+    type: nav_msgs/msg/Odometry
+    required: true
+
+    # Частота собственного цикла EKF: frequency в ekf_real.yaml.
+    # Она не обязана совпадать с частотой входной одометрии.
+    expected_rate: 50.0
+    tolerance: 0.20
+    window_size: 30
+    max_age: 0.3
+    stamp_field: header.stamp
+    qos: system_default
+
+  cmd_vel:
+    topic: /cmd_vel
+    type: geometry_msgs/msg/TwistStamped
+
+    # Команда событийная: её отсутствие при стоящем роботе не является
+    # неисправностью системы.
+    required: false
+    expected_rate: 0.0
+    max_age: 0.0
+    stamp_field: header.stamp
+    qos: system_default

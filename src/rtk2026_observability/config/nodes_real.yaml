@@ -1,0 +1,64 @@
+# Ноды реального робота RTK2026.
+#
+# Монитор проверяет наличие ноды в ROS graph, обязательные сервисы,
+# lifecycle-состояние и недавние WARN/ERROR из /rosout.
+#
+# Проверка опирается на ROS graph, поэтому работает только там, где граф
+# настоящий, то есть на самом роботе. Через DDS Router граф не проходит
+# достоверно, см. docs/transport_check.rst.
+
+nodes:
+
+  robot_state_publisher:
+    node: /robot_state_publisher
+    required: true
+    loggers:
+      - robot_state_publisher
+
+  arduino_bridge:
+    node: /arduino_bridge
+    required: true
+    loggers:
+      - arduino_bridge
+
+    # Драйвер логирует качество линка раз в link_report_period_sec и
+    # поднимает WARN при потерях пакетов или срывах периода прошивки.
+    # Одиночная потеря на витой паре не повод держать красный статус.
+    warn_hold_time: 15.0
+
+  lidar:
+    node: /sllidar_node
+    required: true
+    loggers:
+      - sllidar_node
+
+  ekf:
+    node: /ekf_filter_node
+    required: true
+    loggers:
+      - ekf_filter_node
+
+    # robot_localization пишет ERROR даже при единичном превышении периода
+    # на несколько миллисекунд. Событие сохраняется в счётчике, но красный
+    # live-статус удерживаем недолго; повторяющиеся ошибки всё равно
+    # не успеют погаснуть.
+    error_hold_time: 5.0
+
+  topic_monitor:
+    node: /topic_monitor
+    required: true
+
+  tf_time_monitor:
+    node: /tf_time_monitor
+    required: true
+
+  sensor_monitor:
+    node: /sensor_monitor
+    required: true
+
+  localization_monitor:
+    node: /localization_monitor
+    required: true
+
+# RViz в этот список не входит: он запускается на ноутбуке и в графе
+# робота не появляется.

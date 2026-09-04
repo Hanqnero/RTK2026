@@ -3,7 +3,10 @@
 # Параметры задаются плоско на этой ноде (без вложенного global_costmap — это только для composed bringup).
 /costmap:
   ros__parameters:
-    use_sim_time: true
+    # Офлайн-редактор: Gazebo не запущен и /clock никто не публикует.
+    # При true часы ноды стоят на нуле, и любая проверка возраста данных
+    # начинает врать. Значение всё равно перекрывается аргументом launch.
+    use_sim_time: false
     global_frame: map
     robot_base_frame: base_footprint
     transform_tolerance: 0.5
@@ -21,5 +24,12 @@
       map_subscribe_transient_local: true
     inflation_layer:
       plugin: "nav2_costmap_2d::InflationLayer"
-      cost_scaling_factor: 4.0
-      inflation_radius: 0.02
+      # Подбирается на живую, без перезапуска:
+      #   ros2 param set /costmap inflation_layer.inflation_radius 0.25
+      #   ros2 param set /costmap inflation_layer.cost_scaling_factor 3.0
+      #
+      # Ограничение снизу: значение меньше robot_radius (0.15) костмапа
+      # считает ошибкой - планировщик пройдёт там, где корпус не влезет.
+      # Ориентир сверху: медианный просвет на этой карте 0.30 м.
+      cost_scaling_factor: 3.0
+      inflation_radius: 0.25

@@ -8,9 +8,22 @@ project(rtk2026_description)
 find_package(ament_cmake REQUIRED)
 
 # Устанавливаем ресурсные директории пакета
-install(DIRECTORY urdf config launch meshes worlds
+install(DIRECTORY urdf config launch
   DESTINATION share/${PROJECT_NAME}
 )
+
+# meshes/ и worlds/ на роботе не нужны: описание там разворачивается без
+# геометрии, а миры к реальному роботу отношения не имеют. На Pi эти
+# каталоги не приезжают (см. EXCLUDES в pi/tools/sync_to_pi.sh), поэтому
+# установка выполняется только при их наличии - иначе сборка образа
+# упала бы на отсутствующем каталоге.
+foreach(optional_asset_dir meshes worlds)
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${optional_asset_dir}")
+    install(DIRECTORY ${optional_asset_dir}
+      DESTINATION share/${PROJECT_NAME}
+    )
+  endif()
+endforeach()
 
 # quantize_joint_states.py остаётся диагностическим инструментом для сравнения
 # идеальных joint states Gazebo с разрешением реальных энкодеров.

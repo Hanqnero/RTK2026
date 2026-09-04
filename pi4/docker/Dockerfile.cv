@@ -1,0 +1,139 @@
+# syntax=docker/dockerfile:1.7
+
+# Образ второй малинки: камера и распознавание знаков.
+#
+# База та же, что у ROS-образа Pi 5 (pi/docker/Dockerfile.ros). Это не
+# косметика: узлы на разных машинах общаются через DDS, и совпадение дистрибутива
+# ROS и реализации RMW - условие того, что они друг друга увидят. Разные версии
+# дают разные хеши типов сообщений, и топик просто не сойдётся.
+#
+# Из проекта собираются два пакета:
+#   rtk2026_interfaces - определение DrivingDetection, обязано совпадать
+#                        с тем, что собрано на Pi 5, иначе типы не сойдутся;
+#   rtk2026_cv         - сам детектор и веса модели.
+#
+# Ни привода, ни SLAM, ни навигации здесь нет: эта машина только смотрит.
+FROM ros:jazzy-ros-base-noble AS ros_system
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean
+
+
+FROM ros_system AS ros_build_tools
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    python3-pip
+
+
+# Камера и обработка изображений.
+#
+# Слой отделён от сборки проекта намеренно: меняется он редко, а весит много,
+# и пересобирать его после каждой правки кода незачем.
+FROM ros_build_tools AS cv_runtime
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    \
+    # Драйвер USB-камеры через V4L2. Публикует sensor_msgs/Image,
+    # ровно то, на что подписан детектор.
+    ros-jazzy-v4l2-camera \
+    \
+    # Детектор разбирает буфер кадра сам, через numpy, но cv_bridge
+    # объявлен зависимостью пакета и нужен для сборки.
+    ros-jazzy-cv-bridge \
+    \
+    python3-opencv \
+    python3-numpy \
+    \
+    # Утилиты V4L2: без них нечем посмотреть, какие режимы отдаёт камера.
+    v4l-utils
+
+# Среда исполнения ONNX. В репозиториях Ubuntu и ROS её нет, ставится из pip.
+#
+# Ключ --break-system-packages нужен потому, что Python в Noble помечен как
+# управляемый системой. В контейнере это безопасно: он одноразовый и ничего,
+# кроме нашего стека, здесь не живёт.
+#
+# Ставится сборка для CPU: у Pi 4 нет ни ускорителя, ни поддерживаемого GPU.
+RUN pip3 install --no-cache-dir --break-system-packages onnxruntime
+
+
+FROM cv_runtime AS cv_workspace
+
+WORKDIR /workspace
+
+RUN if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
+        rosdep init; \
+    fi && \
+    \
+    rosdep_updated=0 && \
+    for attempt in 1 2 3; do \
+        if rosdep update --rosdistro jazzy; then \
+            rosdep_updated=1; \
+            break; \
+        fi; \
+        echo "rosdep update: попытка ${attempt} завершилась ошибкой" >&2; \
+        sleep $((attempt * 5)); \
+    done && \
+    test "${rosdep_updated}" = "1"
+
+
+# Зависимости ставятся по package.xml, до копирования исходников: слой
+# пересобирается при изменении состава зависимостей, а не после каждой правки.
+COPY src/rtk2026_interfaces/package.xml \
+    /tmp/rosdep/src/rtk2026_interfaces/package.xml
+COPY src/rtk2026_cv/package.xml \
+    /tmp/rosdep/src/rtk2026_cv/package.xml
+
+# rosbag2_py и vision_msgs объявлены в rtk2026_cv, но нужны другим его узлам,
+# не детектору. Ставятся из apt как обычные зависимости - пропускать их незачем.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get -o Acquire::Retries=3 update && \
+    rosdep install \
+        --from-paths /tmp/rosdep/src \
+        --ignore-src \
+        --rosdistro jazzy \
+        --skip-keys="ament_python" \
+        -r \
+        -y && \
+    rm -rf /tmp/rosdep
+
+
+# Build context в compose равен корню репозитория.
+COPY src/ /workspace/src/
+
+RUN source /opt/ros/jazzy/setup.bash && \
+    colcon build \
+        --symlink-install \
+        --packages-select \
+            rtk2026_interfaces \
+            rtk2026_cv
+
+RUN printf '%s\n' \
+    'set +u' \
+    'source /opt/ros/jazzy/setup.bash' \
+    'source /workspace/install/setup.bash' \
+    'set -u' \
+    >> /root/.bashrc
+
+# Контейнер остаётся поднятым, запуск идёт через docker exec - так же,
+# как у образов Pi 5.
+CMD ["sleep", "infinity"]

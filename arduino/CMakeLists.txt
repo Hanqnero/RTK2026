@@ -78,6 +78,7 @@ target_include_directories(arduino_core PUBLIC
     ${VENDOR_DIR}/uPID
     ${VENDOR_DIR}/uEncoder/src
     ${VENDOR_DIR}/GyverIO/src
+    ${VENDOR_DIR}/GyverPID/src
 )
 target_compile_definitions(arduino_core PUBLIC ${ARDUINO_BOARD_DEFINES})
 # Стандартный буфер HardwareSerial - 64 байта, а кадр телеметрии занимает 72
@@ -142,6 +143,7 @@ target_include_directories(${PROJECT_NAME}.elf PRIVATE
     ${VENDOR_DIR}/uPID
     ${VENDOR_DIR}/uEncoder/src
     ${VENDOR_DIR}/GyverIO/src
+    ${VENDOR_DIR}/GyverPID/src
 )
 target_compile_definitions(${PROJECT_NAME}.elf PRIVATE ${ARDUINO_BOARD_DEFINES})
 if(ROBOT_DIRECT_MOTOR_TEST)

@@ -1,0 +1,229 @@
+# syntax=docker/dockerfile:1.7
+
+# Тот же официальный ARM64-образ, что и в docker/Dockerfile.sim, но без
+# GUI и Gazebo: на роботе нет дисплея, а симуляция здесь не нужна.
+#
+# Что запускается из этого образа:
+#   arduino_launch.py - привод;
+#   lidar_launch.py   - RPLIDAR A1M8;
+#   real_slam.py      - полный стек картографирования.
+#
+# RViz сюда не входит намеренно. Он живёт на ноутбуке и получает топики
+# через DDS Router, см. docs/transport_check.rst: гонять картинку с Pi
+# дороже, чем сами данные.
+FROM ros:jazzy-ros-base-noble AS ros_system
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean
+
+
+FROM ros_system AS ros_build_tools
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    \
+    # pyserial для rtk2026_driver.
+    python3-serial
+
+
+# Стек картографирования и описания робота.
+#
+# Отдельным слоем от инструментов сборки: меняется он редко, а слой
+# тяжёлый, и пересобирать его при каждой правке кода незачем.
+FROM ros_build_tools AS ros_slam
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    \
+    # 2D lidar SLAM и слияние одометрии с IMU.
+    ros-jazzy-slam-toolbox \
+    ros-jazzy-robot-localization \
+    \
+    # Описание робота: TF из URDF и раскрытие xacro.
+    ros-jazzy-robot-state-publisher \
+    ros-jazzy-xacro \
+    \
+    # Работа с TF из командной строки: без неё нечем проверить дерево
+    # фреймов на самом роботе, а через DDS Router граф не проходит.
+    ros-jazzy-tf2-ros \
+    ros-jazzy-tf2-tools \
+    \
+    # Диагностика: rtk2026_observability публикует DiagnosticArray и
+    # опирается на diagnostic_updater.
+    ros-jazzy-diagnostics \
+    ros-jazzy-diagnostic-updater \
+    \
+    # Запись прогонов в MCAP: разбирать поведение на роботе удобнее
+    # по логу, чем по картинке в RViz через сеть.
+    ros-jazzy-rosbag2-storage-mcap
+
+
+# Драйвер лидара. Собирается из исходников: в apt-репозиториях ROS 2 его
+# нет, и rosdep о нём не знает - именно поэтому он стоит в skip-keys ниже
+# и в docker/Dockerfile.sim.
+#
+# Живёт в отдельном underlay, а не в /workspace/src, потому что compose
+# монтирует туда исходники проекта с хоста и перекрыл бы клон.
+FROM ros_slam AS lidar_driver
+
+ARG SLLIDAR_REF=main
+
+RUN mkdir -p /opt/lidar_ws/src && \
+    git clone --depth 1 --branch "${SLLIDAR_REF}" \
+        https://github.com/Slamtec/sllidar_ros2.git \
+        /opt/lidar_ws/src/sllidar_ros2
+
+# Драйвер собирается без правок.
+#
+# Здесь был патч, переводивший запуск на legacy-сканирование: казалось, что
+# прошивка не поддерживает перечисление режимов, потому что "Can not start
+# scan" повторялся. Проверка сырым протоколом это опровергла - GET_LIDAR_CONF
+# отвечает и сообщает о пяти доступных режимах.
+#
+# Настоящая причина была в нестабильном канале: запуск express - цепочка из
+# четырёх обменов, и при 75 % успеха на шаг она проходит лишь в трети
+# случаев. Патч резал разрешение вчетверо, лечив симптом, а не причину.
+RUN source /opt/ros/jazzy/setup.bash && \
+    cd /opt/lidar_ws && \
+    colcon build --packages-select sllidar_ros2 && \
+    rm -rf /opt/lidar_ws/build /opt/lidar_ws/log
+
+
+FROM lidar_driver AS robot_workspace
+
+WORKDIR /workspace
+
+RUN if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
+        rosdep init; \
+    fi && \
+    \
+    rosdep_updated=0 && \
+    for attempt in 1 2 3; do \
+        if rosdep update --rosdistro jazzy; then \
+            rosdep_updated=1; \
+            break; \
+        fi; \
+        echo "rosdep update: попытка ${attempt} завершилась ошибкой" >&2; \
+        sleep $((attempt * 5)); \
+    done && \
+    test "${rosdep_updated}" = "1"
+
+
+# Зависимости ставятся по package.xml, без исходного кода: слой
+# пересобирается только при изменении состава зависимостей, а не после
+# каждой правки.
+#
+# Копируются ровно те пакеты, которые собираются ниже. Остальной workspace
+# на робота не приезжает: симуляция, зрение и навигация здесь не нужны,
+# а их package.xml тянули бы Gazebo, OpenCV и Nav2 в образ.
+COPY src/rtk2026_driver/package.xml \
+    /tmp/rosdep/src/rtk2026_driver/package.xml
+COPY src/rtk2026_description/package.xml \
+    /tmp/rosdep/src/rtk2026_description/package.xml
+COPY src/rtk2026_localization/package.xml \
+    /tmp/rosdep/src/rtk2026_localization/package.xml
+COPY src/rtk2026_slam/package.xml \
+    /tmp/rosdep/src/rtk2026_slam/package.xml
+COPY src/rtk2026_observability/package.xml \
+    /tmp/rosdep/src/rtk2026_observability/package.xml
+COPY src/rtk2026_bringup/package.xml \
+    /tmp/rosdep/src/rtk2026_bringup/package.xml
+COPY src/rtk2026_interfaces/package.xml \
+    /tmp/rosdep/src/rtk2026_interfaces/package.xml
+
+# Что и почему пропускается.
+#
+# sllidar_ros2
+#     В apt его нет, он собран из исходников в /opt/lidar_ws выше.
+#
+# rtabmap_msgs
+#     Объявлен в package.xml rtk2026_observability, но ни один его скрипт
+#     этот пакет не импортирует: он остался от визуального SLAM, который
+#     на роботе не запускается. Установка тянула бы весь RTAB-Map.
+#
+# plotjuggler_ros, rqt_runtime_monitor, rqt_robot_monitor
+#     Графические инструменты. На роботе нет дисплея, а смотреть
+#     диагностику надо с ноутбука; тянут за собой Qt.
+#
+# rtk2026_tracked_sim
+#     Единственная межпакетная зависимость, которую нечем удовлетворить:
+#     rtk2026_bringup объявляет её ради sim_slam_launch.py. На роботе этот
+#     сценарий не запускается, а сам пакет сюда не копируется.
+#
+# nav2_msgs намеренно НЕ пропущен: его импортирует localization_monitor.py
+# ради ParticleCloud, и это пакет сообщений, а не весь Nav2.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get -o Acquire::Retries=3 update && \
+    rosdep install \
+        --from-paths /tmp/rosdep/src \
+        --ignore-src \
+        --rosdistro jazzy \
+        --skip-keys="sllidar_ros2 ament_python rtabmap_msgs \
+                     plotjuggler_ros rqt_runtime_monitor rqt_robot_monitor \
+                     rtk2026_tracked_sim" \
+        -r \
+        -y && \
+    rm -rf /tmp/rosdep
+
+
+# Исходники. Build context в compose равен корню репозитория.
+COPY src/ /workspace/src/
+
+
+# Пакеты, нужные реальному роботу.
+#
+# Симуляция и зрение сюда не входят: rtk2026_tracked_sim и rtk2026_cv тянут
+# Gazebo и OpenCV. Сам детектор знаков работает на отдельной Raspberry Pi 4,
+# см. pi4/docker/, а сюда по сети приходит только готовый DrivingDetection.
+#
+# rtk2026_interfaces собирается именно поэтому: без определения типа узел
+# на этой машине не сможет подписаться на детекции. Определение обязано
+# совпадать с собранным на Pi 4, иначе хеши типов разойдутся и топик
+# не сойдётся.
+#
+# rtk2026_city_nav пока не собирается: он тянет за собой rtk2026_pose_graph
+# и рабочий стек Nav2. Добавляется, когда движение по городу поедет
+# на железе.
+RUN source /opt/ros/jazzy/setup.bash && \
+    source /opt/lidar_ws/install/setup.bash && \
+    colcon build \
+        --symlink-install \
+        --packages-select \
+            rtk2026_driver \
+            rtk2026_description \
+            rtk2026_localization \
+            rtk2026_slam \
+            rtk2026_observability \
+            rtk2026_bringup \
+            rtk2026_interfaces
+
+# Порядок подключения важен: underlay с драйвером лидара идёт до overlay
+# рабочего пространства, иначе lidar_launch.py не найдёт sllidar_ros2.
+RUN printf '%s\n' \
+    'set +u' \
+    'source /opt/ros/jazzy/setup.bash' \
+    'source /opt/lidar_ws/install/setup.bash' \
+    'source /workspace/install/setup.bash' \
+    'set -u' \
+    >> /root/.bashrc
+
+# Контейнер остаётся запущенным, ROS launch запускается вручную через
+# docker exec - так же, как rtk2026_sim.
+CMD ["sleep", "infinity"]

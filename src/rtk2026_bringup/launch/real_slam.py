@@ -15,6 +15,7 @@ def generate_launch_description() -> LaunchDescription:
     """Сформировать полный стек картографирования на реальном роботе."""
 
     use_rviz = LaunchConfiguration("use_rviz")
+    use_imu = LaunchConfiguration("use_imu")
     ekf_config = LaunchConfiguration("ekf_config")
 
     # Каталог launch-файлов пакета rtk2026_bringup.
@@ -31,6 +32,9 @@ def generate_launch_description() -> LaunchDescription:
     # base_footprint → base_link → lidar_link → lidar_frame;
     #                              → imu_link;
     #                              → camera_link → camera_optical_frame.
+    #
+    # use_visual не передаётся: на роботе описание нужно только ради TF,
+    # геометрию разворачивает RViz на ноутбуке.
     description_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution(
@@ -43,8 +47,7 @@ def generate_launch_description() -> LaunchDescription:
         ),
         launch_arguments={
             "use_sim_time": "false",
-            "use_meshes": "false",
-            "use_webcam": "true",
+            "use_camera": "true",
         }.items(),
     )
 
@@ -60,7 +63,8 @@ def generate_launch_description() -> LaunchDescription:
         )
     )
 
-    # Запуск RPLIDAR C1.
+    # Запуск лидара. Модель берётся по умолчанию из lidar_launch.py, то
+    # есть C1; запасной A1M8 включается там аргументом model:=a1.
     lidar_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution(
@@ -70,6 +74,21 @@ def generate_launch_description() -> LaunchDescription:
                 ]
             )
         )
+    )
+
+    # BMI270 по I2C самой Raspberry Pi. Отключается через use_imu:=false,
+    # и тогда EKF надо запускать с ekf_real_wheel_only.yaml: штатный
+    # ekf_real.yaml берёт курсовую скорость именно отсюда.
+    imu_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution(
+                [
+                    bringup_launch_directory,
+                    "imu_launch.py",
+                ]
+            )
+        ),
+        condition=IfCondition(use_imu),
     )
 
     # Локальный EKF реального робота.
@@ -138,6 +157,14 @@ def generate_launch_description() -> LaunchDescription:
                 description="Запустить RViz на текущем X11-дисплее.",
             ),
             DeclareLaunchArgument(
+                "use_imu",
+                default_value="true",
+                description=(
+                    "Запустить BMI270. При false подставьте "
+                    "ekf_config:=.../ekf_real_wheel_only.yaml."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "ekf_config",
                 default_value=PathJoinSubstitution(
                     [
@@ -151,6 +178,7 @@ def generate_launch_description() -> LaunchDescription:
             description_launch,
             arduino_launch,
             lidar_launch,
+            imu_launch,
             ekf_launch,
             slam_launch,
             rviz,

@@ -21,10 +21,8 @@ This document defines the pin mapping used by the current robot firmware on Ardu
 | Left Encoder | LEFT_ENC_DT | D19 | Input + External Interrupt | Quadrature channel B |
 | Right Encoder | RIGHT_ENC_CLK | D20 | Input + External Interrupt | Quadrature channel A |
 | Right Encoder | RIGHT_ENC_DT | D21 | Input + External Interrupt | Quadrature channel B |
-| Sonar | SONAR_VCC_PIN | D37 | Output | Sensor VCC driven HIGH |
 | Sonar | SONAR_TRIG_PIN | D39 | Output | Trigger pulse |
-| Sonar | SONAR_ECHO_PIN | D41 | Input | Echo pulse |
-| Sonar | SONAR_GND_PIN | D43 | Output | Sensor GND driven LOW |
+| Sonar | SONAR_ECHO_PIN | D41 | Input | Echo pulse; sensor powered from the 5V/GND rails |
 | Host Serial Telemetry/Control | UART0_RX | D0 | Input | USB serial bridge to host TX |
 | Host Serial Telemetry/Control | UART0_TX | D1 | Output | USB serial bridge to host RX |
 

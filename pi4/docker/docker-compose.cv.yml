@@ -1,0 +1,45 @@
+# Распознавание знаков на Raspberry Pi 4.
+#
+# Собирается из корня репозитория: образу нужны исходники rtk2026_cv
+# и rtk2026_interfaces, а они лежат в src/.
+#
+#   docker compose -f pi4/docker/docker-compose.cv.yml up -d --build
+#   docker exec -it rtk2026_cv bash
+
+services:
+  cv:
+    build:
+      context: ../..
+      dockerfile: pi4/docker/Dockerfile.cv
+    image: rtk2026-cv-pi4
+    container_name: rtk2026_cv
+
+    # Без общей сети с хостом DDS не найдёт узлы на Pi 5: обнаружение идёт
+    # рассылкой на локальный сегмент, а из своей сети контейнера она наружу
+    # не выходит. Это не оптимизация, а условие работоспособности.
+    network_mode: host
+
+    environment:
+      # Домен обязан совпадать с тем, что стоит на Pi 5: узлы из разных
+      # доменов не видят друг друга, и это первое, что стоит проверять,
+      # когда топик не появляется.
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+
+      # Реализация DDS тоже общая с Pi 5. Разные вендоры совместимы по
+      # стандарту, но настраиваются по-разному, и расходиться здесь незачем.
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+
+      # Логи ROS идут в вывод docker без задержки.
+      - RCUTILS_LOGGING_BUFFERED_STREAM=0
+
+    devices:
+      # Камера. Если устройство другое, посмотреть список: v4l2-ctl --list-devices
+      - /dev/video0:/dev/video0
+
+    volumes:
+      # Исходники монтируются с хоста, сборка велась с --symlink-install:
+      # правка узла подхватывается без пересборки образа.
+      - ../../src:/workspace/src
+
+    restart: unless-stopped
+    command: sleep infinity

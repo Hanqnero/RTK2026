@@ -1,0 +1,75 @@
+# Распознавание знаков на отдельной Raspberry Pi 4.
+#
+# Камера и модель живут здесь, по сети на Pi 5 уходит только DrivingDetection.
+# Кадры через сеть не гоняются: они нужны лишь детектору, который стоит рядом.
+
+camera:
+  ros__parameters:
+    video_device: /dev/video0
+
+    # Кадр берётся близко к входу модели. Снимать больше бессмысленно:
+    # детектор всё равно ужмёт кадр до input_size, а лишние пиксели
+    # стоят пропускной способности USB и времени на масштабирование.
+    image_size: [640, 480]
+
+    # Детектор принимает rgb8 и bgr8 и разбирает буфер сам.
+    output_encoding: rgb8
+
+    # Выше 15 кадров в секунду смысла нет: инференс на Pi 4 медленнее,
+    # и лишние кадры просто отбрасываются.
+    time_per_frame: [1, 15]
+
+onnx_sign_detector:
+  ros__parameters:
+    image_topic: /camera/image_raw
+    output_topic: /perception/driving_detection
+
+    # Отладочная картинка по умолчанию выключена: её некому смотреть
+    # на роботе, а публикация кадра стоит дороже самого детектирования.
+    debug_overlay: false
+    debug_overlay_topic: /perception/detection_overlay
+    debug_image_topic: /perception/detection_overlay/compressed
+
+    model_path: /workspace/install/rtk2026_cv/share/rtk2026_cv/best.onnx
+
+    # Модель экспортирована с динамическим входом, поэтому разрешение
+    # выбирается здесь, без переэкспорта весов. На Pi 4 при 640 инференс
+    # занимает около секунды на кадр, при 416 - вчетверо меньше. Знаки
+    # крупные и видны вблизи, поэтому потеря мелких деталей не мешает.
+    input_size: 416
+
+    conf_threshold: 0.35
+
+    # Каждый кадр обрабатывать всё равно не выйдет: инференс медленнее
+    # съёмки. Единица означает "бери следующий, как только освободился".
+    every_n_frames: 1
+
+    # Пустые детекции публикуются: city_nav отличает "знака нет"
+    # от "связь пропала" именно по приходу пустых сообщений.
+    publish_empty: true
+
+    log_every_n_frames: 30
+    stop_duration_sec: 2.0
+
+    class_id_to_label:
+      - "0=bus_stop"
+      - "1=move_forward"
+      - "2=no_turn_left"
+      - "3=no_turn_right"
+      - "4=obstacle"
+      - "5=parking_spot"
+      - "6=turn_left"
+      - "7=turn_right"
+
+    class_id_to_route_command:
+      - "1=straight_only"
+      - "2=no_left_turn"
+      - "3=no_right_turn"
+      - "6=left_only"
+      - "7=right_only"
+
+    class_id_to_stop_action:
+      - "0=bus_stop"
+
+    bus_class_ids:
+      - "4"
