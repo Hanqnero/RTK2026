@@ -91,7 +91,15 @@ services:
       RMW_IMPLEMENTATION: rmw_fastrtps_cpp
       ROS_DOMAIN_ID: "0"
       ROS_LOCALHOST_ONLY: "0"
+      # проброс X11 внутрь контейнера
+      DISPLAY: ${DISPLAY:-:1}
+      XAUTHORITY: /tmp/.Xauthority
+      QT_X11_NO_MITSHM: 1
     volumes:
+      # проброс X11 внутрь контейнера
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ~/.Xauthority:/tmp/.Xauthority:rw
+      - /etc/localtime:/etc/localtime:ro
       # Симлинк-сборка: правка Python-кода действует сразу без пересборки
       # образа, как в docker/Dockerfile.sim.
       - ../../src:/workspace/src
