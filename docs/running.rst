@@ -221,11 +221,26 @@ pose graph:
 
    ros2 launch rtk2026_bringup real_slam.py
 
-Если на том же X11-дисплее нужен RViz:
+Если на том же X11-дисплее нужен RViz, создайте ``ros``
+из графической сессии Pi:
+
+.. code-block:: bash
+
+   export DISPLAY
+   export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+   docker compose -f pi/docker/docker-compose.pi.yml up -d --force-recreate ros
+
+Затем запустите launch внутри уже созданного контейнера:
 
 .. code-block:: bash
 
    ros2 launch rtk2026_bringup real_slam.py use_rviz:=true
+
+Compose передаёт сокет X11 и указанный cookie-файл в
+``ros``. Не запускайте compose через ``sudo``: так теряются
+``DISPLAY`` и ``XAUTHORITY``. Для обычного Xorg fallback — ``:0`` и
+``$HOME/.Xauthority``; Wayland/Xwayland обычно сам задаёт другой
+``XAUTHORITY`` в ``/run/user/<uid>/``.
 
 Для локализации по сохранённой карте SLAM запускать нельзя:
 

@@ -34,16 +34,35 @@
 В контейнере
 -------------
 
-Нужен, если не хочется ставить зависимости на хост. Окна Qt при этом
-не работают без дополнительной настройки, поэтому вариант годится для
-режимов ``--text`` и ``--no-plot`` и для сбора логов.
+Образ содержит стендовые Python-инструменты, ROS 2 Jazzy, RViz и
+RQt. На Linux сервис использует host network и host IPC, поэтому
+попадает в тот же DDS-граф ``ROS_DOMAIN_ID=0``, что и ROS-контейнеры
+робота. Запускайте compose из графической сессии, не из ``sudo``:
 
 .. code-block:: bash
 
    export RTK_LINK=192.168.1.50:5555
+   export DISPLAY
+   export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
 
+   docker compose -f pc/docker/docker-compose.tools.yml build tools
    docker compose -f pc/docker/docker-compose.tools.yml run --rm tools \
        python3 tools/check_encoders.py --port $RTK_LINK --auto --no-plot --log records/enc.csv
+
+Пока работает ROS-стек на Pi, GUI запускается отдельными
+одноразовыми контейнерами:
+
+.. code-block:: bash
+
+   docker compose -f pc/docker/docker-compose.tools.yml run --rm tools \
+       rviz2 -d /work/rviz/rtk2026_real_robot.rviz
+   docker compose -f pc/docker/docker-compose.tools.yml run --rm tools rqt
+   docker compose -f pc/docker/docker-compose.tools.yml run --rm tools rqt_graph
+
+Если Qt пишет ``could not connect to display``, проверьте, что
+``DISPLAY`` не пуст и файл ``XAUTHORITY`` существует и читается.
+В Wayland/Xwayland это обычно файл в ``/run/user/<uid>/``, а не
+``~/.Xauthority``; compose монтирует значение переменной.
 
 Логи пишутся в ``records/`` смонтированного дерева и остаются на хосте.
 
@@ -63,6 +82,11 @@
    export DISPLAY=host.docker.internal:0
    docker compose -f pc/docker/docker-compose.tools.yml run --rm tools \
        python3 tools/monitor.py --port $RTK_LINK --drive
+
+``network_mode: host`` в Docker Desktop на macOS не даёт контейнеру
+настоящий L2/multicast-доступ к сети Pi. XQuartz решает только
+вывод окон; для ROS-топиков используйте DDS Router и ``viz``
+из :doc:`../transport_check`.
 
 Дальше
 ------
