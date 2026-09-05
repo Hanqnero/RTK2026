@@ -19,7 +19,9 @@
 ``lidar_launch.py``
 -------------------
 
-Включает официальный ``sllidar_c1_launch.py`` со значениями:
+Запускает ``sllidar_node`` напрямую, чтобы перезапускать драйвер после
+неудачного рукопожатия. Аргумент ``model`` выбирает профиль C1 или запасного
+A1M8. Профиль C1 использует следующие значения:
 
 .. list-table:: RPLIDAR C1
    :header-rows: 1
@@ -48,25 +50,53 @@
 ``use_sim_time``, находит конфигурацию пакета ``rtk2026_slam`` и включает
 ``slam_toolbox/online_async_launch.py`` с ``autostart=true``.
 
-``real_slam.py``
-----------------
+``full.launch.py``
+------------------
 
-Композиция пяти launch-файлов:
+Полный аппаратный слой реального робота без алгоритмов:
 
 .. code-block:: text
 
    display.launch.py  ──> robot_state_publisher, fixed TF
    arduino_launch.py  ──> /cmd_vel -> Arduino -> /wheel/odom
    lidar_launch.py    ──> /scan
+   imu_launch.py      ──> /imu/data
+
+По умолчанию запускаются все четыре части. Для стендовой отладки драйверы
+можно отключать аргументами ``use_arduino``, ``use_lidar`` и ``use_imu``;
+``lidar_model:=a1`` выбирает запасной A1M8 вместо штатного C1.
+
+Launch намеренно не запускает EKF, SLAM/AMCL, Nav2, компьютерное зрение,
+диагностику или RViz. Эти алгоритмы и инструменты выбираются и запускаются
+отдельно. Драйвер USB-камеры также остаётся в отдельном compose-сервисе,
+потому что у камеры свой device lifecycle; её фиксированный TF при этом
+входит в публикуемое описание робота.
+
+.. code-block:: bash
+
+   ros2 launch rtk2026_bringup full.launch.py
+
+``real_slam.py``
+----------------
+
+Композиция шести launch-файлов:
+
+.. code-block:: text
+
+   display.launch.py  ──> robot_state_publisher, fixed TF
+   arduino_launch.py  ──> /cmd_vel -> Arduino -> /wheel/odom
+   lidar_launch.py    ──> /scan
+   imu_launch.py      ──> /imu/data
    ekf.launch.py      ──> /odometry/filtered + odom -> base_footprint
    slam_launch.py     ──> map, map -> odom
 
-Для реального запуска: ``use_sim_time=false``, mesh отключены, webcam frame
-включён. ``ekf_real.yaml`` объединяет ``vx``, ограничение ``vy=0`` из
+Для реального запуска: ``use_sim_time=false``; геометрия и camera frame
+включены в латченный ``/robot_description`` для удалённого RViz.
+``ekf_real.yaml`` объединяет ``vx``, ограничение ``vy=0`` из
 энкодеров и ``angular_velocity.z`` BMI270. Нода BMI270 подключается к I²C
-Raspberry Pi и должна отдельно публиковать ``/imu/data`` в ``imu_link``;
-текущий bringup её пока не запускает. Аргумент ``use_rviz`` по умолчанию
-false, а ``ekf_config`` позволяет явно выбрать другой YAML.
+Raspberry Pi; её запускает ``imu_launch.py`` и она публикует ``/imu/data`` в
+``imu_link``. Аргумент ``use_rviz`` по умолчанию false, а ``ekf_config``
+позволяет явно выбрать другой YAML.
 
 ``real_localization.py``
 ------------------------
