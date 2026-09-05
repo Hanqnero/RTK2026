@@ -105,7 +105,9 @@ COPY vendor/sllidar_ros2/ /opt/vendor_ws/src/sllidar_ros2/
 # случаев. Патч резал разрешение вчетверо, лечив симптом, а не причину.
 RUN source /opt/ros/jazzy/setup.bash && \
     cd /opt/vendor_ws && \
-    colcon build --packages-select sllidar_ros2 && \
+    colcon build --merge-install --packages-select sllidar_ros2 && \
+    source /opt/vendor_ws/install/setup.bash && \
+    ros2 pkg prefix sllidar_ros2 && \
     rm -rf /opt/vendor_ws/build /opt/vendor_ws/log
 
 

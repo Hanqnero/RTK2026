@@ -121,7 +121,7 @@ RViz на ноутбуке считает возраст трансформац�
 
    .. code-block:: bash
 
-      docker compose -f pi/docker/docker-compose.pi.yml up -d --force-recreate ros
+      docker compose -f pi/docker/docker-compose.pi.yml up -d --build --force-recreate ros
 
 Устройства
 ----------
@@ -171,7 +171,7 @@ RViz на ноутбуке считает возраст трансформац�
 
 .. code-block:: bash
 
-   docker compose -f pi/docker/docker-compose.pi.yml up -d ros
+   docker compose -f pi/docker/docker-compose.pi.yml up -d --build ros
 
 Перед запуском Bash контейнер сам выполняет ``colcon build
 --symlink-install`` для пакетов робота. Лог сборки виден через
@@ -195,6 +195,15 @@ RViz на ноутбуке считает возраст трансформац�
 Порядок подключения важен: underlay с драйвером лидара идёт до overlay
 рабочего пространства, иначе ``lidar_launch.py`` не найдёт
 ``sllidar_ros2``.
+
+Если образ был собран старой версией Dockerfile и ``ros2 pkg prefix
+sllidar_ros2`` всё ещё не находит пакет, один раз пересоберите слой драйвера
+без кэша:
+
+.. code-block:: bash
+
+   docker compose -f pi/docker/docker-compose.pi.yml build --no-cache ros
+   docker compose -f pi/docker/docker-compose.pi.yml up -d --force-recreate ros
 
 Отдельные части стека:
 
