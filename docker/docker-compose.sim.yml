@@ -32,6 +32,9 @@ services:
       - ../runtime:/workspaces/sim_ws/runtime
       - ../worlds:/workspaces/sim_ws/worlds
 
+      # Используется только при DISPLAY_MODE=x11 на Linux.
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+
     # Добавляет минимальный init-процесс.
     #
     # Он передаёт сигналы и удаляет завершившиеся
@@ -49,8 +52,13 @@ services:
       - "127.0.0.1:6081:6081"
 
     environment:
-      # X11-дисплей, создаваемый Xvfb.
-      DISPLAY: ":1"
+      # novnc (по умолчанию) или x11 для дисплея Linux-хоста.
+      DISPLAY_MODE: ${DISPLAY_MODE:-novnc}
+
+      # В x11-режиме передаётся DISPLAY хоста. В novnc-режиме entrypoint
+      # использует VNC_DISPLAY независимо от этого значения.
+      DISPLAY: ${DISPLAY:-}
+      VNC_DISPLAY: ":1"
 
       # Независимый X11-дисплей диагностических GUI.
       DIAGNOSTICS_DISPLAY: ":2"

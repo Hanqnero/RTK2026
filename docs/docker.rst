@@ -90,6 +90,22 @@ loopback хоста:
 
    http://127.0.0.1:6080/vnc.html
 
+По умолчанию используется ``DISPLAY_MODE=novnc``. На Linux GUI можно
+вывести непосредственно на X11-дисплей хоста:
+
+.. code-block:: bash
+
+   xhost +si:localuser:root
+   DISPLAY_MODE=x11 DISPLAY="$DISPLAY" \
+     docker compose -f docker/docker-compose.sim.yml up -d --build
+
+В режиме ``x11`` entrypoint проверяет доступность дисплея и не запускает
+``Xvfb``, ``x11vnc`` или ``websockify``. После работы разрешение можно отозвать:
+
+.. code-block:: bash
+
+   xhost -si:localuser:root
+
 Вход в контейнер:
 
 .. code-block:: bash

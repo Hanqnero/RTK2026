@@ -8,11 +8,54 @@
 set -euo pipefail
 
 
+# Dockerfile CMD или поле command из Compose должны передать основной процесс.
+if [ "$#" -eq 0 ]; then
+    echo "Не передана команда для основного процесса контейнера" >&2
+    exit 64
+fi
+
+
+# novnc создаёт два виртуальных desktop, x11 использует X-сервер Linux-хоста.
+display_mode="${DISPLAY_MODE:-novnc}"
+
+case "${display_mode}" in
+    novnc|vnc)
+        # DISPLAY хоста может быть передан Compose даже в режиме noVNC.
+        # Виртуальный desktop всегда использует собственный номер дисплея.
+        export DISPLAY="${VNC_DISPLAY:-:1}"
+        ;;
+    x11)
+        if [ -z "${DISPLAY:-}" ]; then
+            echo "Для DISPLAY_MODE=x11 необходимо передать DISPLAY хоста" >&2
+            exit 64
+        fi
+
+        export QT_X11_NO_MITSHM="${QT_X11_NO_MITSHM:-1}"
+        export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
+        export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-root}"
+        mkdir -p "${XDG_RUNTIME_DIR}"
+        chmod 700 "${XDG_RUNTIME_DIR}"
+
+        if ! xdpyinfo -display "${DISPLAY}" >/dev/null 2>&1; then
+            echo "X11-дисплей ${DISPLAY} недоступен из контейнера" >&2
+            echo "Проверьте /tmp/.X11-unix и разрешение xhost" >&2
+            exit 1
+        fi
+
+        echo "Используется X11-дисплей хоста ${DISPLAY}; noVNC отключён"
+        exec "$@"
+        ;;
+    *)
+        echo "Неизвестный DISPLAY_MODE=${display_mode}; используйте novnc или x11" >&2
+        exit 64
+        ;;
+esac
+
+
 # Настройки графической среды.
 #
 # Если переменная уже передана из Compose, используется её значение.
 # Иначе применяется значение после :-.
-export DISPLAY="${DISPLAY:-:1}"
 export DIAGNOSTICS_DISPLAY="${DIAGNOSTICS_DISPLAY:-:2}"
 export QT_X11_NO_MITSHM="${QT_X11_NO_MITSHM:-1}"
 export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
@@ -228,19 +271,5 @@ if ! kill -0 "${diagnostics_websockify_pid}" 2>/dev/null; then
 fi
 
 
-# Dockerfile CMD или поле command из Compose
-# должны передать основной процесс контейнера.
-if [ "$#" -eq 0 ]; then
-    echo "Не передана команда для основного процесса контейнера" >&2
-    exit 64
-fi
-
-
 # Заменяем entrypoint Bash переданной командой.
-#
-# В нашем случае это будет:
-#
-#     sleep infinity
-#
-# Она просто удерживает контейнер запущенным.
 exec "$@"

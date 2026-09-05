@@ -317,7 +317,7 @@ RUN printf '%s\n' \
     'set -u' \
     >> /root/.bashrc
 
-# Entrypoint поднимает Xvfb, Fluxbox, x11vnc и noVNC.
+# Entrypoint поднимает noVNC либо проверяет проброшенный X11-дисплей.
 ENTRYPOINT ["/usr/local/bin/start_sim_novnc"]
 
 # После запуска GUI собираем sim_ws, подключаем overlay и запускаем Bash.
