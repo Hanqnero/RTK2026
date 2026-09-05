@@ -1,16 +1,17 @@
 # syntax=docker/dockerfile:1.7
 
 # Тот же официальный ARM64-образ, что и в docker/Dockerfile.sim, но без
-# GUI и Gazebo: на роботе нет дисплея, а симуляция здесь не нужна.
+# Gazebo, noVNC и лишних desktop-инструментов: симуляция здесь не нужна.
 #
 # Что запускается из этого образа:
 #   arduino_launch.py - привод;
 #   lidar_launch.py   - RPLIDAR A1M8;
 #   real_slam.py      - полный стек картографирования.
 #
-# RViz сюда не входит намеренно. Он живёт на ноутбуке и получает топики
-# через DDS Router, см. docs/transport_check.rst: гонять картинку с Pi
-# дороже, чем сами данные.
+# Обычно RViz живёт на ноутбуке и получает топики через DDS Router,
+# но образ поддерживает и локальный ``use_rviz:=true`` через X11-дисплей
+# Raspberry Pi. Это полезно для стенда, а в штатном сценарии лучше
+# не тратить ресурсы Pi на визуализацию.
 FROM ros:jazzy-ros-base-noble AS ros_system
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -54,6 +55,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     # 2D lidar SLAM и слияние одометрии с IMU.
     ros-jazzy-slam-toolbox \
     ros-jazzy-robot-localization \
+    \
+    # Опциональный локальный GUI для real_slam.py/use_rviz.
+    ros-jazzy-rviz2 \
+    \
+    # Программный OpenGL: /dev/dri в compose намеренно не обязателен.
+    libgl1-mesa-dri \
+    libglx-mesa0 \
     \
     # Описание робота: TF из URDF и раскрытие xacro.
     ros-jazzy-robot-state-publisher \
@@ -223,6 +231,8 @@ RUN printf '%s\n' \
     'source /workspace/install/setup.bash' \
     'set -u' \
     >> /root/.bashrc
+
+RUN install -d -m 700 /tmp/runtime-root
 
 # Контейнер остаётся запущенным, ROS launch запускается вручную через
 # docker exec - так же, как rtk2026_sim.

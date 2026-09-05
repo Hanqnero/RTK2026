@@ -91,14 +91,22 @@ services:
       RMW_IMPLEMENTATION: rmw_fastrtps_cpp
       ROS_DOMAIN_ID: "0"
       ROS_LOCALHOST_ONLY: "0"
-      # проброс X11 внутрь контейнера
-      DISPLAY: ${DISPLAY:-:1}
+      # Используем реальный display хоста. :0 — обычный
+      # X11/Xwayland display Raspberry Pi с локальным desktop; :1 был
+      # display виртуального Xvfb и здесь не существует.
+      DISPLAY: ${DISPLAY:-:0}
       XAUTHORITY: /tmp/.Xauthority
-      QT_X11_NO_MITSHM: 1
+      QT_X11_NO_MITSHM: "1"
+      # Не требует проброса /dev/dri; для RViz на Pi это медленнее,
+      # зато headless-запуск ros не зависит от наличия GPU device.
+      LIBGL_ALWAYS_SOFTWARE: ${LIBGL_ALWAYS_SOFTWARE:-1}
+      XDG_RUNTIME_DIR: /tmp/runtime-root
     volumes:
-      # проброс X11 внутрь контейнера
+      # XAUTHORITY может быть не ~/.Xauthority (например, у
+      # Xwayland он живёт в /run/user/<uid>). Поэтому монтируем
+      # именно файл из окружения, с fallback для обычного Xorg.
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - ~/.Xauthority:/tmp/.Xauthority:rw
+      - "${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.Xauthority:ro"
       - /etc/localtime:/etc/localtime:ro
       # Симлинк-сборка: правка Python-кода действует сразу без пересборки
       # образа, как в docker/Dockerfile.sim.
