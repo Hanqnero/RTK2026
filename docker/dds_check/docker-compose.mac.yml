@@ -73,11 +73,20 @@ services:
         VULCANEXUS_TAG: ${VULCANEXUS_TAG:-jazzy}
     image: rtk2026-dds-check-viz
     container_name: rtk2026_viz
+    volumes:
+      # Вид реального робота. Образ уже кладёт конфиги в /check/rviz
+      # (COPY rviz в Dockerfile.viz), сюда подставляется ещё один - тот,
+      # что живёт в пакете и используется launch-файлами. Так у конфига
+      # один владелец, а правка вида не требует пересборки образа.
+      - ../../src/rtk2026_bringup/rviz/rtk2026_real_robot.rviz:/check/rviz/robot.rviz:ro
     environment:
       PI_ADDRESS: ${PI_ADDRESS:?задайте адрес Raspberry Pi, например export PI_ADDRESS=192.168.2.2}
       RMW_IMPLEMENTATION: rmw_fastrtps_cpp
       ROS_DOMAIN_ID: "0"
       ROS_LOCALHOST_ONLY: "0"
+      # По умолчанию start_viz.sh берёт check.rviz - проверочный вид
+      # транспорта, без модели робота и без карты.
+      RVIZ_CONFIG: /check/rviz/robot.rviz
     ports:
       # noVNC доступен только с этого компьютера: VNC работает без пароля.
       - "127.0.0.1:6080:6080"

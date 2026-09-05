@@ -33,8 +33,16 @@ def generate_launch_description() -> LaunchDescription:
     #                              → imu_link;
     #                              → camera_link → camera_optical_frame.
     #
-    # use_visual не передаётся: на роботе описание нужно только ради TF,
-    # геометрию разворачивает RViz на ноутбуке.
+    # use_visual:=true, хотя самому роботу геометрия не нужна.
+    #
+    # Её потребитель - RViz на ноутбуке, и берёт он её из топика
+    # /robot_description, а не из файла: так устроены все конфиги RViz
+    # в проекте (Description Source: Topic, Transient Local). Топик
+    # латчится, поэтому RViz получает модель даже подключившись позже.
+    #
+    # Цена мала: вся геометрия - четыре коробки и три цилиндра, внешних
+    # мешей в описании нет, поэтому строка остаётся самодостаточной и
+    # не тянет за собой файлы, которых на роботе нет.
     description_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution(
@@ -48,6 +56,7 @@ def generate_launch_description() -> LaunchDescription:
         launch_arguments={
             "use_sim_time": "false",
             "use_camera": "true",
+            "use_visual": "true",
         }.items(),
     )
 

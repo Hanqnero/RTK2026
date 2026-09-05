@@ -167,19 +167,34 @@ constexpr float kMaxAngularCommandRadS = kPi/2.0f;
 //
 // k_static и k_velocity не подбираются на глаз: они снимаются по ступенькам
 // PWM и равны, соответственно, PWM страгивания и наклону зависимости
-// установившейся скорости от PWM. До их измерения оба нуля означают работу
-// без feedforward, то есть чистый ПИД.
-constexpr float kLeftWheelKp = 0.0f;
-constexpr float kLeftWheelKi = 0.0f;
+// установившейся скорости от PWM.
+//
+// Здесь лежит снятая настройка, а не нули. Нули означали бы полное
+// отсутствие управления при пустой EEPROM: без feedforward и без ПИД
+// колесо не тронется вовсе, и отказ выглядел бы как мёртвый привод.
+// Значения ниже дают рабочий, пусть и не выверенный, привод сразу.
+//
+// Сняты identify_wheel и автотюном после исправления kGearRatio, то есть
+// в правильной шкале оборотов. Ступенька на 1.2 об/с: установление 253 мс
+// слева и 228 мс справа, установившаяся ошибка 0.07 % и 0.23 %,
+// насыщения PWM нет.
+//
+// kd намеренно ноль, хотя автотюн предлагал 8.95 и 9.38. Релейный метод
+// не видит шума квантования энкодера на цикле 25 мс и переоценивает
+// дифференциальную часть: с его значениями PWM держался в насыщении
+// 89 % и 86 % времени, а установления не наступало вовсе. Это свойство
+// метода, а не разовая случайность - после каждого автотюна kd зануляем.
+constexpr float kLeftWheelKp = 98.7737f;
+constexpr float kLeftWheelKi = 272.4790f;
 constexpr float kLeftWheelKd = 0.0f;
-constexpr float kLeftWheelKStatic = 0.0f;
-constexpr float kLeftWheelKVelocity = 0.0f;
+constexpr float kLeftWheelKStatic = 16.166f;
+constexpr float kLeftWheelKVelocity = 53.666f;
 
-constexpr float kRightWheelKp = 0.0f;
-constexpr float kRightWheelKi = 0.0f;
+constexpr float kRightWheelKp = 103.5558f;
+constexpr float kRightWheelKi = 285.6711f;
 constexpr float kRightWheelKd = 0.0f;
-constexpr float kRightWheelKStatic = 0.0f;
-constexpr float kRightWheelKVelocity = 0.0f;
+constexpr float kRightWheelKStatic = 14.344f;
+constexpr float kRightWheelKVelocity = 53.229f;
 
 
 constexpr float kMaxPwmDuty = 0.90f;
