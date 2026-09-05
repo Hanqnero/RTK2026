@@ -120,6 +120,22 @@ topics:
       durability: true
       reliability: true
 
+  # Динамическое дерево TF: odom -> base_footprint от EKF и map -> odom
+  # от slam_toolbox. Без него на ноутбуке нет НИЧЕГО: RViz не может
+  # разрешить Fixed Frame и пишет "No tf data", хотя карта и скан идут.
+  # Удержание не нужно и вредно - трансформации публикуются непрерывно,
+  # и хранить устаревшую бессмысленно.
+  - name: "rt/tf"
+    qos:
+      durability: false
+      reliability: true
+
+  # Выход EKF: по нему RViz рисует пройденный путь.
+  - name: "rt/odometry/filtered"
+    qos:
+      durability: false
+      reliability: true
+
   # Датчики: потеря отдельного сообщения допустима, повторная передача
   # только увеличила бы задержку.
   - name: "rt/scan"
