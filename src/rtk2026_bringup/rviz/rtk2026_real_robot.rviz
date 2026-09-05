@@ -38,13 +38,6 @@ Visualization Manager:
         Reliability Policy: Reliable
       Value: true
 
-    # Самый дорогой дисплей в этом наборе, поэтому он ужат.
-    #
-    # Рендер здесь программный, и при Update Interval: 0 с подписями
-    # фреймов RViz съедал больше двух третей ядра: интерфейс отвечал
-    # с задержкой, и это выглядело как "окно не кликается". Подписи
-    # рисуются текстом на каждый фрейм и стоят дороже самих осей,
-    # поэтому выключены; включи вручную, когда надо разобрать дерево.
     - Class: rviz_default_plugins/TF
       Name: TF
       Enabled: true
@@ -52,7 +45,6 @@ Visualization Manager:
       Show Arrows: false
       Show Axes: true
       Show Names: false
-      Update Interval: 0.5
       Value: true
 
     - Class: rviz_default_plugins/Map
@@ -118,9 +110,7 @@ Visualization Manager:
     # map, а не odom: при картографировании интересно видеть дрейф
     # odom относительно карты, а с фиксацией на odom он не заметен.
     Fixed Frame: map
-    # 10 кадров в секунду: картинка на программном рендере всё равно не
-    # идёт быстрее, а освободившееся время достаётся обработке ввода.
-    Frame Rate: 10
+    Frame Rate: 30
   Tools:
     - Class: rviz_default_plugins/MoveCamera
     - Class: rviz_default_plugins/FocusCamera
@@ -150,14 +140,5 @@ Visualization Manager:
 Window Geometry:
   Displays:
     collapsed: false
-  # Меньше экрана Xvfb (1600x900) намеренно, и с явной позицией.
-  #
-  # При размере ровно в экран рамка fluxbox не помещается, окно уезжает
-  # за левый край вместе с заголовком, и ухватить его мышью нельзя:
-  # выглядит как "RViz не реагирует на клики", хотя ввод исправен.
-  X: 0
-  Y: 0
-  Width: 1560
-  Height: 830
   Hide Left Dock: false
   Hide Right Dock: true
