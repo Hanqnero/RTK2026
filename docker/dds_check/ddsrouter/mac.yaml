@@ -108,6 +108,14 @@ topics:
       durability: false
       reliability: true
 
+  # Сжатый кадр с камеры. Сырой /image_raw намеренно не пробрасывается:
+  # 640x480 это около 900 КБ на кадр, на мосту он вытеснит скан и TF.
+  # Смотреть в RViz надо дисплеем Image с transport = compressed.
+  - name: "rt/image_raw/compressed"
+    qos:
+      durability: false
+      reliability: false
+
   # Датчики: потеря отдельного сообщения допустима, повторная передача
   # только увеличила бы задержку.
   - name: "rt/scan"

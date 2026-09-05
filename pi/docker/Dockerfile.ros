@@ -214,6 +214,32 @@ RUN source /opt/ros/jazzy/setup.bash && \
             rtk2026_bringup \
             rtk2026_interfaces
 
+# USB-камера.
+#
+# Слой намеренно последний, после colcon build: добавление пакета сюда
+# не сбрасывает кэш сборки рабочего пространства, и пересборка образа
+# на самой Pi занимает минуты вместо часов.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    \
+    # Драйвер USB-камеры через V4L2, публикует sensor_msgs/Image.
+    ros-jazzy-v4l2-camera \
+    \
+    # Сжатый транспорт. Без него сырой кадр 640x480 весит около 900 КБ,
+    # и на 30 кадрах это 27 МБ/с - столько по мосту до ноутбука не уйдёт.
+    # С compressed тот же поток укладывается в единицы мегабит.
+    ros-jazzy-image-transport-plugins \
+    \
+    # Запись топиков в bag: ею сохраняется видеопоток.
+    ros-jazzy-rosbag2 \
+    ros-jazzy-rosbag2-storage-mcap \
+    \
+    # Утилиты V4L2: посмотреть, какие режимы отдаёт камера.
+    v4l-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 # Порядок подключения важен: underlay с драйвером лидара идёт до overlay
 # рабочего пространства, иначе lidar_launch.py не найдёт sllidar_ros2.
 RUN printf '%s\n' \

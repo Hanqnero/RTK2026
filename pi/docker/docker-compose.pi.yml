@@ -119,6 +119,10 @@ services:
       # проверить наличие узла: ls -l /dev/i2c-1
       # и увидеть чип: i2cdetect -y 1  (ждём 68 или 69)
       - "/dev/i2c-1:/dev/i2c-1"
+      #
+      # Камера здесь НЕ объявлена намеренно, хотя стоит на той же Pi:
+      # иначе стек не поднялся бы без неё. Она вынесена в сервис camera
+      # ниже, по тому же принципу, что и lidar.
     init: true
     stdin_open: true
     tty: true
@@ -166,3 +170,50 @@ services:
         source /opt/lidar_ws/install/setup.bash &&
         source /workspace/install/setup.bash &&
         ros2 launch rtk2026_bringup lidar_launch.py
+
+  # ~ Только камера, без остального железа.
+  #
+  # Отдельный сервис по той же причине, что и lidar: docker резолвит
+  # devices при старте, и объяви мы камеру в ros, стек не поднялся бы
+  # без неё. Съёмка карты и запись видео - разные сеансы, и держать их
+  # в одном контейнере значило бы связать их отказы.
+  #
+  # network_mode: host + ipc: host, домен тот же - поэтому камера
+  # оказывается в одном ROS-графе с ros и arduino_bridge, и записывать
+  # видео можно, катаясь телеопом.
+  #
+  #     docker compose -f pi/docker/docker-compose.pi.yml up -d camera
+  #     docker logs -f rtk2026-camera
+  camera:
+    build:
+      context: ../..
+      dockerfile: pi/docker/Dockerfile.ros
+    image: rtk2026-ros-pi
+    container_name: rtk2026-camera
+    network_mode: host
+    ipc: host
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_DOMAIN_ID: "0"
+      ROS_LOCALHOST_ONLY: "0"
+    volumes:
+      - ../../src:/workspace/src
+      # Записи пишутся на саму Pi, а не внутрь контейнера.
+      - ../../records:/workspace/records
+    devices:
+      # Номер, в отличие от serial-устройств, по by-id не адресуется.
+      # Если камер несколько или номер уехал:  v4l2-ctl --list-devices
+      - "/dev/video0:/dev/video0"
+    init: true
+    # camera_frame_id обязан совпадать с link в URDF, иначе кадр не
+    # встанет в дерево TF и RViz не сможет его разместить.
+    command:
+      - bash
+      - -lc
+      - >-
+        source /opt/ros/jazzy/setup.bash &&
+        source /workspace/install/setup.bash &&
+        ros2 run v4l2_camera v4l2_camera_node --ros-args
+        -p video_device:=/dev/video0
+        -p image_size:="[640,480]"
+        -p camera_frame_id:=camera_optical_frame

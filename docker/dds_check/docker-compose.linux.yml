@@ -1,0 +1,80 @@
+# RViz на Linux-машине: окно на рабочем столе, без noVNC и без Router.
+#
+# Чем отличается от docker-compose.mac.yml
+# ----------------------------------------
+#
+# Обе вещи, которыми та схема сложна, нужны исключительно из-за macOS.
+#
+# Router. Он заменяет автообнаружение одним TCP-соединением, потому что
+# Docker Desktop не даёт контейнеру настоящий сетевой namespace хоста и
+# multicast между Mac-контейнером и Pi не проходит. На Linux
+# network_mode: host отдаёт контейнеру сеть хоста как есть, DDS находит
+# робота обычным обнаружением, и посредник только добавил бы задержку.
+#
+# noVNC. Он нужен, потому что на macOS нет X-сервера, к которому можно
+# пробросить окно. На Linux сокет X11 монтируется внутрь, и RViz рисует
+# прямо на рабочем столе. start_viz.sh это распознаёт сам: если по
+# указанному DISPLAY уже кто-то отвечает, свой Xvfb он не поднимает.
+#
+# Требования к хосту
+# ------------------
+#
+# Робот и эта машина в одной сети, ROS_DOMAIN_ID совпадает.
+#
+# Перед первым запуском разрешить контейнеру доступ к X-серверу:
+#
+#     xhost +local:docker
+#
+# Отозвать потом:  xhost -local:docker
+#
+# Запуск
+# ------
+#
+#     xhost +local:docker
+#     docker compose -f docker/dds_check/docker-compose.linux.yml up viz
+
+services:
+  viz:
+    build:
+      context: .
+      dockerfile: Dockerfile.viz
+      args:
+        VULCANEXUS_TAG: ${VULCANEXUS_TAG:-jazzy}
+    image: rtk2026-dds-check-viz
+    container_name: rtk2026_viz_linux
+
+    # Настоящая сеть хоста: DDS сам находит робота, посредник не нужен.
+    # ipc: host - по той же причине, что и на роботе: DDS в пределах
+    # одного хоста выбирает shared memory, а /dev/shm контейнера без
+    # этого свой собственный, и обмен тихо не пойдёт.
+    network_mode: host
+    ipc: host
+
+    environment:
+      # Дисплей хоста. Именно он отличает эту схему от маковской:
+      # start_viz.sh увидит живой X-сервер и пропустит Xvfb с noVNC.
+      DISPLAY: ${DISPLAY:?переменная DISPLAY не задана - запускать из графической сессии}
+
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_DOMAIN_ID: "0"
+      ROS_LOCALHOST_ONLY: "0"
+
+      # Аппаратный OpenGL: на Linux он доступен, в отличие от Xvfb на
+      # Mac, где рендер программный и RViz упирается в процессор.
+      LIBGL_ALWAYS_SOFTWARE: "0"
+
+      # Router не запускается, поэтому адрес робота не нужен. Пустое
+      # значение отключает подстановку в start_viz.sh.
+      PI_ADDRESS: ""
+
+      RVIZ_CONFIG: /check/rviz/robot.rviz
+
+    volumes:
+      # Сокет X11 хоста. Без него окно открыть некуда.
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+
+      # Конфиг вида робота из пакета: у него один владелец, и правка
+      # не требует пересборки образа.
+      - ../../src/rtk2026_bringup/rviz/rtk2026_real_robot.rviz:/check/rviz/robot.rviz:ro
+
+    init: true
