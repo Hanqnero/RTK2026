@@ -34,8 +34,9 @@
 В контейнере
 -------------
 
-Образ содержит стендовые Python-инструменты, ROS 2 Jazzy, RViz и
-RQt. На Linux сервис использует host network и host IPC, поэтому
+Образ содержит стендовые Python-инструменты, ROS 2 Jazzy, RViz, RQt и
+``teleop_twist_keyboard``. На Linux сервис использует host network и host
+IPC, поэтому
 попадает в тот же DDS-граф ``ROS_DOMAIN_ID=0``, что и ROS-контейнеры
 робота. Запускайте compose из графической сессии, не из ``sudo``:
 
@@ -58,6 +59,18 @@ RQt. На Linux сервис использует host network и host IPC, по
        rviz2 -d /work/rviz/rtk2026_real_robot.rviz
    docker compose -f pc/docker/docker-compose.tools.yml run --rm tools rqt
    docker compose -f pc/docker/docker-compose.tools.yml run --rm tools rqt_graph
+
+Для управления роботом через ``/cmd_vel`` запустите интерактивный контейнер:
+
+.. code-block:: bash
+
+   docker compose -f pc/docker/docker-compose.tools.yml run --rm tools \
+       ros2 run teleop_twist_keyboard teleop_twist_keyboard \
+       --ros-args -p stamped:=true -p frame_id:=base_footprint \
+       --remap cmd_vel:=/cmd_vel
+
+Перед движением проверьте тип ``/cmd_vel``. Для получателя
+``geometry_msgs/msg/Twist`` уберите параметры ``stamped`` и ``frame_id``.
 
 Если Qt пишет ``could not connect to display``, проверьте, что
 ``DISPLAY`` не пуст и файл ``XAUTHORITY`` существует и читается.

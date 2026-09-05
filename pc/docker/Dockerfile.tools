@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ros-jazzy-rqt-common-plugins \
         ros-jazzy-rqt-robot-monitor \
         ros-jazzy-rqt-runtime-monitor \
+        ros-jazzy-teleop-twist-keyboard \
         libgl1 \
         libgl1-mesa-dri \
         libegl1 \
@@ -49,7 +50,7 @@ RUN install -d -m 700 /tmp/runtime-root
 
 # Ошибка сборки вместо ошибки уже на ноутбуке.
 RUN source /opt/ros/jazzy/setup.bash && \
-    for tool in rviz2 rqt rqt_graph; do \
+    for tool in rviz2 rqt rqt_graph teleop_twist_keyboard; do \
         command -v "$tool" >/dev/null || { echo "$tool не установился" >&2; exit 1; }; \
     done
 
