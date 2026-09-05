@@ -1,3 +1,6 @@
 [submodule "arduino/vendor/MeArm-Arduino"]
 	path = arduino/vendor/MeArm-Arduino
 	url = https://github.com/MeArm/MeArm-Arduino
+[submodule "vendor/sllidar_ros2"]
+	path = vendor/sllidar_ros2
+	url = https://github.com/Slamtec/sllidar_ros2.git

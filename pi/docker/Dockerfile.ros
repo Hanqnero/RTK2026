@@ -5,7 +5,7 @@
 #
 # Что запускается из этого образа:
 #   arduino_launch.py - привод;
-#   lidar_launch.py   - RPLIDAR A1M8;
+#   lidar_launch.py   - RPLIDAR C1 (или запасной A1M8);
 #   real_slam.py      - полный стек картографирования.
 #
 # Обычно RViz живёт на ноутбуке и получает топики через DDS Router,
@@ -31,7 +31,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
-    git \
     python3-colcon-common-extensions \
     python3-rosdep \
     \
@@ -82,20 +81,18 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     ros-jazzy-rosbag2-storage-mcap
 
 
-# Драйвер лидара. Собирается из исходников: в apt-репозиториях ROS 2 его
-# нет, и rosdep о нём не знает - именно поэтому он стоит в skip-keys ниже
-# и в docker/Dockerfile.sim.
+# Драйвер лидара. Собирается из зафиксированного Git-подмодуля:
+# в apt-репозиториях ROS 2 его нет, и rosdep о нём не знает - именно
+# поэтому он стоит в skip-keys ниже и в docker/Dockerfile.sim.
 #
 # Живёт в отдельном underlay, а не в /workspace/src, потому что compose
 # монтирует туда исходники проекта с хоста и перекрыл бы клон.
 FROM ros_slam AS lidar_driver
 
-ARG SLLIDAR_REF=main
-
-RUN mkdir -p /opt/lidar_ws/src && \
-    git clone --depth 1 --branch "${SLLIDAR_REF}" \
-        https://github.com/Slamtec/sllidar_ros2.git \
-        /opt/lidar_ws/src/sllidar_ros2
+# Подмодуль зафиксирован в репозитории на проверенный commit с
+# поддержкой RPLIDAR C1. Сборка образа не ходит в GitHub и получает
+# те же исходники на Pi и на машине разработчика.
+COPY vendor/sllidar_ros2/ /opt/lidar_ws/src/sllidar_ros2/
 
 # Драйвер собирается без правок.
 #

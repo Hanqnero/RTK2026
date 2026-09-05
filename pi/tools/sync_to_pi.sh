@@ -54,6 +54,7 @@ TREES=(
     pi
     protocol
     docker/dds_check
+    vendor/sllidar_ros2
 )
 
 # Мусор сборки и окружений: он пересоздаётся на месте и по сети ехать
@@ -109,7 +110,7 @@ if [ "${CLEAN:-0}" = "1" ]; then
 
     ssh "${REMOTE}" "
         cd ${PI_ROOT} || exit 0
-        rm -rf yolo worlds docs pc vendor runtime isaac_lab install build log
+        rm -rf yolo worlds docs pc runtime isaac_lab install build log
         cd src 2>/dev/null || exit 0
         for d in */; do
             name=\"\${d%/}\"
