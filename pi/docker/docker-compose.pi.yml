@@ -106,13 +106,16 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - "${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.Xauthority:ro"
       - /etc/localtime:/etc/localtime:ro
-      # Симлинк-сборка: правка Python-кода действует сразу без пересборки
-      # образа, как в docker/Dockerfile.sim.
-      - ../../src:/workspace/src
-      # Карты и записи прогонов сохраняются на саму Pi, а не внутрь
-      # контейнера: иначе они исчезали бы вместе с ним.
-      - ../../maps:/workspace/maps
-      - ../../records:/workspace/records
+      - ../../workspaces/robot_ws:/workspaces/robot_ws
+      - ../../src/rtk2026_driver:/workspaces/robot_ws/src/rtk2026_driver
+      - ../../src/rtk2026_description:/workspaces/robot_ws/src/rtk2026_description
+      - ../../src/rtk2026_localization:/workspaces/robot_ws/src/rtk2026_localization
+      - ../../src/rtk2026_slam:/workspaces/robot_ws/src/rtk2026_slam
+      - ../../src/rtk2026_observability:/workspaces/robot_ws/src/rtk2026_observability
+      - ../../src/rtk2026_bringup:/workspaces/robot_ws/src/rtk2026_bringup
+      - ../../src/rtk2026_interfaces:/workspaces/robot_ws/src/rtk2026_interfaces
+      - ../../maps:/workspaces/robot_ws/maps
+      - ../../records:/workspaces/robot_ws/records
     devices:
       # Пути по идентификатору устройства, а не /dev/ttyUSB0 и ttyUSB1:
       # номера присваиваются в порядке подключения и после перезагрузки
@@ -140,7 +143,6 @@ services:
     init: true
     stdin_open: true
     tty: true
-    command: bash
 
   # ~ Только лидар, без остального железа.
   #
@@ -170,7 +172,16 @@ services:
       ROS_DOMAIN_ID: "0"
       ROS_LOCALHOST_ONLY: "0"
     volumes:
-      - ../../src:/workspace/src
+      - ../../workspaces/robot_ws:/workspaces/robot_ws
+      - ../../src/rtk2026_driver:/workspaces/robot_ws/src/rtk2026_driver
+      - ../../src/rtk2026_description:/workspaces/robot_ws/src/rtk2026_description
+      - ../../src/rtk2026_localization:/workspaces/robot_ws/src/rtk2026_localization
+      - ../../src/rtk2026_slam:/workspaces/robot_ws/src/rtk2026_slam
+      - ../../src/rtk2026_observability:/workspaces/robot_ws/src/rtk2026_observability
+      - ../../src/rtk2026_bringup:/workspaces/robot_ws/src/rtk2026_bringup
+      - ../../src/rtk2026_interfaces:/workspaces/robot_ws/src/rtk2026_interfaces
+      - ../../maps:/workspaces/robot_ws/maps
+      - ../../records:/workspaces/robot_ws/records
     devices:
       - "/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_5816f0d8d96ff0118dde93301045c30f-if00-port0:/dev/rplidar"
     init: true
@@ -181,8 +192,8 @@ services:
       - -lc
       - >-
         source /opt/ros/jazzy/setup.bash &&
-        source /opt/lidar_ws/install/setup.bash &&
-        source /workspace/install/setup.bash &&
+        source /opt/vendor_ws/install/setup.bash &&
+        source /workspaces/robot_ws/install/setup.bash &&
         ros2 launch rtk2026_bringup lidar_launch.py
 
   # ~ Только камера, без остального железа.
@@ -211,9 +222,16 @@ services:
       ROS_DOMAIN_ID: "0"
       ROS_LOCALHOST_ONLY: "0"
     volumes:
-      - ../../src:/workspace/src
-      # Записи пишутся на саму Pi, а не внутрь контейнера.
-      - ../../records:/workspace/records
+      - ../../workspaces/robot_ws:/workspaces/robot_ws
+      - ../../src/rtk2026_driver:/workspaces/robot_ws/src/rtk2026_driver
+      - ../../src/rtk2026_description:/workspaces/robot_ws/src/rtk2026_description
+      - ../../src/rtk2026_localization:/workspaces/robot_ws/src/rtk2026_localization
+      - ../../src/rtk2026_slam:/workspaces/robot_ws/src/rtk2026_slam
+      - ../../src/rtk2026_observability:/workspaces/robot_ws/src/rtk2026_observability
+      - ../../src/rtk2026_bringup:/workspaces/robot_ws/src/rtk2026_bringup
+      - ../../src/rtk2026_interfaces:/workspaces/robot_ws/src/rtk2026_interfaces
+      - ../../maps:/workspaces/robot_ws/maps
+      - ../../records:/workspaces/robot_ws/records
     devices:
       # Номер, в отличие от serial-устройств, по by-id не адресуется.
       # Если камер несколько или номер уехал:  v4l2-ctl --list-devices
@@ -226,7 +244,7 @@ services:
       - -lc
       - >-
         source /opt/ros/jazzy/setup.bash &&
-        source /workspace/install/setup.bash &&
+        source /workspaces/robot_ws/install/setup.bash &&
         ros2 run v4l2_camera v4l2_camera_node --ros-args
         -p video_device:=/dev/video0
         -p image_size:="[640,480]"

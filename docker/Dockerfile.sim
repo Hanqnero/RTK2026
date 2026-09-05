@@ -221,7 +221,10 @@ ENV LIBGL_ALWAYS_SOFTWARE=1
 
 ENV XDG_RUNTIME_DIR=/tmp/runtime-root
 
-WORKDIR /workspace
+WORKDIR /workspaces/sim_ws
+
+# Сохраняем runtime-пути, которые используют launch-файлы и конфиги.
+RUN ln -s /workspaces/sim_ws /workspace
 
 
 # Обновление базы rosdep не зависит от исходного кода проекта. Выносим его
@@ -291,52 +294,16 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     rm -rf /tmp/rosdep
 
 
-# Исходники. Build context в compose равен корню проекта.
-COPY src/ /workspace/src/
-
-# Карты нужны Map Server. YAML хранит относительное имя PGM, поэтому
-# копируется весь каталог.
-COPY maps/ /workspace/maps/
-
-# Gazebo worlds передаются лаунчу абсолютным путём.
-COPY worlds/ /workspace/worlds/
-
-
-# Собираются все пакеты, нужные движению по городу в симуляции.
-#
-# rtk2026_interfaces обязателен: без него нет типа DrivingDetection, и
-# rtk2026_cv с rtk2026_city_nav падают на импорте. Раньше его в списке
-# не было, хотя rtk2026_cv от него зависит.
-#
-# rtk2026_route_nav и rtk2026_graph собираются не ради навигации - её
-# заменили rtk2026_city_nav и rtk2026_nav2 - а ради единственного
-# сценария: route_tool_with_costmap.launch.py, офлайн-режим правки
-# костмапы и запретных зон над готовой картой. rtk2026_graph тянется
-# как зависимость rtk2026_route_nav.
-RUN source /opt/ros/jazzy/setup.bash && \
-    source /opt/vo_ws/install/setup.bash && \
-    colcon build \
-        --symlink-install \
-        --packages-select \
-            rtk2026_interfaces \
-            rtk2026_pose_graph \
-            rtk2026_graph \
-            rtk2026_route_nav \
-            rtk2026_city_nav \
-            rtk2026_nav2 \
-            rtk2026_vector_objects \
-            rtk2026_description \
-            rtk2026_driver \
-            rtk2026_slam \
-            rtk2026_localization \
-            rtk2026_observability \
-            rtk2026_tracked_sim \
-            rtk2026_cv \
-            rtk2026_bringup
+# Исходники и runtime-данные монтирует Compose. Артефакты colcon
+# остаются в sim_ws на хосте и не попадают в образ.
 
 COPY --chmod=755 \
     docker/start_sim_novnc.sh \
     /usr/local/bin/start_sim_novnc
+
+COPY --chmod=755 \
+    docker/start_sim_workspace.sh \
+    /usr/local/bin/start_sim_workspace
 
 
 # 6080 — Gazebo и RViz; 6081 — диагностика и графики.
@@ -346,12 +313,12 @@ RUN printf '%s\n' \
     'set +u' \
     'source /opt/ros/jazzy/setup.bash' \
     'source /opt/vo_ws/install/setup.bash' \
-    'source /workspace/install/setup.bash' \
+    '[ ! -f /workspaces/sim_ws/install/setup.bash ] || source /workspaces/sim_ws/install/setup.bash' \
     'set -u' \
     >> /root/.bashrc
 
 # Entrypoint поднимает Xvfb, Fluxbox, x11vnc и noVNC.
 ENTRYPOINT ["/usr/local/bin/start_sim_novnc"]
 
-# Контейнер остаётся запущенным, ROS launch автоматически не стартует.
-CMD ["sleep", "infinity"]
+# После запуска GUI собираем sim_ws, подключаем overlay и запускаем Bash.
+CMD ["/usr/local/bin/start_sim_workspace"]

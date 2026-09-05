@@ -32,8 +32,8 @@ Raspberry Pi
    * - ``docker/dds_check/``
      - DDS Router на стороне робота.
    * - ``src/``
-     - Шесть ROS-пакетов: ``driver``, ``description``, ``localization``,
-       ``slam``, ``observability``, ``bringup``.
+     - Семь ROS-пакетов: ``driver``, ``description``, ``localization``,
+       ``slam``, ``observability``, ``bringup`` и ``interfaces``.
    * - ``maps/``, ``records/``
      - Рабочие каталоги робота: карты и записи прогонов.
 
@@ -41,8 +41,11 @@ Raspberry Pi
 данные, которых нет в репозитории. Всё остальное зеркалируется с
 ``--delete``, поэтому лишний файл на роботе не переживёт синхронизации.
 
-Список пакетов в скрипте обязан совпадать с ``--packages-select`` в
-``pi/docker/Dockerfile.ros``.
+Образ не копирует эти исходники. Compose собирает
+``/workspaces/robot_ws/src`` из bind mounts нужных Pi пакетов.
+``build/``, ``install/`` и ``log/`` живут в ``workspaces/robot_ws``
+на Pi и сохраняются при пересоздании контейнера. Vendor-драйверы
+собраны отдельно в ``/opt/vendor_ws`` внутри образа.
 
 Доступ
 ------
@@ -170,6 +173,13 @@ RViz на ноутбуке считает возраст трансформац�
 
    docker compose -f pi/docker/docker-compose.pi.yml up -d ros
 
+Перед запуском Bash контейнер сам выполняет ``colcon build
+--symlink-install`` для пакетов робота. Лог сборки виден через
+``docker logs rtk2026-ros``.
+
+``tmux`` и ``vim`` установлены в образ для работы в интерактивной
+сессии на роботе.
+
 Окружение ROS подключается в ``.bashrc``, поэтому ``docker exec -it``
 его видит, а ``docker exec bash -lc`` - нет: login-оболочка ``.bashrc``
 не читает. В скриптах подключайте явно:
@@ -178,9 +188,9 @@ RViz на ноутбуке считает возраст трансформац�
 
    docker exec -it rtk2026-ros bash -c '
      source /opt/ros/jazzy/setup.bash
-     source /opt/lidar_ws/install/setup.bash
-     source /workspace/install/setup.bash
-     ros2 launch rtk2026_bringup real_slam.py'
+     source /opt/vendor_ws/install/setup.bash
+     source /workspaces/robot_ws/install/setup.bash
+     ros2 launch rtk2026_bringup full.launch.py'
 
 Порядок подключения важен: underlay с драйвером лидара идёт до overlay
 рабочего пространства, иначе ``lidar_launch.py`` не найдёт
@@ -192,7 +202,8 @@ RViz на ноутбуке считает возраст трансформац�
 
    ros2 launch rtk2026_bringup lidar_launch.py     # только лидар
    ros2 launch rtk2026_bringup arduino_launch.py   # только привод
-   ros2 launch rtk2026_bringup real_slam.py        # всё вместе
+   ros2 launch rtk2026_bringup full.launch.py       # весь аппаратный стек
+   ros2 launch rtk2026_bringup real_slam.py         # аппаратура, EKF и SLAM
 
 Лидар
 -----

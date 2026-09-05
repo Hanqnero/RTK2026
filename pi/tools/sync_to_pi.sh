@@ -43,6 +43,7 @@ ROS_PACKAGES=(
     rtk2026_slam
     rtk2026_observability
     rtk2026_bringup
+    rtk2026_interfaces
 )
 
 # Каталоги, которые едут целиком.
@@ -82,7 +83,7 @@ EXCLUDES=(
 printf 'хост      = %s\n' "${REMOTE}"
 printf 'источник  = %s\n\n' "${ROOT}"
 
-ssh "${REMOTE}" "mkdir -p ${PI_ROOT}/src ${PI_ROOT}/maps ${PI_ROOT}/records"
+ssh "${REMOTE}" "mkdir -p ${PI_ROOT}/src ${PI_ROOT}/maps ${PI_ROOT}/records ${PI_ROOT}/workspaces/robot_ws/src"
 
 for tree in "${TREES[@]}"; do
     printf '  %s\n' "${tree}"

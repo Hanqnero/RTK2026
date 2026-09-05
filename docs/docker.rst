@@ -12,14 +12,16 @@
    контроллеры, ``slam_toolbox``, ``robot_localization``, компоненты AMCL и
    ``teleop_twist_keyboard``.
 2. Устанавливается графический стек ``Xvfb → fluxbox → x11vnc → websockify``.
-3. В ``/workspace`` копируются ``src/``, ``maps/`` и ``worlds/``.
+3. Compose монтирует ``src/``, ``maps/`` и ``worlds/`` в
+   ``/workspaces/sim_ws``.
 4. ``rosdep`` разрешает зависимости, кроме внешнего ``sllidar_ros2``.
-5. ``colcon`` собирает description, driver, slam, localization и bringup.
-6. Entrypoint поднимает виртуальный экран и выполняет ``CMD ["sleep",
-   "infinity"]``.
+5. Entrypoint поднимает виртуальный экран.
+6. Default command собирает ``sim_ws``, подключает overlay и
+   запускает Bash.
 
-``--symlink-install`` полезен внутри build stage, но исходный каталог хоста не
-смонтирован в контейнер. После изменения кода образ необходимо пересобрать.
+Исходный каталог хоста смонтирован в контейнер. ``--symlink-install`` позволяет
+править Python-код без пересборки образа; при изменении CMake-пакетов достаточно
+перезапустить контейнер или вручную повторить ``colcon build``.
 
 Состав runtime
 --------------
@@ -43,10 +45,10 @@
    * - ``websockify`` / noVNC
      - TCP 6080
      - HTTP/WebSocket-доступ из браузера.
-   * - ``sleep infinity``
+   * - ``bash``
      - PID основного процесса
-     - Удерживает контейнер запущенным; ROS launch пользователь запускает
-       вручную через ``docker exec``.
+     - Запускается после успешной сборки ``sim_ws`` и удерживает контейнер;
+       ROS launch пользователь запускает вручную через ``docker exec``.
 
 Entrypoint проверяет запуск каждого фонового процесса. Логи находятся в
 ``/tmp/xvfb.log``, ``/tmp/fluxbox.log``, ``/tmp/x11vnc.log`` и
@@ -95,7 +97,7 @@ loopback хоста:
    docker exec -it rtk2026_sim bash
 
 В интерактивном shell ``.bashrc`` подключает ROS 2 Jazzy и собранный
-``/workspace/install``. Запуск полного стека выполняется вручную:
+``/workspaces/sim_ws/install``. Запуск полного стека выполняется вручную:
 
 .. code-block:: bash
 
@@ -145,7 +147,7 @@ Launch принимает абсолютный путь аргументом ``w
    docker exec -it rtk2026_sim bash
    docker exec rtk2026_sim bash -lc 'ps -ef'
    docker exec rtk2026_sim bash -lc \
-     'source /opt/ros/jazzy/setup.bash; source /workspace/install/setup.bash; ros2 node list'
+     'source /opt/ros/jazzy/setup.bash; source /workspaces/sim_ws/install/setup.bash; ros2 node list'
    docker exec rtk2026_sim bash -lc 'tail -100 /tmp/xvfb.log'
    docker exec rtk2026_sim bash -lc 'tail -100 /tmp/novnc.log'
 

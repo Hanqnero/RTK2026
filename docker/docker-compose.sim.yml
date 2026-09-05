@@ -17,22 +17,20 @@ services:
     container_name: rtk2026_sim
 
     volumes:
-      # Исходники монтируются, а не только копируются в образ. Пакеты
-      # собраны с --symlink-install, поэтому install/ ссылается прямо
-      # сюда: правка Python-кода действует сразу, достаточно перезапустить
-      # ноду. Пересобирать нужно только rtk2026_interfaces и другие
-      # CMake-пакеты, то есть при изменении сообщений.
-      - ../src:/workspace/src
+      # Отдельный sim workspace хранит build/install/log на хосте.
+      - ../workspaces/sim_ws:/workspaces/sim_ws
+      - ../src:/workspaces/sim_ws/src
 
       # Карты и граф сразу записываются в каталог maps/ на компьютере.
-      - ../maps:/workspace/maps
+      - ../maps:/workspaces/sim_ws/maps
       # Записи экспериментов сразу сохраняются на компьютере.
-      - ../records:/workspace/records
+      - ../records:/workspaces/sim_ws/records
       # Сформированные графики и HTML-отчёты.
-      - ../reports:/workspace/reports
+      - ../reports:/workspaces/sim_ws/reports
       # Файл поз и память о знаках: их пишет робот, а читать и править
       # их надо с компьютера.
-      - ../runtime:/workspace/runtime
+      - ../runtime:/workspaces/sim_ws/runtime
+      - ../worlds:/workspaces/sim_ws/worlds
 
     # Добавляет минимальный init-процесс.
     #
