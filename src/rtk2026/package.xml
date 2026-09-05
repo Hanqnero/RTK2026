@@ -11,7 +11,6 @@
   <exec_depend>rtk2026_bringup</exec_depend>
   <exec_depend>rtk2026_interfaces</exec_depend>
   <exec_depend>rtk2026_driver</exec_depend>
-  <exec_depend>rtk2026_mearm</exec_depend>
   <exec_depend>rtk2026_localization</exec_depend>
   <exec_depend>rtk2026_slam</exec_depend>
   <exec_depend>rtk2026_nav2</exec_depend>
