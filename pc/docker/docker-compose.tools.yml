@@ -6,8 +6,8 @@
 #   docker compose -f pc/docker/docker-compose.tools.yml run --rm tools \
 #       python3 tools/check_encoders.py --port $RTK_LINK --auto --no-plot
 #
-# Окна Qt в контейнере требуют XQuartz, см. docs/arduino/bench.rst.
-# Для графиков проще запускать инструменты из локального .venv.
+# На Linux окна RViz/RQt и инструментов выводятся в X11 хоста.
+# На macOS нужен XQuartz, см. docs/pc/index.rst.
 #
 # Контекст сборки - pc/ (родитель этой директории): образу не нужен
 # доступ к прошивке в arduino/, только requirement.txt и сами инструменты.
@@ -23,11 +23,26 @@ services:
       # Логи и выгрузки пишутся в примонтированное дерево и остаются
       # на хосте после остановки контейнера.
       - ../records:/work/records
+      # X11 socket и cookie. XAUTHORITY важно передавать явно:
+      # у Xwayland файл часто находится не в ~/.Xauthority.
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - "${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.Xauthority:ro"
+      # Готовый конфиг реального робота, не включая весь repo.
+      - ../../src/rtk2026_bringup/rviz:/work/rviz:ro
     environment:
-      - RTK_LINK=${RTK_LINK:-}
-      # Заполняется только при использовании XQuartz.
-      - DISPLAY=${DISPLAY:-}
+      RTK_LINK: ${RTK_LINK:-}
+      DISPLAY: ${DISPLAY:-:0}
+      XAUTHORITY: /tmp/.Xauthority
+      QT_X11_NO_MITSHM: "1"
+      LIBGL_ALWAYS_SOFTWARE: ${LIBGL_ALWAYS_SOFTWARE:-1}
+      XDG_RUNTIME_DIR: /tmp/runtime-root
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_DOMAIN_ID: "0"
+      ROS_LOCALHOST_ONLY: "0"
     network_mode: host
+    # Fast DDS в host network выбирает shared memory, поэтому
+    # /dev/shm должен совпадать с другими host-network ROS контейнерами.
+    ipc: host
     stdin_open: true
     tty: true
     command: bash
