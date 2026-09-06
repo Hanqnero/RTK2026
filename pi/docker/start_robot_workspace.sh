@@ -25,7 +25,10 @@ colcon build \
         rtk2026_slam \
         rtk2026_observability \
         rtk2026_bringup \
-        rtk2026_interfaces
+        rtk2026_interfaces \
+        rtk2026_pose_graph \
+        rtk2026_nav2 \
+        rtk2026_city_nav
 
 set +u
 source /workspaces/robot_ws/install/setup.bash

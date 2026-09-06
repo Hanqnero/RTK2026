@@ -18,3 +18,4 @@ lane_decision_manager:
     robot_base_frame: "base_footprint"
     enable_fallback_visit_balancing: true
     block_immediate_backtrack: true
+    lane_right_offset_m: 0.10  # desired 25 cm from the vertex/edge centreline

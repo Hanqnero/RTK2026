@@ -219,6 +219,20 @@ sllidar_ros2`` всё ещё не находит пакет, один раз п�
    ros2 launch rtk2026_bringup full.launch.py       # весь аппаратный стек
    ros2 launch rtk2026_bringup real_slam.py         # аппаратура, EKF и SLAM
 
+Автономный прогон запускается в трёх терминалах контейнера. После первой
+команды задайте начальную позу в RViz:
+
+.. code-block:: bash
+
+   ros2 launch rtk2026_bringup real_localization.py \
+     map:=/workspaces/robot_ws/maps/my_map.yaml
+   ros2 launch rtk2026_nav2 nav2.launch.py use_sim_time:=false
+   ros2 launch rtk2026_city_nav city_nav.launch.py \
+     use_sim_time:=false \
+     graph_path:=/workspaces/robot_ws/maps/graph \
+     start_previous_vertex:=<PREVIOUS_ID> \
+     start_current_vertex:=<CURRENT_ID>
+
 Распознавание знаков
 --------------------
 

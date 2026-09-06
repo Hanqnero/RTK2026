@@ -119,6 +119,9 @@ services:
       - ../../src/rtk2026_observability:/workspaces/robot_ws/src/rtk2026_observability
       - ../../src/rtk2026_bringup:/workspaces/robot_ws/src/rtk2026_bringup
       - ../../src/rtk2026_interfaces:/workspaces/robot_ws/src/rtk2026_interfaces
+      - ../../src/rtk2026_pose_graph:/workspaces/robot_ws/src/rtk2026_pose_graph
+      - ../../src/rtk2026_nav2:/workspaces/robot_ws/src/rtk2026_nav2
+      - ../../src/rtk2026_city_nav:/workspaces/robot_ws/src/rtk2026_city_nav
       - ../../maps:/workspaces/robot_ws/maps
       - ../../records:/workspaces/robot_ws/records
     devices:
@@ -185,6 +188,9 @@ services:
       - ../../src/rtk2026_observability:/workspaces/robot_ws/src/rtk2026_observability
       - ../../src/rtk2026_bringup:/workspaces/robot_ws/src/rtk2026_bringup
       - ../../src/rtk2026_interfaces:/workspaces/robot_ws/src/rtk2026_interfaces
+      - ../../src/rtk2026_pose_graph:/workspaces/robot_ws/src/rtk2026_pose_graph
+      - ../../src/rtk2026_nav2:/workspaces/robot_ws/src/rtk2026_nav2
+      - ../../src/rtk2026_city_nav:/workspaces/robot_ws/src/rtk2026_city_nav
       - ../../maps:/workspaces/robot_ws/maps
       - ../../records:/workspaces/robot_ws/records
     devices:
@@ -235,6 +241,9 @@ services:
       - ../../src/rtk2026_observability:/workspaces/robot_ws/src/rtk2026_observability
       - ../../src/rtk2026_bringup:/workspaces/robot_ws/src/rtk2026_bringup
       - ../../src/rtk2026_interfaces:/workspaces/robot_ws/src/rtk2026_interfaces
+      - ../../src/rtk2026_pose_graph:/workspaces/robot_ws/src/rtk2026_pose_graph
+      - ../../src/rtk2026_nav2:/workspaces/robot_ws/src/rtk2026_nav2
+      - ../../src/rtk2026_city_nav:/workspaces/robot_ws/src/rtk2026_city_nav
       - ../../maps:/workspaces/robot_ws/maps
       - ../../records:/workspaces/robot_ws/records
     devices:

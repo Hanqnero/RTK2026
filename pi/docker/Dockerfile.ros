@@ -6,7 +6,8 @@
 # Что запускается из этого образа:
 #   arduino_launch.py - привод;
 #   lidar_launch.py   - RPLIDAR C1 (или запасной A1M8);
-#   real_slam.py      - полный стек картографирования.
+#   real_slam.py      - полный стек картографирования;
+#   real_localization.py + Nav2 + City Nav - автономный прогон.
 #
 # Обычно RViz живёт на ноутбуке и получает топики через DDS Router,
 # но образ поддерживает и локальный ``use_rviz:=true`` через X11-дисплей
@@ -142,8 +143,8 @@ RUN if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
 # каждой правки.
 #
 # Копируются ровно те пакеты, которые собираются ниже. Остальной workspace
-# на робота не приезжает: симуляция, зрение и навигация здесь не нужны,
-# а их package.xml тянули бы Gazebo, OpenCV и Nav2 в образ.
+# на робота не приезжает: симуляция и зрение собираются в других образах.
+# City Nav и исполняющий его команды Nav2 работают на самом роботе.
 COPY src/rtk2026_driver/package.xml \
     /tmp/rosdep/src/rtk2026_driver/package.xml
 COPY src/rtk2026_description/package.xml \
@@ -158,6 +159,12 @@ COPY src/rtk2026_bringup/package.xml \
     /tmp/rosdep/src/rtk2026_bringup/package.xml
 COPY src/rtk2026_interfaces/package.xml \
     /tmp/rosdep/src/rtk2026_interfaces/package.xml
+COPY src/rtk2026_pose_graph/package.xml \
+    /tmp/rosdep/src/rtk2026_pose_graph/package.xml
+COPY src/rtk2026_nav2/package.xml \
+    /tmp/rosdep/src/rtk2026_nav2/package.xml
+COPY src/rtk2026_city_nav/package.xml \
+    /tmp/rosdep/src/rtk2026_city_nav/package.xml
 
 # Что и почему пропускается.
 #
