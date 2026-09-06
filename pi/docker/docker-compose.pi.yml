@@ -92,7 +92,12 @@ services:
       ROS_DOMAIN_ID: "0"
       ROS_LOCALHOST_ONLY: "0"
       # Используем реальный display хоста. :0 — обычный
-      # X11/Xwayland display Raspberry Pi с локальным desktop      DISPLAY: ${DISPLAY:-:0}
+      # X11/Xwayland display Raspberry Pi с локальным desktop.
+      #
+      # Перенос строки здесь обязателен: при слиянии он потерялся,
+      # DISPLAY ушёл в комментарий, и YAML разобрался без ошибок -
+      # отказ был тихим, проброс X11 просто не работал.
+      DISPLAY: ${DISPLAY:-:0}
       XAUTHORITY: /tmp/.Xauthority
       QT_X11_NO_MITSHM: "1"
       # Не требует проброса /dev/dri; для RViz на Pi это медленнее,
