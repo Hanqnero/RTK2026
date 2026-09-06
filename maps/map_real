@@ -30,7 +30,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 1
+                "id": 1,
+                "kind": "junction" 
             },
             "type": "Feature"
         },
@@ -58,7 +59,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 4
+                "id": 4,
+                "kind": "junction" 
             },
             "type": "Feature"
         },
@@ -86,7 +88,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 8
+                "id": 8,
+                "kind": "junction" 
             },
             "type": "Feature"
         },
@@ -100,7 +103,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 9
+                "id": 9,
+                "kind": "junction" 
             },
             "type": "Feature"
         },
@@ -114,7 +118,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 11
+                "id": 11,
+                "kind": "junction"
             },
             "type": "Feature"
         },
@@ -156,7 +161,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 16
+                "id": 16,
+                "kind": "junction" 
             },
             "type": "Feature"
         },
@@ -170,7 +176,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 17
+                "id": 17,
+                "kind": "junction" 
             },
             "type": "Feature"
         },
@@ -198,7 +205,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 19
+                "id": 19,
+                "kind": "junction" 
             },
             "type": "Feature"
         },
@@ -212,7 +220,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 20
+                "id": 20,
+                "kind": "junction" 
             },
             "type": "Feature"
         },
@@ -226,7 +235,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 21
+                "id": 21,
+                "kind": "junction" 
             },
             "type": "Feature"
         },
@@ -240,7 +250,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 23
+                "id": 23,
+                "kind": "junction" 
             },
             "type": "Feature"
         },
@@ -282,7 +293,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 26
+                "id": 26,
+                "kind": "junction" 
             },
             "type": "Feature"
         },
