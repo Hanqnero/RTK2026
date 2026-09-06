@@ -12,17 +12,21 @@ This document defines the pin mapping used by the current robot firmware on Ardu
 
 | Subsystem | Signal | Arduino Pin | Direction | Notes |
 |---|---|---:|---|---|
-| Motor Driver (dual PWM) | LEFT_PWM_A | D7 | Output (PWM) | Left motor PWM input A |
-| Motor Driver (dual PWM) | LEFT_PWM_B | D6 | Output (PWM) | Left motor PWM input B |
-| Motor Driver (dual PWM) | RIGHT_PWM_A | D5 | Output (PWM) | Right motor PWM input A |
-| Motor Driver (dual PWM) | RIGHT_PWM_B | D4 | Output (PWM) | Right motor PWM input B |
+| Motor Driver (dual PWM) | LEFT_PWM_A | D5 | Output (PWM) | Left motor PWM input A |
+| Motor Driver (dual PWM) | LEFT_PWM_B | D4 | Output (PWM) | Left motor PWM input B |
+| Motor Driver (dual PWM) | RIGHT_PWM_A | D7 | Output (PWM) | Right motor PWM input A |
+| Motor Driver (dual PWM) | RIGHT_PWM_B | D6 | Output (PWM) | Right motor PWM input B |
 | Status LED | LED_BUILTIN | D13 | Output | Blinks once per control loop cycle |
-| Left Encoder | LEFT_ENC_CLK | D18 | Input + External Interrupt | Quadrature channel A |
-| Left Encoder | LEFT_ENC_DT | D19 | Input + External Interrupt | Quadrature channel B |
-| Right Encoder | RIGHT_ENC_CLK | D20 | Input + External Interrupt | Quadrature channel A |
-| Right Encoder | RIGHT_ENC_DT | D21 | Input + External Interrupt | Quadrature channel B |
-| Sonar | SONAR_TRIG_PIN | D39 | Output | Trigger pulse |
-| Sonar | SONAR_ECHO_PIN | D41 | Input | Echo pulse; sensor powered from the 5V/GND rails |
+| Left Encoder | LEFT_ENC_CLK | D16 | Input, polled | Quadrature channel A |
+| Left Encoder | LEFT_ENC_DT | D18 | Input, polled | Quadrature channel B |
+| Right Encoder | RIGHT_ENC_CLK | D17 | Input, polled | Quadrature channel A |
+| Right Encoder | RIGHT_ENC_DT | D19 | Input, polled | Quadrature channel B |
+| Sonar 0: `sonar_front_left` | TRIG / ECHO | D38 / D39 | Output / Input | First pin in pair is TRIG |
+| Sonar 1: `sonar_front_right` | TRIG / ECHO | D40 / D41 | Output / Input | First pin in pair is TRIG |
+| Sonar 2: `sonar_left_right` | TRIG / ECHO | D30 / D31 | Output / Input | First pin in pair is TRIG |
+| Sonar 3: `sonar_left_left` | TRIG / ECHO | D32 / D33 | Output / Input | First pin in pair is TRIG |
+| Sonar 4: `sonar_right_right` | TRIG / ECHO | D36 / D37 | Output / Input | First pin in pair is TRIG |
+| Sonar 5: `sonar_right_left` | TRIG / ECHO | D34 / D35 | Output / Input | First pin in pair is TRIG |
 | Host Serial Telemetry/Control | UART0_RX | D0 | Input | USB serial bridge to host TX |
 | Host Serial Telemetry/Control | UART0_TX | D1 | Output | USB serial bridge to host RX |
 
@@ -39,18 +43,17 @@ This document defines the pin mapping used by the current robot firmware on Ardu
 ### Encoders
 
 - All encoder inputs are configured as INPUT_PULLUP in firmware.
-- Current external interrupt mapping on Mega supports these pins:
-  - D18, D19, D20, D21
+- The main firmware polls all four lines together; it does not attach encoder interrupts.
 
-### Sonar
+### Sonars
 
-- Sonar stop threshold: 20 cm.
-- When a valid sonar reading is below the threshold, firmware commands both motors to zero.
-- D37 powers sensor VCC HIGH and D43 provides sensor GND LOW.
+- All six HC-SR04 modules are powered from the common 5V/GND rails, never from GPIO.
+- Firmware triggers only one module at a time, in the table order, to suppress cross-talk.
+- Each finished measurement is sent as `SonarSamplePayload`; obstacle handling belongs to Nav2 and Collision Monitor.
 
 ### BMI270 I2C
 
-- The main motor-control firmware now reserves D20/D21 for the right encoder, so BMI270 I2C wiring on D20/D21 applies only to the standalone BMI270 test firmware or to alternate wiring/builds.
+- D20/D21 remain the Mega hardware-I2C pins. The main firmware does not read BMI270; the production IMU is connected to Raspberry Pi.
 - I2C bus uses Arduino Mega hardware I2C pins:
   - SDA D20, SCL D21
 - I2C clock configured in BMI270 test firmware: 400 kHz.
@@ -82,15 +85,15 @@ Notes:
 
 ## Reserved/Used Pins Summary
 
-- Used digital pins: D0, D1, D4, D5, D6, D7, D13, D18, D19, D20, D21, D37, D39, D41, D43
+- Used digital pins: D0, D1, D4, D5, D6, D7, D13, D16-D19, D30-D41
 - Unused digital pins: all others (available for future expansion)
 - Analog pins A0-A15: currently unused
 
 ## Power and Ground Guidance
 
 - Use a common ground between Arduino, motor driver, encoders, and IMU.
-- Power motors from a suitable motor supply through TB6612FNG VM.
-- Power TB6612 logic according to driver voltage requirements; power the BMI270 module from 3.3V.
+- Power motors from their external supply through the two BTS7960 modules.
+- Tie Arduino, both BTS7960 modules and the sonar supply to a common ground.
 - Do not power motors directly from Arduino 5V rail.
 
 ## Change Control

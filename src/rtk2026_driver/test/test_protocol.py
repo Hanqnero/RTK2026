@@ -42,12 +42,14 @@ from rtk2026_driver.protocol import (
     MSG_PID_DEBUG,
     MSG_SAVE_GAINS,
     MSG_SET_GAINS,
+    MSG_SONAR_SAMPLE,
     MSG_STATS,
     MSG_TELEMETRY,
     PID_DEBUG_STRUCT,
     RESET_ODOMETRY,
     RESET_PID,
     SET_GAINS_STRUCT,
+    SONAR_SAMPLE_STRUCT,
     STATS_STRUCT,
     TELEMETRY_STRUCT,
     VELOCITY_STRUCT,
@@ -61,6 +63,7 @@ from rtk2026_driver.protocol import (
     crc16_ccitt,
     decode_gains_report,
     decode_pid_debug,
+    decode_sonar_sample,
     decode_stats,
     decode_telemetry,
     pack_get_gains,
@@ -135,6 +138,7 @@ def test_struct_sizes_match_firmware():
     assert TELEMETRY_STRUCT.size == 66
     assert PID_DEBUG_STRUCT.size == 66
     assert STATS_STRUCT.size == 49
+    assert SONAR_SAMPLE_STRUCT.size == 9
 
 
 def test_crc16_matches_reference_vector():
@@ -215,6 +219,17 @@ def test_decode_telemetry_fields():
     assert telemetry.current_linear_mps == pytest.approx(0.42)
     assert telemetry.current_angular_rps == pytest.approx(-0.18)
     assert telemetry.sonar_distance_cm == 42
+
+
+def test_decode_sonar_sample_fields():
+    payload = SONAR_SAMPLE_STRUCT.pack(123, 456789, 4, 875)
+
+    sample = decode_sonar_sample(payload)
+
+    assert sample.seq == 123
+    assert sample.mcu_time_ms == 456789
+    assert sample.sensor_index == 4
+    assert sample.distance_mm == 875
 
 
 def test_telemetry_flag_properties():
@@ -417,6 +432,7 @@ def test_ros_and_bench_codecs_agree():
     assert rtk_link.TELEMETRY_STRUCT.format == TELEMETRY_STRUCT.format
     assert rtk_link.STATS_STRUCT.format == STATS_STRUCT.format
     assert rtk_link.VELOCITY_STRUCT.format == VELOCITY_STRUCT.format
+    assert rtk_link.SONAR_SAMPLE_STRUCT.format == SONAR_SAMPLE_STRUCT.format
 
     assert rtk_link.crc16_ccitt(b"123456789") == crc16_ccitt(b"123456789")
 
@@ -425,6 +441,10 @@ def test_ros_and_bench_codecs_agree():
 
     assert rtk_link.MSG_TELEMETRY == MSG_TELEMETRY
     assert rtk_link.MSG_STATS == MSG_STATS
+    assert rtk_link.MSG_SONAR_SAMPLE == MSG_SONAR_SAMPLE
+
+    sonar_payload = SONAR_SAMPLE_STRUCT.pack(12, 3456, 2, -1)
+    assert rtk_link.decode_sonar_sample(sonar_payload).distance_mm == -1
 
     # Кадр, собранный одним кодеком, должен разбираться другим.
     frame = build_frame(MSG_TELEMETRY, _telemetry_payload(seq=99))

@@ -55,6 +55,7 @@ constexpr uint8_t kMsgPidDebug = 0x82U;
 constexpr uint8_t kMsgStats = 0x83U;
 constexpr uint8_t kMsgGainsReport = 0x84U;
 constexpr uint8_t kMsgAutotuneStatus = 0x85U;
+constexpr uint8_t kMsgSonarSample = 0x86U;
 
 // Флаги VelocityCommandPayload.flags
 // Действует для всех трёх команд движения: пока флаг взведён, прошивка
@@ -319,6 +320,20 @@ struct __attribute__((packed)) StatsPayload {
     uint16_t free_ram_bytes;
 };  // 49 байт
 
+// Один завершённый замер одного сонара. Кадр отдельный от
+// TelemetryPayload: добавление шести датчиков не ломает протокол v2,
+// а хост получает замер сразу после завершения эха.
+struct __attribute__((packed)) SonarSamplePayload {
+    // Общий счётчик кадров сонаров по модулю 2^16.
+    uint16_t seq;
+    // Время MCU на момент завершения замера.
+    uint32_t mcu_time_ms;
+    // Индек в массивах sonar_topics / sonar_frames на хосте.
+    uint8_t sensor_index;
+    // Миллиметры; -1 означает отсутствие эха до предела датчика.
+    int16_t distance_mm;
+};  // 9 байт
+
 // Размеры зафиксированы: они же захардкожены в host-кодеках
 // (protocol/rtk_link.py для стенда и src/rtk2026_driver/rtk2026_driver/
 // protocol.py для ROS). Молчаливое расхождение здесь означало бы неверную
@@ -333,6 +348,7 @@ static_assert(sizeof(GainsReportPayload) == 22, "GainsReportPayload измени
 static_assert(sizeof(TelemetryPayload) == 66, "TelemetryPayload изменился");
 static_assert(sizeof(PidDebugPayload) == 66, "PidDebugPayload изменился");
 static_assert(sizeof(StatsPayload) == 49, "StatsPayload изменился");
+static_assert(sizeof(SonarSamplePayload) == 9, "SonarSamplePayload изменился");
 
 // Самое длинное входящее сообщение обязано помещаться в буфер разборщика.
 static_assert(sizeof(SetGainsPayload) <= kMaxInboundPayloadBytes,

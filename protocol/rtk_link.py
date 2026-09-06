@@ -39,6 +39,7 @@ MSG_PID_DEBUG = 0x82
 MSG_STATS = 0x83
 MSG_GAINS_REPORT = 0x84
 MSG_AUTOTUNE_STATUS = 0x85
+MSG_SONAR_SAMPLE = 0x86
 
 # Флаг любой команды движения: пока он взведён, прошивка добавляет к
 # телеметрии кадр внутренностей регуляторов.
@@ -83,6 +84,7 @@ AUTOTUNE_STATUS_STRUCT = struct.Struct("<BBBBfff")
 TELEMETRY_STRUCT = struct.Struct("<HIIhhiiffffhhfffffhBB")
 PID_DEBUG_STRUCT = struct.Struct("<H16f")
 STATS_STRUCT = struct.Struct("<BIIIIIIIIIHHHHHH")
+SONAR_SAMPLE_STRUCT = struct.Struct("<HIBh")
 
 assert VELOCITY_STRUCT.size == 9, "VelocityCommandPayload разошёлся с прошивкой"
 assert RESET_STRUCT.size == 1, "ResetCommandPayload разошёлся с прошивкой"
@@ -95,6 +97,7 @@ assert AUTOTUNE_STATUS_STRUCT.size == 16, "AutotuneStatusPayload разошёл�
 assert TELEMETRY_STRUCT.size == 66, "TelemetryPayload разошёлся с прошивкой"
 assert PID_DEBUG_STRUCT.size == 66, "PidDebugPayload разошёлся с прошивкой"
 assert STATS_STRUCT.size == 49, "StatsPayload разошёлся с прошивкой"
+assert SONAR_SAMPLE_STRUCT.size == 9, "SonarSamplePayload разошёлся с прошивкой"
 
 
 
@@ -446,6 +449,17 @@ class Stats:
     free_ram_bytes: int
 
 
+@dataclass(frozen=True, slots=True)
+class SonarSample:
+    """Один завершённый замер одного из шести сонаров."""
+
+    seq: int
+    mcu_time_ms: int
+    sensor_index: int
+    #: Миллиметры; -1 означает отсутствие эха до предела датчика.
+    distance_mm: int
+
+
 
 
 def decode_telemetry(payload: bytes) -> Telemetry:
@@ -460,6 +474,12 @@ def decode_stats(payload: bytes) -> Stats:
     """Разобрать полезную нагрузку кадра ``MSG_STATS``."""
 
     return Stats(*STATS_STRUCT.unpack(payload))
+
+
+def decode_sonar_sample(payload: bytes) -> SonarSample:
+    """Разобрать полезную нагрузку ``MSG_SONAR_SAMPLE``."""
+
+    return SonarSample(*SONAR_SAMPLE_STRUCT.unpack(payload))
 
 
 
@@ -828,4 +848,3 @@ def describe_telemetry_flags(flags: int) -> str:
         names.append("overrun")
 
     return ",".join(names) if names else "-"
-

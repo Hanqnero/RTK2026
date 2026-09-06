@@ -21,15 +21,19 @@ from geometry_msgs.msg import TransformStamped, TwistStamped
 from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import Range
 from tf2_ros import TransformBroadcaster
 
 from rtk2026_driver.protocol import (
+    MSG_SONAR_SAMPLE,
     MSG_STATS,
     MSG_TELEMETRY,
     RESET_STATS,
     FrameDecoder,
     SequenceTracker,
     TelemetryPacket,
+    decode_sonar_sample,
     decode_stats,
     decode_telemetry,
     pack_reset_command,
@@ -40,6 +44,24 @@ from rtk2026_driver.transport import SerialTransport
 
 class ArduinoBridgeNode(Node):
     """Мост между ROS2-топиками и USB Serial Arduino."""
+
+    SONAR_COUNT = 6
+    DEFAULT_SONAR_TOPICS = (
+        "/sonar/front_left",
+        "/sonar/front_right",
+        "/sonar/left_right",
+        "/sonar/left_left",
+        "/sonar/right_right",
+        "/sonar/right_left",
+    )
+    DEFAULT_SONAR_FRAMES = (
+        "sonar_front_left_link",
+        "sonar_front_right_link",
+        "sonar_left_right_link",
+        "sonar_left_left_link",
+        "sonar_right_right_link",
+        "sonar_right_left_link",
+    )
 
     def __init__(self) -> None:
         """Создать ROS2-ноду, открыть порт и запустить таймеры."""
@@ -52,6 +74,15 @@ class ArduinoBridgeNode(Node):
 
         self.declare_parameter("cmd_vel_topic", "/cmd_vel") # входной топик данной ноды (по умолч "/cmd_vel")
         self.declare_parameter("odom_topic", "/wheel/odom") # выходной топик данной ноды
+
+        # Индекс из SonarSamplePayload одновременно выбирает топик и
+        # frame_id. Порядок этих массивов теперь часть контракта с
+        # прошивкой и обязан совпадать с порядком её пинов.
+        self.declare_parameter("sonar_topics", list(self.DEFAULT_SONAR_TOPICS))
+        self.declare_parameter("sonar_frames", list(self.DEFAULT_SONAR_FRAMES))
+        self.declare_parameter("sonar_field_of_view_rad", math.radians(15.0))
+        self.declare_parameter("sonar_min_range_m", 0.02)
+        self.declare_parameter("sonar_max_range_m", 4.0)
 
         self.declare_parameter("odom_frame", "odom") # создаем неподвижную СК одометрии
         self.declare_parameter("base_frame", "base_footprint") # создаем СК робота
@@ -97,6 +128,23 @@ class ArduinoBridgeNode(Node):
             self.get_parameter("odom_topic").value
         )
 
+        self._sonar_topics = tuple(
+            str(value) for value in self.get_parameter("sonar_topics").value
+        )
+        self._sonar_frames = tuple(
+            str(value) for value in self.get_parameter("sonar_frames").value
+        )
+        self._sonar_field_of_view_rad = float(
+            self.get_parameter("sonar_field_of_view_rad").value
+        )
+        self._sonar_min_range_m = float(
+            self.get_parameter("sonar_min_range_m").value
+        )
+        self._sonar_max_range_m = float(
+            self.get_parameter("sonar_max_range_m").value
+        )
+        self._validate_sonar_config()
+
         self._odom_frame = str(
             self.get_parameter("odom_frame").value
         )
@@ -141,6 +189,7 @@ class ArduinoBridgeNode(Node):
         # их счётчики накопительные и составляют картину качества линка.
         self._decoder = FrameDecoder()
         self._sequence = SequenceTracker()
+        self._sonar_sequence = SequenceTracker()
         self._latest_stats = None
         self._last_link_report_time = time.monotonic()
         # создаем сериал объект
@@ -155,6 +204,10 @@ class ArduinoBridgeNode(Node):
             Odometry,
             odom_topic,
             10, #глубина сообщений
+        )
+        self._sonar_publishers = tuple(
+            self.create_publisher(Range, topic, qos_profile_sensor_data)
+            for topic in self._sonar_topics
         )
 
         self._tf_broadcaster = TransformBroadcaster(self) # Создаётся broadcaster динамических TF (вычисляет дельты между СК)
@@ -223,6 +276,36 @@ class ArduinoBridgeNode(Node):
             )
 
         return diagonal
+
+    def _validate_sonar_config(self) -> None:
+        """Проверить отображение индекса MCU в ROS-топик и TF."""
+
+        if len(self._sonar_topics) != self.SONAR_COUNT:
+            raise ValueError(
+                f"sonar_topics must contain exactly {self.SONAR_COUNT} values"
+            )
+        if len(self._sonar_frames) != self.SONAR_COUNT:
+            raise ValueError(
+                f"sonar_frames must contain exactly {self.SONAR_COUNT} values"
+            )
+        if any(not value for value in (*self._sonar_topics, *self._sonar_frames)):
+            raise ValueError("sonar topics and frames must not be empty")
+        if len(set(self._sonar_topics)) != self.SONAR_COUNT:
+            raise ValueError("sonar_topics must be unique")
+        if len(set(self._sonar_frames)) != self.SONAR_COUNT:
+            raise ValueError("sonar_frames must be unique")
+        if not 0.0 < self._sonar_field_of_view_rad <= math.pi:
+            raise ValueError("sonar_field_of_view_rad must be in (0, pi]")
+        if not math.isfinite(self._sonar_field_of_view_rad):
+            raise ValueError("sonar_field_of_view_rad must be finite")
+        if not math.isfinite(self._sonar_min_range_m):
+            raise ValueError("sonar_min_range_m must be finite")
+        if not math.isfinite(self._sonar_max_range_m):
+            raise ValueError("sonar_max_range_m must be finite")
+        if self._sonar_min_range_m < 0.0:
+            raise ValueError("sonar_min_range_m must be non-negative")
+        if self._sonar_max_range_m <= self._sonar_min_range_m:
+            raise ValueError("sonar_max_range_m must exceed sonar_min_range_m")
     # тот самый колбек подписки
     def _on_cmd_vel(self, message: TwistStamped) -> None:
         """Проверить и сохранить новую команду скорости.
@@ -323,6 +406,8 @@ class ArduinoBridgeNode(Node):
         for message_id, payload in self._decoder.feed(received_bytes):
             if message_id == MSG_TELEMETRY:
                 self._handle_telemetry(payload)
+            elif message_id == MSG_SONAR_SAMPLE:
+                self._handle_sonar_sample(payload)
             elif message_id == MSG_STATS:
                 self._handle_stats(payload)
             # Прочие идентификаторы принадлежат сообщениям, которых эта
@@ -347,6 +432,57 @@ class ArduinoBridgeNode(Node):
 
         self._sequence.update(telemetry.seq)
         self._publish_odometry(telemetry)
+
+    def _handle_sonar_sample(self, payload: bytes) -> None:
+        """Опубликовать один замер MCU как ``sensor_msgs/Range``.
+
+        Отсутствие эха публикуется ровно как ``max_range``, а не
+        как infinity. Это валидное значение для сонара с переменной
+        дальностью и даёт RangeSensorLayer очистить конус при
+        ``clear_on_max_reading=true``.
+
+        :param payload: полезная нагрузка ``MSG_SONAR_SAMPLE``.
+        """
+
+        try:
+            sample = decode_sonar_sample(payload)
+        except struct.error as exception:
+            self.get_logger().error(
+                f"Замер сонара неожиданной длины {len(payload)}: "
+                f"{exception}"
+            )
+            return
+
+        self._sonar_sequence.update(sample.seq)
+
+        if not 0 <= sample.sensor_index < self.SONAR_COUNT:
+            self.get_logger().error(
+                f"Прошивка присла неизвестный индекс сонара "
+                f"{sample.sensor_index}"
+            )
+            return
+
+        if sample.distance_mm < 0:
+            distance_m = self._sonar_max_range_m
+        else:
+            # Замер ближе паспортного минимума нельзя
+            # игнорировать: для остановки безопаснее зажать его
+            # в допустимый диапазон.
+            distance_m = max(
+                self._sonar_min_range_m,
+                min(sample.distance_mm * 0.001, self._sonar_max_range_m),
+            )
+
+        message = Range()
+        message.header.stamp = self.get_clock().now().to_msg()
+        message.header.frame_id = self._sonar_frames[sample.sensor_index]
+        message.radiation_type = Range.ULTRASOUND
+        message.field_of_view = self._sonar_field_of_view_rad
+        message.min_range = self._sonar_min_range_m
+        message.max_range = self._sonar_max_range_m
+        message.range = distance_m
+
+        self._sonar_publishers[sample.sensor_index].publish(message)
 
     def _handle_stats(self, payload: bytes) -> None:
         """Сохранить последнюю статистику прошивки.
@@ -385,6 +521,12 @@ class ArduinoBridgeNode(Node):
             f"мусор={self._decoder.resync_count}"
         )
 
+        if self._sonar_sequence.received > 0:
+            message += (
+                f" | sonar: принято={self._sonar_sequence.received} "
+                f"потеряно={self._sonar_sequence.lost}"
+            )
+
         if stats is not None:
             message += (
                 f" | mcu: dt={stats.dt_mean_us / 1000.0:.1f} мс "
@@ -396,6 +538,7 @@ class ArduinoBridgeNode(Node):
 
         degraded = (
             self._sequence.lost > 0
+            or self._sonar_sequence.lost > 0
             or self._decoder.bad_crc_count > 0
             or self._decoder.resync_count > 0
             or (stats is not None and (stats.overruns > 0 or stats.tx_dropped > 0))

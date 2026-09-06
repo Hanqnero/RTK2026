@@ -40,6 +40,7 @@ LoopProfiler profiler;
 uint8_t tx_buffer[80];
 
 uint16_t telemetry_seq = 0;
+uint16_t sonar_seq = 0;
 uint32_t tx_frames = 0;
 uint16_t tx_dropped = 0;
 
@@ -284,6 +285,24 @@ void sendTelemetry() {
     if (pid_debug_requested) {
         sendPidDebug();
     }
+}
+
+void sendSonarSample(const SonarReading& reading) {
+    SonarSamplePayload sample;
+
+    sample.seq = sonar_seq;
+    ++sonar_seq;
+    sample.mcu_time_ms = millis();
+    sample.sensor_index = reading.sensor_index;
+
+    if (reading.distance_cm < 0.0f || isnan(reading.distance_cm)) {
+        sample.distance_mm = -1;
+    } else {
+        sample.distance_mm = saturateToInt16(
+            static_cast<int32_t>(lroundf(reading.distance_cm * 10.0f)));
+    }
+
+    emitFrame(kMsgSonarSample, &sample, sizeof(SonarSamplePayload));
 }
 
 void sendGainsReport(uint8_t wheel) {
@@ -895,6 +914,11 @@ void loop() {
     // проходит много раз, и опрос на каждой итерации не даёт пропустить
     // переход квадратуры.
     pollEncoders();
+
+    SonarReading sonar_reading;
+    if (sonarTakeCompletedReading(&sonar_reading)) {
+        sendSonarSample(sonar_reading);
+    }
 
     const uint32_t now_us = micros();
 

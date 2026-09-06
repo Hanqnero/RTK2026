@@ -1,0 +1,94 @@
+# Наложение к nav2_params.yaml, подключаемое use_sonars:=true.
+# В global_costmap сонары намеренно не добавлены: их шумные ближние
+# препятствия нужны для текущего манёвра, а не для долгоживущей карты.
+
+controller_server:
+  ros__parameters:
+    FollowPath:
+      use_collision_detection: true
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      plugins: ["obstacle_layer", "range_layer", "inflation_layer"]
+      range_layer:
+        plugin: "nav2_costmap_2d::RangeSensorLayer"
+        topics:
+          - "/sonar/front_left"
+          - "/sonar/front_right"
+          - "/sonar/left_right"
+          - "/sonar/left_left"
+          - "/sonar/right_right"
+          - "/sonar/right_left"
+        input_sensor_type: "VARIABLE"
+        clear_on_max_reading: true
+        no_readings_timeout: 0.75
+        phi: 1.2
+        inflate_cone: 1.0
+        clear_threshold: 0.2
+        mark_threshold: 0.8
+
+collision_monitor:
+  ros__parameters:
+    use_sim_time: true
+    base_frame_id: "base_footprint"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "/cmd_vel_nav"
+    cmd_vel_out_topic: "/cmd_vel"
+    state_topic: "/collision_monitor_state"
+    transform_tolerance: 0.2
+    source_timeout: 0.75
+    base_shift_correction: true
+    stop_pub_timeout: 1.0
+    enable_stamped_cmd_vel: true
+
+    # Зона окаймляет footprint и даёт примерно 0.20–0.25 м до
+    # препятствия от положения датчика. Это стартовая оценка:
+    # её надо уточнить по пути торможения на реальном покрытии.
+    polygons: ["SonarStop"]
+    SonarStop:
+      type: "polygon"
+      points: "[[0.40, 0.34], [0.40, -0.34], [-0.22, -0.34], [-0.22, 0.34]]"
+      action_type: "stop"
+      min_points: 1
+      visualize: true
+      polygon_pub_topic: "/sonar_stop_zone"
+
+    observation_sources:
+      - "sonar_front_left"
+      - "sonar_front_right"
+      - "sonar_left_right"
+      - "sonar_left_left"
+      - "sonar_right_right"
+      - "sonar_right_left"
+
+    sonar_front_left:
+      type: "range"
+      topic: "/sonar/front_left"
+      source_timeout: 0.75
+      obstacles_angle: 0.01745329252
+    sonar_front_right:
+      type: "range"
+      topic: "/sonar/front_right"
+      source_timeout: 0.75
+      obstacles_angle: 0.01745329252
+    sonar_left_right:
+      type: "range"
+      topic: "/sonar/left_right"
+      source_timeout: 0.75
+      obstacles_angle: 0.01745329252
+    sonar_left_left:
+      type: "range"
+      topic: "/sonar/left_left"
+      source_timeout: 0.75
+      obstacles_angle: 0.01745329252
+    sonar_right_right:
+      type: "range"
+      topic: "/sonar/right_right"
+      source_timeout: 0.75
+      obstacles_angle: 0.01745329252
+    sonar_right_left:
+      type: "range"
+      topic: "/sonar/right_left"
+      source_timeout: 0.75
+      obstacles_angle: 0.01745329252

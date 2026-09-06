@@ -32,14 +32,24 @@
 #define RIGHT_ENC_CLK 17
 #define RIGHT_ENC_DT 19
 
-// Сигнальные выводы дальномера. Питание он берёт с рельс 5V и GND платы,
-// а не с ножек контроллера: в момент посылки пачки датчик потребляет больше,
-// чем вывод AVR отдаёт штатно.
+// Сигнальные выводы шести HC-SR04. В каждой паре первый пин —
+// TRIG, второй — ECHO. Порядок пар совпадает с sensor_index в
+// SonarSamplePayload и с sonar_topics/sonar_frames в Arduino bridge.
 //
-// ECHO читается опросом, поэтому подойдёт любой цифровой вывод: все четыре
-// с внешними прерываниями заняты энкодерами.
-#define SONAR_TRIG_PIN 39
-#define SONAR_ECHO_PIN 41
+// Питание датчики берут с шин 5V/GND, а не с GPIO. ECHO читается
+// опросом, поэтому внешние прерывания на этих пинах не нужны.
+#define SONAR_FRONT_LEFT_TRIG_PIN 38
+#define SONAR_FRONT_LEFT_ECHO_PIN 39
+#define SONAR_FRONT_RIGHT_TRIG_PIN 40
+#define SONAR_FRONT_RIGHT_ECHO_PIN 41
+#define SONAR_LEFT_RIGHT_TRIG_PIN 30
+#define SONAR_LEFT_RIGHT_ECHO_PIN 31
+#define SONAR_LEFT_LEFT_TRIG_PIN 32
+#define SONAR_LEFT_LEFT_ECHO_PIN 33
+#define SONAR_RIGHT_RIGHT_TRIG_PIN 36
+#define SONAR_RIGHT_RIGHT_ECHO_PIN 37
+#define SONAR_RIGHT_LEFT_TRIG_PIN 34
+#define SONAR_RIGHT_LEFT_ECHO_PIN 35
 
 constexpr float kPi = 3.14159265358979323846F;
 
@@ -203,4 +213,7 @@ constexpr float kMaxPwmCommand = 255.0f * kMaxPwmDuty;
 // Дальше таймаута эхо не ждём: считаем, что препятствия в пределах дальности
 // нет. Прошивка дистанцию только измеряет и отдаёт в телеметрии.
 constexpr uint32_t kSonarEchoTimeoutUs = 25000UL;
-constexpr uint16_t kSonarSamplePeriodMs = 60;
+// Минимум между любыми двумя импульсами. Все шесть датчиков
+// опрашиваются строго по очереди: одновременные эхо-пачки дали бы
+// перекрёстные ложные срабатывания.
+constexpr uint16_t kSonarInterPingPeriodMs = 60;

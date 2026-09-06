@@ -149,6 +149,22 @@ class _FakeOdometry:
         )
 
 
+class _FakeRange:
+    ULTRASOUND = 0
+    INFRARED = 1
+
+    def __init__(self):
+        self.header = types.SimpleNamespace(
+            stamp=None,
+            frame_id="",
+        )
+        self.radiation_type = 0
+        self.field_of_view = 0.0
+        self.min_range = 0.0
+        self.max_range = 0.0
+        self.range = 0.0
+
+
 class _FakePublisher:
     def __init__(self):
         self.messages = []
@@ -276,6 +292,15 @@ def _load_bridge_module(monkeypatch):
         executors_mod,
     )
 
+    qos_mod = types.ModuleType("rclpy.qos")
+    qos_mod.qos_profile_sensor_data = object()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "rclpy.qos",
+        qos_mod,
+    )
+
     geometry_msg_mod = types.ModuleType("geometry_msgs.msg")
     geometry_msg_mod.TransformStamped = _FakeTransformStamped
     geometry_msg_mod.TwistStamped = _FakeTwistStamped
@@ -295,6 +320,16 @@ def _load_bridge_module(monkeypatch):
         "nav_msgs",
         "msg",
         nav_msg_mod,
+    )
+
+    sensor_msg_mod = types.ModuleType("sensor_msgs.msg")
+    sensor_msg_mod.Range = _FakeRange
+
+    _register_package(
+        monkeypatch,
+        "sensor_msgs",
+        "msg",
+        sensor_msg_mod,
     )
 
     tf2_ros_mod = types.ModuleType("tf2_ros")
@@ -585,6 +620,7 @@ def _make_reading_node(module, transport):
     node._transport = transport
     node._decoder = protocol.FrameDecoder()
     node._sequence = protocol.SequenceTracker()
+    node._sonar_sequence = protocol.SequenceTracker()
     node._latest_stats = None
 
     return node
@@ -705,6 +741,59 @@ def test_read_telemetry_stores_stats_packet(monkeypatch):
     assert node._latest_stats.free_ram_bytes == 5300
 
 
+@pytest.mark.parametrize(
+    ("sensor_index", "distance_mm", "expected_range"),
+    [
+        (0, 735, 0.735),
+        # -1 — нет эха: RangeSensorLayer должен очистить конус.
+        (5, -1, 4.0),
+    ],
+)
+def test_read_telemetry_publishes_indexed_sonar_range(
+    monkeypatch,
+    sensor_index,
+    distance_mm,
+    expected_range,
+):
+    module = _load_bridge_module(monkeypatch)
+    protocol = module._test_protocol_module
+
+    payload = protocol.SONAR_SAMPLE_STRUCT.pack(
+        17,
+        123456,
+        sensor_index,
+        distance_mm,
+    )
+    transport = _FakeTransport()
+    transport.read_bytes = protocol.build_frame(
+        protocol.MSG_SONAR_SAMPLE,
+        payload,
+    )
+
+    node = _make_reading_node(module, transport)
+    node._publish_odometry = lambda packet: None
+    node._sonar_frames = module.ArduinoBridgeNode.DEFAULT_SONAR_FRAMES
+    node._sonar_field_of_view_rad = math.radians(15.0)
+    node._sonar_min_range_m = 0.02
+    node._sonar_max_range_m = 4.0
+    node._sonar_publishers = tuple(_FakePublisher() for _ in range(6))
+    node.get_clock = lambda: _FakeClock(2_000_000_000)
+    node.get_logger = lambda: _FakeLogger()
+
+    node._read_telemetry()
+
+    assert node._sonar_sequence.received == 1
+    assert len(node._sonar_publishers[sensor_index].messages) == 1
+    message = node._sonar_publishers[sensor_index].messages[0]
+    assert message.header.frame_id == node._sonar_frames[sensor_index]
+    assert message.header.stamp == {"nanoseconds": 2_000_000_000}
+    assert message.radiation_type == _FakeRange.ULTRASOUND
+    assert message.field_of_view == pytest.approx(math.radians(15.0))
+    assert message.min_range == pytest.approx(0.02)
+    assert message.max_range == pytest.approx(4.0)
+    assert message.range == pytest.approx(expected_range)
+
+
 # проверяет уровень отчёта о состоянии линка
 @pytest.mark.parametrize(
     "lost_packets, expects_warning",
@@ -726,6 +815,7 @@ def test_report_link_health_warns_only_on_degradation(
     node = module.ArduinoBridgeNode.__new__(module.ArduinoBridgeNode)
     node._decoder = protocol.FrameDecoder()
     node._sequence = protocol.SequenceTracker()
+    node._sonar_sequence = protocol.SequenceTracker()
     node._sequence.received = 100
     node._sequence.lost = lost_packets
     node._latest_stats = None
@@ -747,6 +837,7 @@ def test_report_link_health_warns_when_silent(monkeypatch):
     node = module.ArduinoBridgeNode.__new__(module.ArduinoBridgeNode)
     node._decoder = protocol.FrameDecoder()
     node._sequence = protocol.SequenceTracker()
+    node._sonar_sequence = protocol.SequenceTracker()
     node._latest_stats = None
     node.get_logger = lambda: logger
 

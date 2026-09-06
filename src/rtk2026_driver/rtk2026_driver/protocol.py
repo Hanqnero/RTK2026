@@ -58,6 +58,7 @@ MSG_TELEMETRY = 0x81
 MSG_PID_DEBUG = 0x82
 MSG_STATS = 0x83
 MSG_GAINS_REPORT = 0x84
+MSG_SONAR_SAMPLE = 0x86
 
 # Флаг любой команды движения: пока он взведён, прошивка добавляет к
 # телеметрии кадр внутренностей регуляторов.
@@ -103,6 +104,7 @@ GAINS_REPORT_STRUCT = struct.Struct("<BfffffB")
 TELEMETRY_STRUCT = struct.Struct("<HIIhhiiffffhhfffffhBB")
 PID_DEBUG_STRUCT = struct.Struct("<H16f")
 STATS_STRUCT = struct.Struct("<BIIIIIIIIIHHHHHH")
+SONAR_SAMPLE_STRUCT = struct.Struct("<HIBh")
 
 # Проверки выполняются при импорте. Если разметка разойдётся с прошивкой,
 # нода упадёт сразу, а не будет молча публиковать мусор в качестве одометрии.
@@ -115,6 +117,7 @@ assert GAINS_REPORT_STRUCT.size == 22, "GainsReportPayload разошёлся с
 assert TELEMETRY_STRUCT.size == 66, "TelemetryPayload разошёлся с прошивкой"
 assert PID_DEBUG_STRUCT.size == 66, "PidDebugPayload разошёлся с прошивкой"
 assert STATS_STRUCT.size == 49, "StatsPayload разошёлся с прошивкой"
+assert SONAR_SAMPLE_STRUCT.size == 9, "SonarSamplePayload разошёлся с прошивкой"
 
 
 def crc16_ccitt(data: bytes, seed: int = 0xFFFF) -> int:
@@ -411,6 +414,25 @@ class StatsPacket:
     free_ram_bytes: int
 
 
+@dataclass(frozen=True, slots=True)
+class SonarSamplePacket:
+    """Один завершённый замер одного из шести сонаров.
+
+    Отдельный кадр не меняет разметку штатной телеметрии v2 и
+    позволяет MCU отдавать замер сразу после эха, а не ждать
+    следующего пакета одометрии.
+    """
+
+    #: Общий счётчик кадров сонаров по модулю 2^16.
+    seq: int
+    #: Время MCU на момент завершения замера.
+    mcu_time_ms: int
+    #: Индекс в массивах ``sonar_topics`` и ``sonar_frames``.
+    sensor_index: int
+    #: Миллиметры; -1 означает, что эхо до ``max_range`` нет.
+    distance_mm: int
+
+
 def decode_telemetry(payload: bytes) -> TelemetryPacket:
     """Разобрать полезную нагрузку кадра ``MSG_TELEMETRY``.
 
@@ -427,6 +449,15 @@ def decode_stats(payload: bytes) -> StatsPacket:
     """
 
     return StatsPacket(*STATS_STRUCT.unpack(payload))
+
+
+def decode_sonar_sample(payload: bytes) -> SonarSamplePacket:
+    """Разобрать полезную нагрузку ``MSG_SONAR_SAMPLE``.
+
+    :raises struct.error: если длина нагрузки не совпадает с разметкой.
+    """
+
+    return SonarSamplePacket(*SONAR_SAMPLE_STRUCT.unpack(payload))
 
 
 

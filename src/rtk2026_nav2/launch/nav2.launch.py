@@ -31,6 +31,14 @@ Nav2 действием ``navigate_through_poses``, поэтому своей н
 ``controller_server`` падает на активации, а ``bt_navigator`` остаётся
 inactive. Задержка ждёт появления TF, поэтому её величина зависит от способа
 запуска робота и задаётся аргументом.
+
+Сонары
+------
+
+Аргумент ``use_sonars`` добавляет RangeSensorLayer в локальную костмапу
+и ставит Collision Monitor между Nav2 и приводом. При этом серверы
+движения пишут в ``/cmd_vel_nav``, а защищённая команда выходит
+из Collision Monitor в штатный ``/cmd_vel``.
 """
 
 from launch import LaunchDescription
@@ -70,15 +78,37 @@ def _stack(context, *_args, **_kwargs) -> list:
     # должен либо отсутствовать, либо быть непустым, а значением его не
     # выключить — см. config/keepout_filter.yaml.
     use_keepout = LaunchConfiguration("use_keepout").perform(context).lower()
+    use_sonars = LaunchConfiguration("use_sonars").perform(context).lower()
     params: list = [configured_params]
     if use_keepout in ("true", "1"):
         params.append(LaunchConfiguration("keepout_params_file"))
+    if use_sonars in ("true", "1"):
+        configured_sonar_params = RewrittenYaml(
+            source_file=LaunchConfiguration("sonar_params_file"),
+            root_key="",
+            param_rewrites={
+                "use_sim_time": LaunchConfiguration("use_sim_time"),
+            },
+            convert_types=True,
+        )
+        params.append(configured_sonar_params)
 
     # Ремапы по серверу. controller_server подписан на имя odom, менять его
     # параметром нельзя, поэтому одометрия приходит к нему только так.
     remappings = {
         "controller_server": [("odom", LaunchConfiguration("odom_topic"))],
     }
+
+    lifecycle_nodes = list(LIFECYCLE_NODES)
+    if use_sonars in ("true", "1"):
+        # Любая команда Nav2 проходит через быструю защиту,
+        # которая смотрит Range напрямую, не дожидаясь костмапы.
+        remappings["controller_server"].append(("cmd_vel", "/cmd_vel_nav"))
+        remappings["behavior_server"] = [("cmd_vel", "/cmd_vel_nav")]
+        lifecycle_nodes.insert(
+            -1,
+            ("nav2_collision_monitor", "collision_monitor"),
+        )
 
     servers = [
         Node(
@@ -89,7 +119,7 @@ def _stack(context, *_args, **_kwargs) -> list:
             parameters=params,
             remappings=remappings.get(executable, []),
         )
-        for package, executable in LIFECYCLE_NODES
+        for package, executable in lifecycle_nodes
     ]
 
     manager = TimerAction(
@@ -109,6 +139,9 @@ def _stack(context, *_args, **_kwargs) -> list:
                         # Ноль отключает bond: серверы этого стека переживают
                         # короткие пропадания без перезапуска.
                         "bond_timeout": 0.0,
+                        "node_names": [
+                            executable for _, executable in lifecycle_nodes
+                        ],
                     },
                 ],
             )
@@ -183,6 +216,24 @@ def generate_launch_description() -> LaunchDescription:
                     "Включить фильтр запретных зон в костмапах. Требует "
                     "запущенного vector_object_server, иначе фильтр будет "
                     "ждать информацию о фильтре и ничего не запретит."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "sonar_params_file",
+                default_value=PathJoinSubstitution(
+                    [share, "config", "sonar_navigation.yaml"]
+                ),
+                description=(
+                    "Наложение RangeSensorLayer и Collision Monitor "
+                    "для шести сонаров."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "use_sonars",
+                default_value="false",
+                description=(
+                    "Подключить шесть Range-топиков к локальной "
+                    "костмапе и пустить cmd_vel через Collision Monitor."
                 ),
             ),
             DeclareLaunchArgument(
