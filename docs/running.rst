@@ -228,7 +228,7 @@ pose graph:
 
    export DISPLAY
    export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
-   docker compose -f pi/docker/docker-compose.pi.yml up -d --build --force-recreate ros
+   docker compose -f pi/docker/docker-compose.pi.yml up -d --no-build --force-recreate ros
 
 Затем запустите launch внутри уже созданного контейнера:
 

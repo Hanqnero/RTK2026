@@ -3,7 +3,8 @@
 #   docker compose -f pi/docker/docker-compose.pi.yml up link        # ретранслятор порта
 #   docker compose -f pi/docker/docker-compose.pi.yml run --rm build # собрать прошивку
 #   docker compose -f pi/docker/docker-compose.pi.yml run --rm flash # собрать и прошить
-#   docker compose -f pi/docker/docker-compose.pi.yml up -d --build ros # ROS2: hardware stack
+#   pi/tools/deploy_to_pi.sh                              # sync + restart ROS
+#   REBUILD_IMAGES=1 pi/tools/deploy_to_pi.sh             # rebuild dependencies
 #
 # ВАЖНО: link, flash и ros не могут работать одновременно - все три
 # конкурируют за serial-порт /dev/arduino. Перед прошивкой или запуском ros
@@ -272,7 +273,7 @@ services:
   # and localization stack.
   #
   #     docker compose -f pi/docker/docker-compose.pi.yml stop camera
-  #     docker compose -f pi/docker/docker-compose.pi.yml up -d --build perception
+  #     SERVICES=perception pi/tools/deploy_to_pi.sh
   #     docker logs -f rtk2026-perception
   perception:
     build:

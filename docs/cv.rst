@@ -13,7 +13,7 @@ ONNX-модель YOLO через ONNX Runtime и публикует не изо
 .. code-block:: bash
 
    docker compose -f pi/docker/docker-compose.pi.yml stop camera
-   docker compose -f pi/docker/docker-compose.pi.yml up -d --build perception
+   SERVICES=perception pi/tools/deploy_to_pi.sh
    docker logs -f rtk2026-perception
 
 Сервис запускает ``rtk2026_cv/sign_detection.launch.py`` с профилем
