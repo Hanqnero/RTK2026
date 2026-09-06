@@ -42,6 +42,8 @@ COPY requirement.txt /tmp/requirement.txt
 RUN python3 -m venv --system-site-packages /opt/pc-tools-venv && \
     /opt/pc-tools-venv/bin/pip install --no-cache-dir -r /tmp/requirement.txt
 
+COPY --chmod=755 docker/teleop_keyboard /usr/local/bin/teleop_keyboard
+
 WORKDIR /work
 
 ENV PYTHONUNBUFFERED=1
@@ -50,8 +52,10 @@ RUN install -d -m 700 /tmp/runtime-root
 
 # Ошибка сборки вместо ошибки уже на ноутбуке.
 RUN source /opt/ros/jazzy/setup.bash && \
-    for tool in rviz2 rqt rqt_graph teleop_twist_keyboard; do \
+    for tool in rviz2 rqt rqt_graph teleop_keyboard; do \
         command -v "$tool" >/dev/null || { echo "$tool не установился" >&2; exit 1; }; \
-    done
+    done && \
+    ros2 pkg executables teleop_twist_keyboard | \
+        grep -qx 'teleop_twist_keyboard teleop_twist_keyboard'
 
 CMD ["bash"]

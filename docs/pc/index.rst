@@ -51,12 +51,14 @@ IPC, поэтому
        python3 tools/check_encoders.py --port $RTK_LINK --auto --no-plot --log records/enc.csv
 
 Пока работает ROS-стек на Pi, GUI запускается отдельными
-одноразовыми контейнерами:
+одноразовыми контейнерами. Сервис задаёт ``RVIZ_CONFIG`` на конфигурацию
+``real_slam`` с ``Fixed Frame: map``, картой, лидаром, EKF-одометрией,
+TF и моделью робота:
 
 .. code-block:: bash
 
    docker compose -f pc/docker/docker-compose.tools.yml run --rm tools \
-       rviz2 -d /work/rviz/rtk2026_real_robot.rviz
+       bash -lc 'rviz2 -d "$RVIZ_CONFIG"'
    docker compose -f pc/docker/docker-compose.tools.yml run --rm tools rqt
    docker compose -f pc/docker/docker-compose.tools.yml run --rm tools rqt_graph
 
@@ -64,13 +66,18 @@ IPC, поэтому
 
 .. code-block:: bash
 
-   docker compose -f pc/docker/docker-compose.tools.yml run --rm tools \
-       ros2 run teleop_twist_keyboard teleop_twist_keyboard \
-       --ros-args -p stamped:=true -p frame_id:=base_footprint \
-       --remap cmd_vel:=/cmd_vel
+   docker compose -f pc/docker/docker-compose.tools.yml run --rm tools teleop_keyboard
 
-Перед движением проверьте тип ``/cmd_vel``. Для получателя
-``geometry_msgs/msg/Twist`` уберите параметры ``stamped`` и ``frame_id``.
+Команда по умолчанию публикует ``geometry_msgs/msg/TwistStamped`` в
+``/cmd_vel`` с ``frame_id=base_footprint`` — это интерфейс реального робота.
+Топик и формат можно переопределить без изменения образа:
+
+.. code-block:: bash
+
+   TELEOP_TOPIC=/manual/cmd_vel docker compose \
+       -f pc/docker/docker-compose.tools.yml run --rm tools teleop_keyboard
+   TELEOP_STAMPED=false docker compose \
+       -f pc/docker/docker-compose.tools.yml run --rm tools teleop_keyboard
 
 Если Qt пишет ``could not connect to display``, проверьте, что
 ``DISPLAY`` не пуст и файл ``XAUTHORITY`` существует и читается.

@@ -90,7 +90,10 @@ FROM ros_slam AS lidar_driver
 
 # Подмодуль зафиксирован в репозитории на проверенный commit с
 # поддержкой RPLIDAR C1. Сборка образа не ходит в GitHub и получает
-# те же исходники на Pi и на машине разработчика.
+# те же исходники на Pi и на машине разработчика. package.xml копируется
+# отдельно, чтобы сборка сразу упала при неинициализированном подмодуле,
+# даже если BuildKit сохранил старый слой с COPY всего каталога.
+COPY vendor/sllidar_ros2/package.xml /opt/vendor_ws/src/sllidar_ros2/package.xml
 COPY vendor/sllidar_ros2/ /opt/vendor_ws/src/sllidar_ros2/
 
 # Драйвер собирается без правок.

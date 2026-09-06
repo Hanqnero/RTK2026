@@ -5,6 +5,8 @@
 #
 #   docker compose -f pc/docker/docker-compose.tools.yml run --rm tools \
 #       python3 tools/check_encoders.py --port $RTK_LINK --auto --no-plot
+#   docker compose -f pc/docker/docker-compose.tools.yml run --rm tools \
+#       teleop_keyboard
 #
 # На Linux окна RViz/RQt и инструментов выводятся в X11 хоста.
 # На macOS нужен XQuartz, см. docs/pc/index.rst.
@@ -39,6 +41,14 @@ services:
       RMW_IMPLEMENTATION: rmw_fastrtps_cpp
       ROS_DOMAIN_ID: "0"
       ROS_LOCALHOST_ONLY: "0"
+      # Вид картографирования реального робота: Fixed Frame=map,
+      # /map, /scan, /odometry/filtered, TF и RobotModel.
+      RVIZ_CONFIG: /work/rviz/rtk2026_real_robot.rviz
+      # teleop_keyboard по умолчанию публикует контракт реального робота:
+      # geometry_msgs/TwistStamped в /cmd_vel.
+      TELEOP_STAMPED: ${TELEOP_STAMPED:-true}
+      TELEOP_FRAME_ID: ${TELEOP_FRAME_ID:-base_footprint}
+      TELEOP_TOPIC: ${TELEOP_TOPIC:-/cmd_vel}
     network_mode: host
     # Fast DDS в host network выбирает shared memory, поэтому
     # /dev/shm должен совпадать с другими host-network ROS контейнерами.

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Run keyboard teleoperation with the RTK2026 /cmd_vel contract.
+
+set -euo pipefail
+
+set +u
+source /opt/ros/jazzy/setup.bash
+set -u
+
+exec ros2 run teleop_twist_keyboard teleop_twist_keyboard \
+    --ros-args \
+    -p stamped:="${TELEOP_STAMPED:-true}" \
+    -p frame_id:="${TELEOP_FRAME_ID:-base_footprint}" \
+    --remap cmd_vel:="${TELEOP_TOPIC:-/cmd_vel}" \
+    "$@"

@@ -33,6 +33,15 @@ PI_ROOT="RTK2026"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REMOTE="${PI_USER}@${PI_HOST}"
 
+# Не позволяем rsync --delete превратить исправный vendor-каталог на Pi
+# в пустой, если локальный Git-подмодуль забыли инициализировать.
+if [ ! -f "${ROOT}/vendor/sllidar_ros2/package.xml" ]; then
+    printf '%s\n' \
+        'vendor/sllidar_ros2 не инициализирован.' \
+        'Выполните: git submodule update --init --recursive vendor/sllidar_ros2' >&2
+    exit 1
+fi
+
 # Пакеты ROS, которые робот действительно собирает. Список обязан
 # совпадать с --packages-select в pi/docker/Dockerfile.ros: иначе сборка
 # упадёт на отсутствующем пакете либо соберёт лишнее.
