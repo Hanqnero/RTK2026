@@ -1,0 +1,29 @@
+FROM arm64v8/ros:jazzy
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-colcon-common-extensions \
+    ros-jazzy-nav2-costmap-2d \
+    ros-jazzy-nav2-lifecycle-manager \
+    ros-jazzy-nav2-map-server \
+    ros-jazzy-nav2-route \
+    ros-jazzy-nav2-rviz-plugins \
+    ros-jazzy-vision-msgs \
+    ros-jazzy-rviz2 \
+    xvfb \
+    x11vnc \
+    fluxbox \
+    novnc \
+    websockify \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LIBGL_ALWAYS_SOFTWARE=1
+
+WORKDIR /workspace
+
+COPY docker/scripts /scripts
+RUN chmod +x /scripts/*.sh
+
+WORKDIR /workspace
+COPY src /workspace/src
+RUN . /opt/ros/jazzy/setup.sh && \
+    colcon build --symlink-install

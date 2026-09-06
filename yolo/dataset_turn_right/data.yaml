@@ -1,0 +1,11 @@
+# Собрано samannot_to_yolo.py из выгрузки SAMannot.
+#
+# Порядок классов обязан совпадать с class_id_to_label в
+# src/rtk2026_cv/config/onnx_sign_detector.yaml: детектор читает
+# идентификатор по позиции, и перестановка молча сломает
+# сопоставление знака с командой маршрута.
+path: /Users/kamiliskhakov/VS Code Project/RTK2026/yolo/dataset_turn_right
+train: images/train
+val: images/val
+nc: 1
+names: ['turn_right']

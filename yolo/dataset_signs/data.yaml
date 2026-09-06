@@ -1,0 +1,19 @@
+# Собрано mirror_class.py.
+#
+# turn_left получен отражением turn_right: знаки
+# зеркальны, поэтому отражённый кадр визуально верен. Отражается
+# при этом вся сцена, и модель может связать класс с зеркальностью
+# обстановки, а не со стрелкой. Годится для проверки схемы; для
+# рабочего датасета второй класс надо снять отдельно.
+#
+# ВАЖНО: обучать с fliplr: 0.0. Отражение как аугментация здесь
+# уничтожает именно тот признак, ради которого датасет и собран.
+#
+# Порядок классов совпадает с class_id_to_label в
+# src/rtk2026_cv/config/onnx_sign_detector.yaml: пустые классы
+# оставлены намеренно, чтобы модель подключалась без переназначения.
+path: /Users/kamiliskhakov/VS Code Project/RTK2026/yolo/dataset_signs
+train: images/train
+val: images/val
+nc: 8
+names: ['bus_stop', 'move_forward', 'no_turn_left', 'no_turn_right', 'obstacle', 'parking_spot', 'turn_left', 'turn_right']

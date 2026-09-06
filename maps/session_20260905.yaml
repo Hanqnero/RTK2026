@@ -1,0 +1,7 @@
+image: session_20260905.pgm
+mode: trinary
+resolution: 0.020
+origin: [-4.729, -4.953, 0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196
