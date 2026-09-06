@@ -51,6 +51,23 @@ class OnnxSignDetectorNode(Node):
         self.declare_parameter("log_every_n_frames", 30)
         self.declare_parameter("debug_overlay", True)
         self.declare_parameter("stop_duration_sec", 2.0)
+        # ~ Каскад лево/право.
+        #
+        # Основная модель почти не различает turn_left и turn_right - на
+        # реальном кадре разрыв уверенности был 46 % против 43 %, монетка.
+        # Причина в обучении: fliplr: 0.5 половину кадров отражал, оставляя
+        # прежний класс, и сеть выучила игнорировать направление стрелки.
+        #
+        # Второй, отдельно обученный ONNX смотрит только на вырезанную
+        # область знака и обучен без fliplr - см. yolo/finetune_head.py.
+        # Пустой путь выключает проверку: старые конфиги без cascade_model_path
+        # продолжают работать как раньше, только с прежней слабостью.
+        self.declare_parameter("cascade_model_path", "")
+        # Насколько увереннее должен быть каскад, чтобы его вердикту вообще
+        # доверять. Если разрыв между left и right внутри каскада меньше
+        # этого порога, каскад тоже не уверен, и решение основной модели
+        # трогать не за что.
+        self.declare_parameter("cascade_min_margin", 0.10)
         self.declare_parameter(
             "class_id_to_label",
             [
@@ -86,6 +103,7 @@ class OnnxSignDetectorNode(Node):
         self._publish_empty = bool(self.get_parameter("publish_empty").value)
         self._debug_overlay = bool(self.get_parameter("debug_overlay").value)
         self._stop_duration_sec = float(self.get_parameter("stop_duration_sec").value)
+        self._cascade_min_margin = float(self.get_parameter("cascade_min_margin").value)
         self._last_log_signature: Optional[tuple[str, str, bool]] = None
         self._last_inference_ms = 0.0
         self._last_source_age_ms: Optional[float] = None
@@ -122,6 +140,27 @@ class OnnxSignDetectorNode(Node):
             )
             self._net = cv2.dnn.readNetFromONNX(str(model_path))
             self.get_logger().info("Using OpenCV DNN backend")
+
+        # Каскад грузится отдельной сессией: он маленький (nc=8, но реально
+        # обучены только два класса) и падать вместе с основной моделью не
+        # должен - при любой проблеме с файлом просто отключается.
+        self._cascade_session = None
+        self._cascade_input_name = None
+        cascade_path_text = str(self.get_parameter("cascade_model_path").value).strip()
+        if cascade_path_text and ort is not None:
+            cascade_path = Path(cascade_path_text)
+            if cascade_path.exists():
+                self._cascade_session = ort.InferenceSession(
+                    str(cascade_path),
+                    providers=["CPUExecutionProvider"],
+                )
+                self._cascade_input_name = self._cascade_session.get_inputs()[0].name
+                self.get_logger().info(f"Каскад лево/право: {cascade_path}")
+            else:
+                self.get_logger().warning(
+                    f"cascade_model_path указан, но файл не найден: {cascade_path} - "
+                    "проверка лево/право отключена"
+                )
 
         image_topic = str(self.get_parameter("image_topic").value)
         output_topic = str(self.get_parameter("output_topic").value)
@@ -201,6 +240,14 @@ class OnnxSignDetectorNode(Node):
                 best_stop = self._pick_better(best_stop, candidate)
             else:
                 best_route = self._pick_better(best_route, candidate)
+
+        # Каскад решает только уже принятый спор основной модели -
+        # left_only и right_only это единственные команды, за которые
+        # отвечают классы 6 и 7 в текущей конфигурации. Найти их по
+        # маршрутной команде, а не по числу класса: так проверка не
+        # привязана к тому, что turn_left и turn_right - это именно 6 и 7.
+        if best_route is not None and best_route.command in ("left_only", "right_only"):
+            best_route = self._apply_cascade(best_route, image_bgr)
 
         if not self._publish_empty and best_route is None and best_stop is None and best_bus is None:
             return
@@ -392,6 +439,87 @@ class OnnxSignDetectorNode(Node):
             confidence=confidence,
             box_area=area,
             box=(x1, y1, x2, y2),
+        )
+
+    def _apply_cascade(self, route: Candidate, image_bgr: np.ndarray) -> Candidate:
+        """Перепроверить left_only/right_only вторым ONNX на целом кадре.
+
+        Каскад намеренно получает весь кадр, а не вырез вокруг рамки основной
+        модели. Проверено эмпирически: та же модель на плотном вырезе с полем
+        20% давала на порядок меньшую уверенность и путала классы - обучающие
+        кадры шли из SAM2-разметки видео целиком, сцена вокруг знака входит в
+        то, что модель видела, и вырез сдвигает масштаб знака за пределы
+        распределения обучения. Кормить её тем же кадром, что и основную
+        модель, дороже по вычислениям, но единственное, что действительно
+        работает без переобучения под вырез.
+
+        Возвращает route как есть, если каскад выключен, файл не нашёлся при
+        старте или разрыв между left и right внутри каскада меньше
+        cascade_min_margin: в этом случае каскад тоже не уверен, и подменять
+        решение не на что.
+        """
+
+        if self._cascade_session is None:
+            return route
+
+        left_class_index = next(
+            (idx for idx, cmd in self._class_id_to_route_command.items() if cmd == "left_only"),
+            None,
+        )
+        right_class_index = next(
+            (idx for idx, cmd in self._class_id_to_route_command.items() if cmd == "right_only"),
+            None,
+        )
+        if left_class_index is None or right_class_index is None:
+            return route
+
+        # Тот же прямой resize без letterbox, что и у основной модели: обе
+        # обучены на этом соглашении, менять его здесь означало бы кормить
+        # каскад искажением, которого он не видел при обучении.
+        blob = cv2.dnn.blobFromImage(
+            image_bgr,
+            scalefactor=1.0 / 255.0,
+            size=(self._input_size, self._input_size),
+            swapRB=True,
+            crop=False,
+        )
+        raw = self._cascade_session.run(None, {self._cascade_input_name: blob})[0]
+        if raw.ndim == 3 and raw.shape[0] == 1:
+            raw = raw[0]
+        if raw.shape[0] < raw.shape[1]:
+            raw = raw.T
+        if raw.shape[1] <= max(left_class_index, right_class_index) + 4:
+            return route
+
+        # Максимум по всем якорям отдельно для left и right, а не argmax
+        # одного якоря: устойчивее к тому, что лучший якорь для одного
+        # класса может не совпасть с лучшим якорем для другого.
+        score_left = float(raw[:, 4 + left_class_index].max())
+        score_right = float(raw[:, 4 + right_class_index].max())
+
+        if abs(score_left - score_right) < self._cascade_min_margin:
+            return route
+
+        cascade_says_left = score_left > score_right
+        cascade_confidence = score_left if cascade_says_left else score_right
+        cascade_command = "left_only" if cascade_says_left else "right_only"
+
+        if cascade_command == route.command:
+            return route
+
+        cascade_class_index = left_class_index if cascade_says_left else right_class_index
+        self.get_logger().info(
+            f"Каскад поменял вердикт: {route.command} -> {cascade_command} "
+            f"(left={score_left:.2f} right={score_right:.2f}, "
+            f"была уверенность основной модели {route.confidence:.2f})"
+        )
+        return Candidate(
+            class_index=cascade_class_index,
+            class_label=self._class_id_to_label.get(cascade_class_index, cascade_command),
+            command=cascade_command,
+            confidence=cascade_confidence,
+            box_area=route.box_area,
+            box=route.box,
         )
 
     @staticmethod

@@ -9,6 +9,7 @@ def generate_launch_description() -> LaunchDescription:
     share = FindPackageShare("rtk2026_cv")
     params_file = LaunchConfiguration("params_file")
     model_path = LaunchConfiguration("model_path")
+    cascade_model_path = LaunchConfiguration("cascade_model_path")
 
     return LaunchDescription(
         [
@@ -24,12 +25,26 @@ def generate_launch_description() -> LaunchDescription:
                 default_value=PathJoinSubstitution([share, "best.onnx"]),
                 description="Installed ONNX model.",
             ),
+            DeclareLaunchArgument(
+                "cascade_model_path",
+                default_value=PathJoinSubstitution([share, "turn_lr_cascade.onnx"]),
+                description=(
+                    "Второй ONNX для перепроверки left_only/right_only. "
+                    "Пусто выключает каскад."
+                ),
+            ),
             Node(
                 package="rtk2026_cv",
                 executable="onnx_sign_detector",
                 name="onnx_sign_detector",
                 output="screen",
-                parameters=[params_file, {"model_path": model_path}],
+                parameters=[
+                    params_file,
+                    {
+                        "model_path": model_path,
+                        "cascade_model_path": cascade_model_path,
+                    },
+                ],
             )
         ]
     )
