@@ -5,9 +5,9 @@
 # ------------------
 #
 # Роботу нужна малая часть репозитория. Симуляционные миры, документация,
-# датасеты YOLO и пакеты зрения с навигацией на нём не запускаются, но
+# датасеты YOLO и пакеты симуляции с навигацией на нём не запускаются, но
 # занимают место и путаются под ногами при разборе того, что там лежит.
-# Здесь отправляется ровно то, что робот исполняет.
+# Пакет rtk2026_cv и его ONNX-модель отправляются для perception-сервиса.
 #
 # Что НЕ трогается
 # ----------------
@@ -42,9 +42,8 @@ if [ ! -f "${ROOT}/vendor/sllidar_ros2/package.xml" ]; then
     exit 1
 fi
 
-# Пакеты ROS, которые робот действительно собирает. Список обязан
-# совпадать с --packages-select в pi/docker/Dockerfile.ros: иначе сборка
-# упадёт на отсутствующем пакете либо соберёт лишнее.
+# Пакеты основного robot workspace. Список обязан совпадать с
+# --packages-select в pi/docker/start_robot_workspace.sh.
 ROS_PACKAGES=(
     rtk2026_driver
     rtk2026_description
@@ -54,6 +53,14 @@ ROS_PACKAGES=(
     rtk2026_bringup
     rtk2026_interfaces
 )
+
+# Отдельный perception-образ собирает этот пакет сам. Исходники всё равно
+# должны приехать на Pi 5 как Docker build context и bind mount.
+PERCEPTION_PACKAGES=(
+    rtk2026_cv
+)
+
+SYNC_PACKAGES=("${ROS_PACKAGES[@]}" "${PERCEPTION_PACKAGES[@]}")
 
 # Каталоги, которые едут целиком.
 #
@@ -101,7 +108,7 @@ for tree in "${TREES[@]}"; do
         "${ROOT}/${tree}/" "${REMOTE}:${PI_ROOT}/${tree}/"
 done
 
-for package in "${ROS_PACKAGES[@]}"; do
+for package in "${SYNC_PACKAGES[@]}"; do
     printf '  src/%s\n' "${package}"
     rsync -az --delete "${EXCLUDES[@]}" \
         "${ROOT}/src/${package}/" "${REMOTE}:${PI_ROOT}/src/${package}/"
@@ -115,7 +122,7 @@ done
 if [ "${CLEAN:-0}" = "1" ]; then
     printf '\nуборка лишнего\n'
 
-    keep_pattern="$(printf '%s\\|' "${ROS_PACKAGES[@]}")"
+    keep_pattern="$(printf '%s\\|' "${SYNC_PACKAGES[@]}")"
     keep_pattern="${keep_pattern%\\|}"
 
     ssh "${REMOTE}" "

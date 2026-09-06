@@ -172,6 +172,7 @@ class CityNavNode(Node):
         # следующей. Без него далёкий знак приписался бы не туда, поэтому при
         # нуле детекции не читаются вовсе, и маршрут идёт по покрытию.
         detection_topic = str(self._value("detection_topic"))
+        self._last_detection_time_s: float | None = None
         self._detections = (
             self.create_subscription(
                 DrivingDetection, detection_topic, self._on_detection, 10
@@ -199,7 +200,19 @@ class CityNavNode(Node):
         self._updater.add(RouteTask(self._controller, self._goals, self._manual))
         self._updater.add(DecisionTask(self._controller))
         self._updater.add(SignMemoryTask(self._memory, self._table))
-        self._updater.add(DetectionTask(self, self._latch, detection_topic))
+        self._updater.add(
+            DetectionTask(
+                self,
+                self._latch,
+                detection_topic,
+                last_message_age_s=lambda: (
+                    None
+                    if self._last_detection_time_s is None
+                    else max(0.0, self._now_s() - self._last_detection_time_s)
+                ),
+                timeout_s=float(self._value("detection_timeout_s")),
+            )
+        )
 
         if self._blocked:
             logger.error(f"движение не начато: {self._blocked}")
@@ -322,6 +335,8 @@ class CityNavNode(Node):
         Порог принадлежности и выбор лучшей детекции — забота накопителя;
         здесь только распаковка.
         """
+        self._last_detection_time_s = self._now_s()
+
         if message.route_command:
             self._latch.observe_route(
                 message.route_command,

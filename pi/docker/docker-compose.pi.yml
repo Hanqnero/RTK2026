@@ -254,3 +254,47 @@ services:
         -p video_device:=/dev/video0
         -p image_size:="[640,480]"
         -p camera_frame_id:=camera_optical_frame
+
+  # Camera and YOLO sign detection on the main Pi 5.
+  #
+  # This service replaces `camera` during autonomous runs: both services own
+  # /dev/video0 and must not be started together. Keeping perception outside
+  # `ros` means a missing camera or broken model cannot take down the hardware
+  # and localization stack.
+  #
+  #     docker compose -f pi/docker/docker-compose.pi.yml stop camera
+  #     docker compose -f pi/docker/docker-compose.pi.yml up -d --build perception
+  #     docker logs -f rtk2026-perception
+  perception:
+    build:
+      context: ../..
+      dockerfile: pi/docker/Dockerfile.perception
+    image: rtk2026-perception-pi5
+    container_name: rtk2026-perception
+    network_mode: host
+    ipc: host
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_DOMAIN_ID: "0"
+      ROS_LOCALHOST_ONLY: "0"
+      RCUTILS_LOGGING_BUFFERED_STREAM: "0"
+    volumes:
+      # Python modules and launch/config files are symlink-installed, so edits
+      # are picked up after restarting the service. Rebuild when messages or
+      # dependencies change.
+      - ../../src/rtk2026_interfaces:/workspace/src/rtk2026_interfaces
+      - ../../src/rtk2026_cv:/workspace/src/rtk2026_cv
+      - /etc/localtime:/etc/localtime:ro
+    devices:
+      - "/dev/video0:/dev/video0"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 10s
+    command:
+      - bash
+      - -lc
+      - >-
+        source /opt/ros/jazzy/setup.bash &&
+        source /workspace/install/setup.bash &&
+        ros2 launch rtk2026_cv sign_detection.launch.py
+        params_file:=/workspace/install/rtk2026_cv/share/rtk2026_cv/config/sign_detection_pi5.yaml

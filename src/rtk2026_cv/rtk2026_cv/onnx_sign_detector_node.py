@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Direct ONNX traffic-sign detector for simulation camera topics."""
+"""Direct ONNX traffic-sign detector for ROS camera topics."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Optional
 
 import cv2
 import numpy as np
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rtk2026_interfaces.msg import DrivingDetection
 from sensor_msgs.msg import CompressedImage, Image
 
@@ -41,7 +43,10 @@ class OnnxSignDetectorNode(Node):
         self.declare_parameter("model_path", "/workspace/src/rtk2026_cv/best.onnx")
         self.declare_parameter("input_size", 640)
         self.declare_parameter("conf_threshold", 0.5)
+        self.declare_parameter("nms_threshold", 0.45)
         self.declare_parameter("every_n_frames", 2)
+        self.declare_parameter("intra_op_num_threads", 2)
+        self.declare_parameter("inter_op_num_threads", 1)
         self.declare_parameter("publish_empty", True)
         self.declare_parameter("log_every_n_frames", 30)
         self.declare_parameter("debug_overlay", True)
@@ -77,10 +82,13 @@ class OnnxSignDetectorNode(Node):
         self._every_n = max(1, int(self.get_parameter("every_n_frames").value))
         self._input_size = int(self.get_parameter("input_size").value)
         self._conf_threshold = float(self.get_parameter("conf_threshold").value)
+        self._nms_threshold = float(self.get_parameter("nms_threshold").value)
         self._publish_empty = bool(self.get_parameter("publish_empty").value)
         self._debug_overlay = bool(self.get_parameter("debug_overlay").value)
         self._stop_duration_sec = float(self.get_parameter("stop_duration_sec").value)
         self._last_log_signature: Optional[tuple[str, str, bool]] = None
+        self._last_inference_ms = 0.0
+        self._last_source_age_ms: Optional[float] = None
 
         self._class_id_to_label = self._parse_int_mapping("class_id_to_label")
         self._class_id_to_route_command = self._parse_int_mapping("class_id_to_route_command")
@@ -94,10 +102,24 @@ class OnnxSignDetectorNode(Node):
         self._ort_input_name = None
         self._net = None
         if ort is not None:
-            self._ort_session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+            session_options = ort.SessionOptions()
+            session_options.intra_op_num_threads = max(
+                1, int(self.get_parameter("intra_op_num_threads").value)
+            )
+            session_options.inter_op_num_threads = max(
+                1, int(self.get_parameter("inter_op_num_threads").value)
+            )
+            self._ort_session = ort.InferenceSession(
+                str(model_path),
+                sess_options=session_options,
+                providers=["CPUExecutionProvider"],
+            )
             self._ort_input_name = self._ort_session.get_inputs()[0].name
             self.get_logger().info("Using ONNX Runtime backend")
         else:
+            cv2.setNumThreads(
+                max(1, int(self.get_parameter("intra_op_num_threads").value))
+            )
             self._net = cv2.dnn.readNetFromONNX(str(model_path))
             self.get_logger().info("Using OpenCV DNN backend")
 
@@ -109,7 +131,17 @@ class OnnxSignDetectorNode(Node):
         self._detection_pub = self.create_publisher(DrivingDetection, output_topic, 10)
         self._debug_overlay_pub = self.create_publisher(Image, debug_overlay_topic, 1)
         self._debug_pub = self.create_publisher(CompressedImage, debug_image_topic, 1)
-        self._image_sub = self.create_subscription(Image, image_topic, self._on_image, 10)
+        # A detector must work on the newest frame. A deeper reliable queue
+        # turns overload into seconds of stale inference and is incompatible
+        # with camera drivers that publish using sensor-data QoS.
+        camera_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+        )
+        self._image_sub = self.create_subscription(
+            Image, image_topic, self._on_image, camera_qos
+        )
 
         self.get_logger().info(
             f"onnx_sign_detector started: image_topic={image_topic}, output_topic={output_topic}, model={model_path}"
@@ -147,7 +179,17 @@ class OnnxSignDetectorNode(Node):
             return
 
         image_bgr = self._image_msg_to_bgr(msg)
+        started = perf_counter()
         output = self._forward(image_bgr)
+        self._last_inference_ms = (perf_counter() - started) * 1000.0
+        stamp_ns = int(msg.header.stamp.sec) * 1_000_000_000 + int(
+            msg.header.stamp.nanosec
+        )
+        self._last_source_age_ms = (
+            max(0.0, (self.get_clock().now().nanoseconds - stamp_ns) / 1_000_000.0)
+            if stamp_ns > 0
+            else None
+        )
         best_route: Optional[Candidate] = None
         best_stop: Optional[Candidate] = None
         best_bus: Optional[Candidate] = None
@@ -224,11 +266,17 @@ class OnnxSignDetectorNode(Node):
                 self._debug_pub.publish(debug_msg)
 
         if self._frame_count % self._log_every_n == 0:
+            age = (
+                "unknown"
+                if self._last_source_age_ms is None
+                else f"{self._last_source_age_ms:.0f}ms"
+            )
             self.get_logger().info(
                 "det "
                 f"route={detection.route_command or 'none'} "
                 f"stop={detection.stop_action or 'none'} "
-                f"bus={'yes' if detection.bus_detected else 'no'}"
+                f"bus={'yes' if detection.bus_detected else 'no'} "
+                f"inference={self._last_inference_ms:.0f}ms source_age={age}"
             )
 
     def _forward(self, image_bgr: np.ndarray) -> np.ndarray:
@@ -266,7 +314,7 @@ class OnnxSignDetectorNode(Node):
 
         scale_x = float(orig_w) / float(self._input_size)
         scale_y = float(orig_h) / float(self._input_size)
-
+        raw_candidates: list[tuple[int, float, int, int, int, int]] = []
         for row in output:
             x_c, y_c, w, h = map(float, row[:4])
             class_scores = row[4:]
@@ -279,7 +327,35 @@ class OnnxSignDetectorNode(Node):
             y1 = int(max(0.0, (y_c - h / 2.0) * scale_y))
             x2 = int(min(float(orig_w - 1), (x_c + w / 2.0) * scale_x))
             y2 = int(min(float(orig_h - 1), (y_c + h / 2.0) * scale_y))
-            yield from self._make_candidate(class_index, confidence, x1, y1, x2, y2)
+            raw_candidates.append((class_index, confidence, x1, y1, x2, y2))
+
+        if not raw_candidates:
+            return
+
+        # Suppress duplicates within a class. Running one global NMS would
+        # incorrectly discard two different signs whose boxes overlap.
+        for class_index in {candidate[0] for candidate in raw_candidates}:
+            class_candidates = [
+                candidate
+                for candidate in raw_candidates
+                if candidate[0] == class_index
+            ]
+            boxes = [
+                [x1, y1, x2 - x1, y2 - y1]
+                for _, _, x1, y1, x2, y2 in class_candidates
+            ]
+            scores = [confidence for _, confidence, *_ in class_candidates]
+            kept = cv2.dnn.NMSBoxes(
+                boxes,
+                scores,
+                self._conf_threshold,
+                self._nms_threshold,
+            )
+            for index in np.asarray(kept).reshape(-1):
+                _, confidence, x1, y1, x2, y2 = class_candidates[int(index)]
+                yield from self._make_candidate(
+                    class_index, confidence, x1, y1, x2, y2
+                )
 
     def _iter_xyxy_score_class_candidates(self, rows: np.ndarray, orig_w: int, orig_h: int):
         scale_x = float(orig_w) / float(self._input_size)
@@ -330,19 +406,36 @@ class OnnxSignDetectorNode(Node):
 
     @staticmethod
     def _image_msg_to_bgr(msg: Image) -> np.ndarray:
-        channels = 3
-        image = np.frombuffer(msg.data, dtype=np.uint8)
-        image = image.reshape((msg.height, msg.width, channels))
         encoding = str(msg.encoding).lower()
+        channels_by_encoding = {
+            "bgr8": 3,
+            "rgb8": 3,
+            "bgra8": 4,
+            "rgba8": 4,
+            "mono8": 1,
+        }
+        if encoding not in channels_by_encoding:
+            raise ValueError(f"Unsupported image encoding: {msg.encoding}")
+
+        channels = channels_by_encoding[encoding]
+        packed_step = int(msg.width) * channels
+        step = int(msg.step) or packed_step
+        if step < packed_step:
+            raise ValueError(
+                f"Image step {step} is smaller than packed row {packed_step}"
+            )
+        rows = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, step))
+        image = rows[:, :packed_step].reshape((msg.height, msg.width, channels))
+
         if encoding == "rgb8":
             return cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         if encoding == "bgr8":
             return image.copy()
         if encoding == "rgba8":
-            return cv2.cvtColor(image.reshape((msg.height, msg.width, 4)), cv2.COLOR_RGBA2BGR)
+            return cv2.cvtColor(image, cv2.COLOR_RGBA2BGR)
         if encoding == "bgra8":
-            return cv2.cvtColor(image.reshape((msg.height, msg.width, 4)), cv2.COLOR_BGRA2BGR)
-        return image.copy()
+            return cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+        return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
 
 
 def main(args: list[str] | None = None) -> None:

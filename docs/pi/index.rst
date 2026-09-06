@@ -32,8 +32,8 @@ Raspberry Pi
    * - ``docker/dds_check/``
      - DDS Router на стороне робота.
    * - ``src/``
-     - Семь ROS-пакетов: ``driver``, ``description``, ``localization``,
-       ``slam``, ``observability``, ``bringup`` и ``interfaces``.
+     - Пакеты основного ROS-стека и ``rtk2026_cv`` с ONNX-моделью для
+       отдельного perception-контейнера.
    * - ``maps/``, ``records/``
      - Рабочие каталоги робота: карты и записи прогонов.
 
@@ -102,6 +102,11 @@ RViz на ноутбуке считает возраст трансформац�
      - Сборка прошивки без заливки.
    * - ``shell``
      - Оболочка с ``avrdude`` для ручных операций.
+   * - ``camera``
+     - Только USB-камера, для записи и стендовой диагностики.
+   * - ``perception``
+     - USB-камера и ONNX YOLO-детектор знаков. Штатный вариант для
+       автономного прогона.
 
 .. important::
 
@@ -213,6 +218,42 @@ sllidar_ros2`` всё ещё не находит пакет, один раз п�
    ros2 launch rtk2026_bringup arduino_launch.py   # только привод
    ros2 launch rtk2026_bringup full.launch.py       # весь аппаратный стек
    ros2 launch rtk2026_bringup real_slam.py         # аппаратура, EKF и SLAM
+
+Распознавание знаков
+--------------------
+
+В автономном прогоне камера и детектор запускаются одним сервисом. Он
+намеренно отделён от ``ros``: отказ камеры не останавливает привод, лидар и
+локализацию.
+
+.. code-block:: bash
+
+   docker compose -f pi/docker/docker-compose.pi.yml stop camera
+   docker compose -f pi/docker/docker-compose.pi.yml up -d --build perception
+   docker logs -f rtk2026-perception
+
+``camera`` и ``perception`` одновременно запускать нельзя: оба открывают
+``/dev/video0``. Детектор публикует только компактный
+``/perception/driving_detection``; исходный поток кадров остаётся на Pi 5.
+
+Проверка:
+
+.. code-block:: bash
+
+   docker exec -it rtk2026-perception bash -c '
+     source /opt/ros/jazzy/setup.bash
+     source /workspace/install/setup.bash
+     ros2 topic hz /camera/image_raw'
+   docker exec -it rtk2026-ros bash -c '
+     source /opt/ros/jazzy/setup.bash
+     source /workspaces/robot_ws/install/setup.bash
+     ros2 topic echo /perception/driving_detection --once'
+
+В логе детектора печатаются время инференса и возраст обработанного кадра.
+Если возраст растёт, сначала оставьте ``input_size: 416`` и уменьшите число
+``intra_op_num_threads`` в ``sign_detection_pi5.yaml``. Площадь рамки для
+``city_nav.min_box_area_px`` калибруется на реальной дистанции принятия
+решения; до этого нулевое значение безопасно оставляет знаки выключенными.
 
 Лидар
 -----

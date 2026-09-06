@@ -10,14 +10,17 @@
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, EmitEvent
+from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description() -> LaunchDescription:
+    share = FindPackageShare("rtk2026_cv")
     params_file = LaunchConfiguration("params_file")
+    model_path = LaunchConfiguration("model_path")
 
     camera = Node(
         package="v4l2_camera",
@@ -31,6 +34,9 @@ def generate_launch_description() -> LaunchDescription:
             ("/image_raw", "/camera/image_raw"),
             ("/camera_info", "/camera/camera_info"),
         ],
+        on_exit=EmitEvent(
+            event=Shutdown(reason="camera or sign detector exited")
+        ),
     )
 
     detector = Node(
@@ -38,7 +44,10 @@ def generate_launch_description() -> LaunchDescription:
         executable="onnx_sign_detector",
         name="onnx_sign_detector",
         output="screen",
-        parameters=[params_file],
+        parameters=[params_file, {"model_path": model_path}],
+        on_exit=EmitEvent(
+            event=Shutdown(reason="camera or sign detector exited")
+        ),
     )
 
     return LaunchDescription(
@@ -47,7 +56,7 @@ def generate_launch_description() -> LaunchDescription:
                 "params_file",
                 default_value=PathJoinSubstitution(
                     [
-                        FindPackageShare("rtk2026_cv"),
+                        share,
                         "config",
                         "sign_detection_pi4.yaml",
                     ]
@@ -56,6 +65,11 @@ def generate_launch_description() -> LaunchDescription:
                     "Параметры камеры и детектора. Один файл на оба узла: "
                     "разрешение съёмки и разрешение входа модели связаны."
                 ),
+            ),
+            DeclareLaunchArgument(
+                "model_path",
+                default_value=PathJoinSubstitution([share, "best.onnx"]),
+                description="Installed ONNX model.",
             ),
             camera,
             detector,

@@ -241,11 +241,21 @@ class SignMemoryTask(DiagnosticTask):
 class DetectionTask(DiagnosticTask):
     """Что накоплено к предстоящему выбору и есть ли кому публиковать знаки."""
 
-    def __init__(self, node: Node, latch: Latch, topic: str) -> None:
+    def __init__(
+        self,
+        node: Node,
+        latch: Latch,
+        topic: str,
+        *,
+        last_message_age_s: Callable[[], float | None],
+        timeout_s: float,
+    ) -> None:
         super().__init__("CityNav/detections")
         self._node = node
         self._latch = latch
         self._topic = topic
+        self._last_message_age_s = last_message_age_s
+        self._timeout_s = max(0.0, float(timeout_s))
 
     def run(self, status):
         latch = self._latch
@@ -259,9 +269,14 @@ class DetectionTask(DiagnosticTask):
             return status
 
         publishers = self._node.count_publishers(self._topic)
+        message_age_s = self._last_message_age_s()
 
         status.add("Topic", self._topic)
         status.add("Publishers", str(publishers))
+        status.add(
+            "Возраст сообщения, с",
+            "нет сообщений" if message_age_s is None else f"{message_age_s:.2f}",
+        )
         status.add("Порог принадлежности, пикс2", f"{latch.min_box_area_px:.0f}")
         status.add("Порог уверенности", f"{latch.min_confidence:.2f}")
         status.add("Накопленная команда", latch.route_command or "нет")
@@ -277,6 +292,16 @@ class DetectionTask(DiagnosticTask):
             status.summary(
                 DiagnosticStatus.WARN,
                 "знаки никто не публикует: маршрут пойдёт по покрытию",
+            )
+        elif message_age_s is None:
+            status.summary(
+                DiagnosticStatus.WARN,
+                "издатель есть, но детекции ещё не приходили",
+            )
+        elif message_age_s > self._timeout_s:
+            status.summary(
+                DiagnosticStatus.WARN,
+                f"детекции не приходили {message_age_s:.1f} с",
             )
         else:
             status.summary(DiagnosticStatus.OK, "детекции принимаются")

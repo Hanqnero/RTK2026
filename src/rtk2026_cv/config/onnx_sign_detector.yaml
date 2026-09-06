@@ -4,9 +4,11 @@ onnx_sign_detector:
     output_topic: "/perception/driving_detection"
     debug_overlay_topic: "/perception/detection_overlay"
     debug_image_topic: "/perception/detection_overlay/compressed"
-    model_path: "/workspace/src/rtk2026_cv/best.onnx"
     input_size: 640
     conf_threshold: 0.20
+    nms_threshold: 0.45
+    intra_op_num_threads: 2
+    inter_op_num_threads: 1
     every_n_frames: 1
     publish_empty: true
     debug_overlay: true

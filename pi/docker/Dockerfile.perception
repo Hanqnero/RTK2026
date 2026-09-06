@@ -1,0 +1,85 @@
+# syntax=docker/dockerfile:1.7
+
+# Lean camera and ONNX inference image for the main Raspberry Pi 5. It is
+# separate from Dockerfile.ros so perception dependencies and failures do not
+# affect the drivetrain, lidar, localization, or navigation runtime.
+FROM ros:jazzy-ros-base-noble
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        python3-colcon-common-extensions \
+        python3-opencv \
+        python3-numpy \
+        python3-pip \
+        python3-pil \
+        python3-rosdep \
+        ros-jazzy-cv-bridge \
+        ros-jazzy-v4l2-camera \
+        v4l-utils
+
+# ONNX Runtime supplies an ARM64 CPU wheel for the Python version in Noble.
+# The system Python is externally managed, but this is an isolated container.
+RUN pip3 install --no-cache-dir --break-system-packages onnxruntime
+
+WORKDIR /workspace
+
+RUN if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
+        rosdep init; \
+    fi && \
+    rosdep_updated=0 && \
+    for attempt in 1 2 3; do \
+        if rosdep update --rosdistro jazzy; then \
+            rosdep_updated=1; \
+            break; \
+        fi; \
+        echo "rosdep update: attempt ${attempt} failed" >&2; \
+        sleep $((attempt * 5)); \
+    done && \
+    test "${rosdep_updated}" = "1"
+
+# Resolve package dependencies before copying implementation files so normal
+# source edits do not invalidate the apt layer.
+COPY src/rtk2026_interfaces/package.xml \
+    /tmp/rosdep/src/rtk2026_interfaces/package.xml
+COPY src/rtk2026_cv/package.xml \
+    /tmp/rosdep/src/rtk2026_cv/package.xml
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get -o Acquire::Retries=3 update && \
+    rosdep install \
+        --from-paths /tmp/rosdep/src \
+        --ignore-src \
+        --rosdistro jazzy \
+        --skip-keys="ament_python" \
+        -r \
+        -y && \
+    rm -rf /tmp/rosdep
+
+COPY src/rtk2026_interfaces/ /workspace/src/rtk2026_interfaces/
+COPY src/rtk2026_cv/ /workspace/src/rtk2026_cv/
+
+RUN source /opt/ros/jazzy/setup.bash && \
+    colcon build \
+        --symlink-install \
+        --packages-select \
+            rtk2026_interfaces \
+            rtk2026_cv
+
+RUN printf '%s\n' \
+    'set +u' \
+    'source /opt/ros/jazzy/setup.bash' \
+    'source /workspace/install/setup.bash' \
+    'set -u' \
+    >> /root/.bashrc
+
+CMD ["sleep", "infinity"]

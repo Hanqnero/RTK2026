@@ -88,6 +88,18 @@ ROS-интерфейсы и соглашения
      - AMCL
      - RViz/диагностика
      - Текущее распределение частиц.
+   * - ``/camera/image_raw``
+     - ``sensor_msgs/msg/Image``
+     - ``v4l2_camera`` в perception-сервисе
+     - ``onnx_sign_detector``
+     - Локальный поток USB-камеры на Pi 5; детектор читает его с sensor-data
+       QoS и очередью в один кадр.
+   * - ``/perception/driving_detection``
+     - ``rtk2026_interfaces/msg/DrivingDetection``
+     - ``onnx_sign_detector``
+     - ``city_nav``
+     - Лучшая маршрутная, остановочная и автобусная детекция текущего кадра,
+       включая уверенность и площадь рамки.
    * - ``/clock``
      - ``rosgraph_msgs/msg/Clock``
      - ``gazebo_bridge``
@@ -135,6 +147,11 @@ ROS-интерфейсы и соглашения
 Известная карта
    ``map_server -> /map -> AMCL`` и ``gazebo_bridge -> /scan -> AMCL``.
    AMCL публикует ``/amcl_pose``, ``/particle_cloud`` и TF ``map -> odom``.
+
+Распознавание знаков
+   ``v4l2_camera -> /camera/image_raw -> onnx_sign_detector ->
+   /perception/driving_detection -> city_nav``. Камера и инференс находятся
+   на Pi 5, но живут в отдельном контейнере от аппаратного стека.
 
 Фактический publisher/subscriber всегда проверяется командой
 ``ros2 topic info <имя> -v``. Полный набор команд приведён в :doc:`running`.
