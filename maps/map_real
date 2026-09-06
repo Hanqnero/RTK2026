@@ -45,7 +45,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 3
+                "id": 3,
+                "kind": "geometry"
             },
             "type": "Feature"
         },
@@ -133,7 +134,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 13
+                "id": 13,
+                "kind": "geometry"
             },
             "type": "Feature"
         },
@@ -147,7 +149,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 15
+                "id": 15,
+                "kind": "geometry"
             },
             "type": "Feature"
         },
@@ -191,7 +194,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 18
+                "id": 18,
+                "kind": "geometry"
             },
             "type": "Feature"
         },
@@ -279,7 +283,8 @@
             },
             "properties": {
                 "frame": "map",
-                "id": 25
+                "id": 25,
+                "kind": "geometry"
             },
             "type": "Feature"
         },
