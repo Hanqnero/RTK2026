@@ -1,4 +1,4 @@
-image: polygon3_restored_1_.pgm
+image: polygon3_clean.pgm
 mode: trinary
 resolution: 0.050
 origin: [-0.883, -5.986, 0]
