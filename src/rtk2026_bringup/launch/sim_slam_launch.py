@@ -611,12 +611,12 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "spawn_x",
-                default_value="0.0",
+                default_value="0.5",
                 description="Начальная координата X модели, м.",
             ),
             DeclareLaunchArgument(
                 "spawn_y",
-                default_value="0.2",
+                default_value="0.5",
                 description="Начальная координата Y модели, м.",
             ),
             DeclareLaunchArgument(
