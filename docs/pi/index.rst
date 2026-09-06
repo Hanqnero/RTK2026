@@ -17,6 +17,29 @@ Raspberry Pi
    pi/tools/sync_to_pi.sh              # обычная синхронизация
    CLEAN=1 pi/tools/sync_to_pi.sh      # ещё и убрать лишнее
 
+Обычный deploy кода сразу синхронизирует дерево и пересоздаёт ROS-контейнер,
+явно запретив Docker собирать image:
+
+.. code-block:: bash
+
+   pi/tools/deploy_to_pi.sh
+
+Системные зависимости находятся в image, а исходники подключены bind mount.
+Поэтому image нужно пересобирать только после изменения ``Dockerfile.ros``,
+``package.xml``, startup-скрипта или vendor-драйвера:
+
+.. code-block:: bash
+
+   REBUILD_IMAGES=1 pi/tools/deploy_to_pi.sh
+
+Для точки доступа робота передайте адрес первым аргументом. Набор сервисов
+задаётся через ``SERVICES``:
+
+.. code-block:: bash
+
+   pi/tools/deploy_to_pi.sh 10.42.0.1
+   SERVICES="ros perception" pi/tools/deploy_to_pi.sh
+
 .. list-table::
    :header-rows: 1
    :widths: 22 78
@@ -126,7 +149,7 @@ RViz на ноутбуке считает возраст трансформац�
 
    .. code-block:: bash
 
-      docker compose -f pi/docker/docker-compose.pi.yml up -d --build --force-recreate ros
+      docker compose -f pi/docker/docker-compose.pi.yml up -d --no-build --force-recreate ros
 
 Устройства
 ----------
@@ -176,7 +199,7 @@ RViz на ноутбуке считает возраст трансформац�
 
 .. code-block:: bash
 
-   docker compose -f pi/docker/docker-compose.pi.yml up -d --build ros
+   pi/tools/deploy_to_pi.sh
 
 Перед запуском Bash контейнер сам выполняет ``colcon build
 --symlink-install`` для пакетов робота. Лог сборки виден через
@@ -243,7 +266,7 @@ sllidar_ros2`` всё ещё не находит пакет, один раз п�
 .. code-block:: bash
 
    docker compose -f pi/docker/docker-compose.pi.yml stop camera
-   docker compose -f pi/docker/docker-compose.pi.yml up -d --build perception
+   SERVICES=perception pi/tools/deploy_to_pi.sh
    docker logs -f rtk2026-perception
 
 ``camera`` и ``perception`` одновременно запускать нельзя: оба открывают

@@ -23,6 +23,9 @@
 #     pi/tools/sync_to_pi.sh                 # хост по умолчанию
 #     pi/tools/sync_to_pi.sh 10.42.0.1       # через точку ROSSIYANE
 #     CLEAN=1 pi/tools/sync_to_pi.sh         # ещё и убрать лишнее с Pi
+#
+# Для обычного обновления запущенного стека используйте deploy_to_pi.sh:
+# он синхронизирует файлы и пересоздаёт контейнер без сборки image.
 
 set -euo pipefail
 
